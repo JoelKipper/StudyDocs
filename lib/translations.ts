@@ -69,6 +69,8 @@ export const translations = {
     createDirectory: 'Neues Verzeichnis',
     createDirectoryHere: 'Hier neues Verzeichnis erstellen',
     share: 'Teilen',
+    addToFavorites: 'Zu Favoriten hinzufügen',
+    removeFromFavorites: 'Aus Favoriten entfernen',
     
     // Search
     search: 'Suchen',
@@ -234,6 +236,8 @@ export const translations = {
     createDirectory: 'New Directory',
     createDirectoryHere: 'Create new directory here',
     share: 'Share',
+    addToFavorites: 'Add to Favorites',
+    removeFromFavorites: 'Remove from Favorites',
     
     // Search
     search: 'Search',

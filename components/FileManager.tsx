@@ -13,6 +13,7 @@ import ShareModal from './ShareModal';
 import FilePreview from './FilePreview';
 import FileIcon from './FileIcon';
 import StorageQuota from './StorageQuota';
+import FavoritesList from './FavoritesList';
 import { useLanguage } from '@/contexts/LanguageContext';
 
 interface FileMetadata {
@@ -152,6 +153,14 @@ export default function FileManager({ user, onLogout, initialPath, initialFile: 
     itemType: 'file',
   });
   const [previewFile, setPreviewFile] = useState<FileItem | null>(null);
+  const [sidebarTab, setSidebarTab] = useState<'tree' | 'favorites'>(() => {
+    if (typeof window !== 'undefined') {
+      const saved = localStorage.getItem(`studydocs-sidebar-tab-${user.id}`);
+      return (saved === 'favorites' ? 'favorites' : 'tree') as 'tree' | 'favorites';
+    }
+    return 'tree';
+  });
+  const [favorites, setFavorites] = useState<Set<string>>(new Set());
   const clickTimerRef = useRef<NodeJS.Timeout | null>(null);
   const lastSelectedIndexRef = useRef<number | null>(null);
   const [previewWidth, setPreviewWidth] = useState(() => {
@@ -1074,6 +1083,68 @@ export default function FileManager({ user, onLogout, initialPath, initialFile: 
     });
   }
 
+  async function handleToggleFavorite(item: FileItem) {
+    const isFavorite = favorites.has(item.path);
+    
+    try {
+      if (isFavorite) {
+        // Remove from favorites
+        const res = await fetch(`/api/files/favorites?path=${encodeURIComponent(item.path)}`, {
+          method: 'DELETE',
+        });
+        if (res.ok) {
+          setFavorites(prev => {
+            const newSet = new Set(prev);
+            newSet.delete(item.path);
+            return newSet;
+          });
+          setToast({ 
+            message: language === 'de' 
+              ? `"${item.name}" aus Favoriten entfernt`
+              : `"${item.name}" removed from favorites`,
+            type: 'success' 
+          });
+          // Refresh favorites list if we're on the favorites tab
+          if (sidebarTab === 'favorites') {
+            setTreeRefreshKey((k) => k + 1);
+          }
+        }
+      } else {
+        // Add to favorites
+        const res = await fetch('/api/files/favorites', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            itemPath: item.path,
+            itemName: item.name,
+            itemType: item.type,
+          }),
+        });
+        if (res.ok) {
+          setFavorites(prev => new Set(prev).add(item.path));
+          setToast({ 
+            message: language === 'de'
+              ? `"${item.name}" zu Favoriten hinzugefügt`
+              : `"${item.name}" added to favorites`,
+            type: 'success' 
+          });
+          // Refresh favorites list if we're on the favorites tab
+          if (sidebarTab === 'favorites') {
+            setTreeRefreshKey((k) => k + 1);
+          }
+        }
+      }
+    } catch (error) {
+      console.error('Error toggling favorite:', error);
+      setToast({ 
+        message: language === 'de'
+          ? 'Fehler beim Aktualisieren der Favoriten'
+          : 'Error updating favorites',
+        type: 'error' 
+      });
+    }
+  }
+
   function handleContextMenu(file: FileItem, e: React.MouseEvent) {
     e.preventDefault();
     e.stopPropagation();
@@ -1783,52 +1854,100 @@ export default function FileManager({ user, onLogout, initialPath, initialFile: 
       </header>
 
       <div className="flex-1 flex overflow-hidden">
-        {/* Sidebar - File Tree */}
+        {/* Sidebar - File Tree / Favorites */}
         <div
           className="bg-white dark:bg-gray-800 border-r border-gray-200 dark:border-gray-700 flex flex-col relative"
           style={{ width: `${sidebarWidth}px`, minWidth: '200px', maxWidth: '600px' }}
         >
+          {/* Tabs */}
+          <div className="flex border-b border-gray-200 dark:border-gray-700 flex-shrink-0">
+            <button
+              onClick={() => setSidebarTab('tree')}
+              className={`flex-1 px-4 py-2 text-sm font-medium transition-colors ${
+                sidebarTab === 'tree'
+                  ? 'bg-gray-100 dark:bg-gray-700 text-blue-600 dark:text-blue-400 border-b-2 border-blue-600 dark:border-blue-400'
+                  : 'text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-800/50'
+              }`}
+            >
+              {language === 'de' ? 'Ordner' : 'Folders'}
+            </button>
+            <button
+              onClick={() => setSidebarTab('favorites')}
+              className={`flex-1 px-4 py-2 text-sm font-medium transition-colors relative ${
+                sidebarTab === 'favorites'
+                  ? 'bg-gray-100 dark:bg-gray-700 text-blue-600 dark:text-blue-400 border-b-2 border-blue-600 dark:border-blue-400'
+                  : 'text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-800/50'
+              }`}
+            >
+              {language === 'de' ? 'Favoriten' : 'Favorites'}
+              {favorites.size > 0 && (
+                <span className="absolute top-1 right-2 bg-blue-500 text-white text-xs rounded-full w-5 h-5 flex items-center justify-center">
+                  {favorites.size}
+                </span>
+              )}
+            </button>
+          </div>
+
           <div className="flex-1 overflow-y-auto custom-scrollbar p-2">
-            <FileTree
-              key={`tree-${treeRefreshKey}`}
-              currentPath={currentPath}
-              onNavigate={navigateToPath}
-              onRefresh={handleRefresh}
-              onExternalDrop={handleExternalFilesDrop}
-              userId={user.id}
-              onMoveItem={async (itemPath: string, targetPath: string) => {
-                try {
-                  const res = await fetch('/api/files', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                      action: 'move',
-                      path: itemPath,
-                      targetPath: targetPath,
-                    }),
-                  });
-
-                  const data = await res.json();
-
-                  if (res.ok) {
-                    loadFiles();
-                    setTreeRefreshKey((k) => k + 1);
-                    // Find item name for toast message
-                    const item = files.find(f => f.path === itemPath);
-                    const target = files.find(f => f.path === targetPath);
-                    setToast({ 
-                      message: `"${item?.name || 'Element'}" wurde nach "${target?.name || 'Root'}" verschoben`, 
-                      type: 'success' 
+            {sidebarTab === 'tree' ? (
+              <FileTree
+                key={`tree-${treeRefreshKey}`}
+                currentPath={currentPath}
+                onNavigate={navigateToPath}
+                onRefresh={handleRefresh}
+                onExternalDrop={handleExternalFilesDrop}
+                userId={user.id}
+                onMoveItem={async (itemPath: string, targetPath: string) => {
+                  try {
+                    const res = await fetch('/api/files', {
+                      method: 'POST',
+                      headers: { 'Content-Type': 'application/json' },
+                      body: JSON.stringify({
+                        action: 'move',
+                        path: itemPath,
+                        targetPath: targetPath,
+                      }),
                     });
-                  } else {
-                    setToast({ message: data.error || t('errorMoving'), type: 'error' });
+
+                    const data = await res.json();
+
+                    if (res.ok) {
+                      loadFiles();
+                      setTreeRefreshKey((k) => k + 1);
+                      // Find item name for toast message
+                      const item = files.find(f => f.path === itemPath);
+                      const target = files.find(f => f.path === targetPath);
+                      setToast({ 
+                        message: `"${item?.name || 'Element'}" wurde nach "${target?.name || 'Root'}" verschoben`, 
+                        type: 'success' 
+                      });
+                    } else {
+                      setToast({ message: data.error || t('errorMoving'), type: 'error' });
+                    }
+                  } catch (error) {
+                    console.error('Fehler beim Verschieben:', error);
+                    setToast({ message: t('errorMoving'), type: 'error' });
                   }
-                } catch (error) {
-                  console.error('Fehler beim Verschieben:', error);
-                  setToast({ message: t('errorMoving'), type: 'error' });
-                }
-              }}
-            />
+                }}
+              />
+            ) : (
+              <FavoritesList
+                key={`favorites-${treeRefreshKey}`}
+                currentPath={currentPath}
+                onNavigate={navigateToPath}
+                userId={user.id}
+                refreshKey={treeRefreshKey}
+                onFavoriteRemoved={() => {
+                  // Reload favorites to update the count
+                  fetch('/api/files/favorites')
+                    .then(res => res.json())
+                    .then(data => {
+                      setFavorites(new Set(data.favorites.map((f: { path: string }) => f.path)));
+                    })
+                    .catch(console.error);
+                }}
+              />
+            )}
           </div>
           
           {/* Storage Quota - Bottom of Sidebar */}
@@ -2484,6 +2603,8 @@ export default function FileManager({ user, onLogout, initialPath, initialFile: 
           onRename={contextMenu.item ? () => handleRename(contextMenu.item!) : undefined}
           onCreateDirectory={contextMenu.isEmpty ? handleCreateDirectoryFromContext : undefined}
           onShare={contextMenu.item ? () => handleShare(contextMenu.item!) : undefined}
+          onToggleFavorite={contextMenu.item ? () => handleToggleFavorite(contextMenu.item!) : undefined}
+          isFavorite={contextMenu.item ? favorites.has(contextMenu.item.path) : false}
           itemType={contextMenu.isEmpty ? 'empty' : (contextMenu.item?.type || 'file')}
         />
       )}
