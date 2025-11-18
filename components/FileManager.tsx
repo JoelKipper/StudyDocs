@@ -7,6 +7,7 @@ import ContextMenu from './ContextMenu';
 import DeleteModal from './DeleteModal';
 import ReplaceModal from './ReplaceModal';
 import Toast from './Toast';
+import SearchBar from './SearchBar';
 
 interface FileMetadata {
   createdBy: { id: string; name: string; email: string };
@@ -47,7 +48,10 @@ export default function FileManager({ user, onLogout }: FileManagerProps) {
   });
   
   const [files, setFiles] = useState<FileItem[]>([]);
+  const [allFiles, setAllFiles] = useState<FileItem[]>([]); // All files for global search
   const [loading, setLoading] = useState(true);
+  const [searchLoading, setSearchLoading] = useState(false);
+  const [isGlobalSearch, setIsGlobalSearch] = useState(false);
   const [selectedFile, setSelectedFile] = useState<FileItem | null>(null);
   const [treeRefreshKey, setTreeRefreshKey] = useState(0);
   const [sortField, setSortField] = useState<SortField>('name');
@@ -83,6 +87,16 @@ export default function FileManager({ user, onLogout }: FileManagerProps) {
   const newDirectoryInputRef = useRef<HTMLInputElement>(null);
   const [pendingRenameDirectory, setPendingRenameDirectory] = useState<string | null>(null);
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' | 'info' } | null>(null);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [searchFilters, setSearchFilters] = useState<{
+    fileType: 'all' | 'file' | 'directory';
+    minSize?: number;
+    maxSize?: number;
+    dateFrom?: Date;
+    dateTo?: Date;
+  }>({
+    fileType: 'all',
+  });
   const [sidebarWidth, setSidebarWidth] = useState(() => {
     if (typeof window !== 'undefined') {
       const saved = localStorage.getItem(`studydocs-sidebar-width-${user.id}`);
@@ -366,8 +380,132 @@ export default function FileManager({ user, onLogout }: FileManagerProps) {
     }
   }
 
+  // Global search function
+  async function performGlobalSearch() {
+    if (!searchQuery.trim() && 
+        searchFilters.fileType === 'all' && 
+        !searchFilters.minSize && 
+        !searchFilters.maxSize && 
+        !searchFilters.dateFrom && 
+        !searchFilters.dateTo) {
+      setIsGlobalSearch(false);
+      return;
+    }
+
+    setIsGlobalSearch(true);
+    setSearchLoading(true);
+
+    try {
+      const params = new URLSearchParams();
+      if (searchQuery.trim()) {
+        params.append('q', searchQuery.trim());
+      }
+      if (searchFilters.fileType !== 'all') {
+        params.append('type', searchFilters.fileType);
+      }
+      if (searchFilters.minSize !== undefined) {
+        params.append('minSize', (searchFilters.minSize / 1024).toString());
+      }
+      if (searchFilters.maxSize !== undefined) {
+        params.append('maxSize', (searchFilters.maxSize / 1024).toString());
+      }
+      if (searchFilters.dateFrom) {
+        params.append('dateFrom', searchFilters.dateFrom.toISOString().split('T')[0]);
+      }
+      if (searchFilters.dateTo) {
+        params.append('dateTo', searchFilters.dateTo.toISOString().split('T')[0]);
+      }
+
+      const res = await fetch(`/api/files/search?${params.toString()}`);
+      const data = await res.json();
+
+      if (res.ok) {
+        // Convert ISO date strings back to Date objects
+        const results = (data.results || []).map((file: FileItem) => ({
+          ...file,
+          modified: file.modified ? new Date(file.modified) : undefined,
+        }));
+        setAllFiles(results);
+      } else {
+        setToast({ message: data.error || 'Fehler bei der Suche', type: 'error' });
+        setAllFiles([]);
+      }
+    } catch (error) {
+      console.error('Fehler bei der globalen Suche:', error);
+      setToast({ message: 'Fehler bei der Suche', type: 'error' });
+      setAllFiles([]);
+    } finally {
+      setSearchLoading(false);
+    }
+  }
+
+  // Debounced search
+  useEffect(() => {
+    const timeoutId = setTimeout(() => {
+      performGlobalSearch();
+    }, 300); // 300ms debounce
+
+    return () => clearTimeout(timeoutId);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchQuery, searchFilters]);
+
+  function filterFiles(filesToFilter: FileItem[]): FileItem[] {
+    // If global search is active, use allFiles instead
+    if (isGlobalSearch) {
+      return allFiles;
+    }
+
+    let filtered = [...filesToFilter];
+
+    // Text search
+    if (searchQuery.trim()) {
+      const query = searchQuery.toLowerCase().trim();
+      filtered = filtered.filter((file) =>
+        file.name.toLowerCase().includes(query) ||
+        file.path.toLowerCase().includes(query)
+      );
+    }
+
+    // File type filter
+    if (searchFilters.fileType !== 'all') {
+      filtered = filtered.filter((file) => file.type === searchFilters.fileType);
+    }
+
+    // Size filter
+    if (searchFilters.minSize !== undefined) {
+      filtered = filtered.filter((file) => (file.size || 0) >= searchFilters.minSize!);
+    }
+    if (searchFilters.maxSize !== undefined) {
+      filtered = filtered.filter((file) => (file.size || 0) <= searchFilters.maxSize!);
+    }
+
+    // Date filter
+    if (searchFilters.dateFrom) {
+      const fromDate = new Date(searchFilters.dateFrom);
+      fromDate.setHours(0, 0, 0, 0);
+      filtered = filtered.filter((file) => {
+        if (!file.modified) return false;
+        const fileDate = new Date(file.modified);
+        fileDate.setHours(0, 0, 0, 0);
+        return fileDate >= fromDate;
+      });
+    }
+    if (searchFilters.dateTo) {
+      const toDate = new Date(searchFilters.dateTo);
+      toDate.setHours(23, 59, 59, 999);
+      filtered = filtered.filter((file) => {
+        if (!file.modified) return false;
+        const fileDate = new Date(file.modified);
+        return fileDate <= toDate;
+      });
+    }
+
+    return filtered;
+  }
+
   function getSortedFiles() {
-    const sorted = [...files].sort((a, b) => {
+    const filtered = filterFiles(files);
+    const sorted = filtered.sort((a, b) => {
       let comparison = 0;
       
       if (sortField === 'name') {
@@ -438,6 +576,9 @@ export default function FileManager({ user, onLogout }: FileManagerProps) {
       // Double click - download file or navigate to directory
       if (file.type === 'directory') {
         navigateToPath(file.path);
+        setIsGlobalSearch(false);
+        setSearchQuery('');
+        setSearchFilters({ fileType: 'all' });
       } else {
         handleDownload(file);
       }
@@ -446,9 +587,21 @@ export default function FileManager({ user, onLogout }: FileManagerProps) {
       if (file.type === 'directory') {
         // Navigate directly into directory on single click
         navigateToPath(file.path);
+        setIsGlobalSearch(false);
+        setSearchQuery('');
+        setSearchFilters({ fileType: 'all' });
       } else {
-        // Toggle selection for files
-        toggleSelection(file.path);
+        // For global search results, navigate to parent directory
+        if (isGlobalSearch) {
+          const parentPath = file.path.split('/').slice(0, -1).join('/');
+          navigateToPath(parentPath);
+          setIsGlobalSearch(false);
+          setSearchQuery('');
+          setSearchFilters({ fileType: 'all' });
+        } else {
+          // Toggle selection for files
+          toggleSelection(file.path);
+        }
       }
     }
   }
@@ -1030,6 +1183,37 @@ export default function FileManager({ user, onLogout }: FileManagerProps) {
           {/* Toolbar */}
           <div className="border-b border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800/50">
             <div className="px-4 py-2 flex items-center justify-between gap-4">
+              {/* Search Bar */}
+              <div className="flex-1 max-w-md">
+                <SearchBar
+                  searchQuery={searchQuery}
+                  onSearchChange={setSearchQuery}
+                  filters={searchFilters}
+                  onFiltersChange={setSearchFilters}
+                  onClear={() => {
+                    setSearchQuery('');
+                    setSearchFilters({ fileType: 'all' });
+                    setIsGlobalSearch(false);
+                    setAllFiles([]);
+                  }}
+                />
+                {(searchQuery || searchFilters.fileType !== 'all' || searchFilters.minSize || searchFilters.maxSize || searchFilters.dateFrom || searchFilters.dateTo) && (
+                  <div className="mt-1 text-xs text-gray-500 dark:text-gray-400 flex items-center gap-2">
+                    {searchLoading ? (
+                      <>
+                        <div className="animate-spin rounded-full h-3 w-3 border-b-2 border-gray-400"></div>
+                        <span>Suche...</span>
+                      </>
+                    ) : (
+                      <>
+                        {sortedFiles.length} {sortedFiles.length === 1 ? 'Ergebnis' : 'Ergebnisse'} gefunden
+                        {isGlobalSearch ? ' (in allen Ordnern)' : files.length !== sortedFiles.length && ` (von ${files.length} ${files.length === 1 ? 'Element' : 'Elementen'})`}
+                      </>
+                    )}
+                  </div>
+                )}
+              </div>
+              
               {/* Navigation */}
               <div className="flex items-center gap-2 flex-1 min-w-0">
                 <button
@@ -1128,11 +1312,23 @@ export default function FileManager({ user, onLogout }: FileManagerProps) {
             ) : sortedFiles.length === 0 ? (
               <div className="flex flex-col items-center justify-center h-full">
                 <div className="w-16 h-16 bg-gray-100 dark:bg-gray-700 rounded-full flex items-center justify-center mb-4">
-                  <svg className="w-8 h-8 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20 13V6a2 2 0 00-2-2H6a2 2 0 00-2 2v7m16 0v5a2 2 0 01-2 2H6a2 2 0 01-2-2v-5m16 0h-2.586a1 1 0 00-.707.293l-2.414 2.414a1 1 0 01-.707.293h-3.172a1 1 0 01-.707-.293l-2.414-2.414A1 1 0 006.586 13H4" />
-                  </svg>
+                  {searchQuery || searchFilters.fileType !== 'all' || searchFilters.minSize || searchFilters.maxSize || searchFilters.dateFrom || searchFilters.dateTo ? (
+                    <svg className="w-8 h-8 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                    </svg>
+                  ) : (
+                    <svg className="w-8 h-8 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20 13V6a2 2 0 00-2-2H6a2 2 0 00-2 2v7m16 0v5a2 2 0 01-2 2H6a2 2 0 01-2-2v-5m16 0h-2.586a1 1 0 00-.707.293l-2.414 2.414a1 1 0 01-.707.293h-3.172a1 1 0 01-.707-.293l-2.414-2.414A1 1 0 006.586 13H4" />
+                    </svg>
+                  )}
                 </div>
-                <p className="text-gray-500 dark:text-gray-400 font-medium">Dieses Verzeichnis ist leer</p>
+                <p className="text-gray-500 dark:text-gray-400 font-medium">
+                  {searchQuery || searchFilters.fileType !== 'all' || searchFilters.minSize || searchFilters.maxSize || searchFilters.dateFrom || searchFilters.dateTo
+                    ? isGlobalSearch 
+                      ? 'Keine Ergebnisse in allen Ordnern gefunden'
+                      : 'Keine Ergebnisse gefunden'
+                    : 'Dieses Verzeichnis ist leer'}
+                </p>
               </div>
             ) : (
               <table className="w-full">
@@ -1344,8 +1540,15 @@ export default function FileManager({ user, onLogout }: FileManagerProps) {
                                   autoFocus
                                 />
                               ) : (
-                                <div className="font-medium text-gray-900 dark:text-white truncate">
-                                  {file.name}
+                                <div className="flex flex-col min-w-0">
+                                  <div className="font-medium text-gray-900 dark:text-white truncate">
+                                    {file.name}
+                                  </div>
+                                  {isGlobalSearch && file.path !== file.name && (
+                                    <div className="text-xs text-gray-500 dark:text-gray-400 truncate mt-0.5">
+                                      {file.path.split('/').slice(0, -1).join(' / ') || 'Root'}
+                                    </div>
+                                  )}
                                 </div>
                               )}
                             </div>
