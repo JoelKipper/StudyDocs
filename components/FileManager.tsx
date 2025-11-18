@@ -10,6 +10,7 @@ import Toast from './Toast';
 import SearchBar from './SearchBar';
 import SettingsModal from './SettingsModal';
 import ShareModal from './ShareModal';
+import FilePreview from './FilePreview';
 import { useLanguage } from '@/contexts/LanguageContext';
 
 interface FileMetadata {
@@ -144,6 +145,16 @@ export default function FileManager({ user, onLogout, initialPath }: FileManager
     itemPath: '',
     itemType: 'file',
   });
+  const [previewFile, setPreviewFile] = useState<FileItem | null>(null);
+  const clickTimerRef = useRef<NodeJS.Timeout | null>(null);
+  const [previewWidth, setPreviewWidth] = useState(() => {
+    if (typeof window !== 'undefined') {
+      const saved = localStorage.getItem(`studydocs-preview-width-${user.id}`);
+      return saved ? parseInt(saved, 10) : 50; // 50% default
+    }
+    return 50;
+  });
+  const [isResizingPreview, setIsResizingPreview] = useState(false);
 
   // Save path to localStorage whenever it changes
   useEffect(() => {
@@ -159,7 +170,14 @@ export default function FileManager({ user, onLogout, initialPath }: FileManager
     }
   }, [sidebarWidth, user.id]);
 
-  // Handle resize
+  // Save preview width to localStorage
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      localStorage.setItem(`studydocs-preview-width-${user.id}`, previewWidth.toString());
+    }
+  }, [previewWidth, user.id]);
+
+  // Handle sidebar resize
   useEffect(() => {
     function handleMouseMove(e: MouseEvent) {
       if (!isResizing) return;
@@ -186,6 +204,48 @@ export default function FileManager({ user, onLogout, initialPath }: FileManager
       document.body.style.userSelect = '';
     };
   }, [isResizing]);
+
+  // Handle preview resize
+  useEffect(() => {
+    function handleMouseMove(e: MouseEvent) {
+      if (!isResizingPreview) return;
+      
+      const containerWidth = window.innerWidth - sidebarWidth;
+      if (containerWidth <= 0) return; // Prevent division by zero
+      
+      // Calculate position relative to the container (after sidebar)
+      const relativeX = e.clientX - sidebarWidth;
+      // Convert to percentage
+      const percentage = (relativeX / containerWidth) * 100;
+      // Clamp between 0 and 100
+      const clampedWidth = Math.max(0, Math.min(100, percentage));
+      setPreviewWidth(clampedWidth);
+    }
+
+    function handleMouseUp(e: MouseEvent) {
+      e.preventDefault();
+      e.stopPropagation();
+      setIsResizingPreview(false);
+    }
+
+    if (isResizingPreview) {
+      document.addEventListener('mousemove', handleMouseMove, { passive: false });
+      document.addEventListener('mouseup', handleMouseUp, { passive: false });
+      document.body.style.cursor = 'col-resize';
+      document.body.style.userSelect = 'none';
+      document.body.style.pointerEvents = 'none';
+    } else {
+      document.body.style.pointerEvents = '';
+    }
+
+    return () => {
+      document.removeEventListener('mousemove', handleMouseMove);
+      document.removeEventListener('mouseup', handleMouseUp);
+      document.body.style.cursor = '';
+      document.body.style.userSelect = '';
+      document.body.style.pointerEvents = '';
+    };
+  }, [isResizingPreview, sidebarWidth]);
 
   useEffect(() => {
     loadFiles();
@@ -436,7 +496,7 @@ export default function FileManager({ user, onLogout, initialPath }: FileManager
         return;
       }
 
-      // Enter: Open selected item or first item
+      // Enter: Open selected item or first item (preview for files)
       if (e.key === 'Enter') {
         e.preventDefault();
         const sortedFilesList = getSortedFiles();
@@ -447,7 +507,8 @@ export default function FileManager({ user, onLogout, initialPath }: FileManager
             if (selectedFile.type === 'directory') {
               navigateToPath(selectedFile.path);
             } else {
-              handleDownload(selectedFile);
+              // Open preview instead of downloading
+              setPreviewFile(selectedFile);
             }
           }
         } else if (filesToUse.length > 0) {
@@ -456,7 +517,8 @@ export default function FileManager({ user, onLogout, initialPath }: FileManager
           if (firstItem.type === 'directory') {
             navigateToPath(firstItem.path);
           } else {
-            handleDownload(firstItem);
+            // Open preview instead of downloading
+            setPreviewFile(firstItem);
           }
         }
         return;
@@ -810,18 +872,25 @@ export default function FileManager({ user, onLogout, initialPath }: FileManager
       return;
     }
 
+    // Ignore double clicks in onClick handler - they're handled by onDoubleClick
     if (e.detail === 2) {
-      // Double click - download file or navigate to directory
-      if (file.type === 'directory') {
-        navigateToPath(file.path);
-        setIsGlobalSearch(false);
-        setSearchQuery('');
-        setSearchFilters({ fileType: 'all' });
-      } else {
-        handleDownload(file);
+      // Clear any pending click timer
+      if (clickTimerRef.current) {
+        clearTimeout(clickTimerRef.current);
+        clickTimerRef.current = null;
       }
-    } else {
-      // Single click
+      return;
+    }
+
+    // Clear any existing timer
+    if (clickTimerRef.current) {
+      clearTimeout(clickTimerRef.current);
+    }
+
+    // Delay selection to detect double clicks
+    clickTimerRef.current = setTimeout(() => {
+      clickTimerRef.current = null;
+      // Single click - execute action
       if (file.type === 'directory') {
         // Navigate directly into directory on single click
         navigateToPath(file.path);
@@ -837,11 +906,11 @@ export default function FileManager({ user, onLogout, initialPath }: FileManager
           setSearchQuery('');
           setSearchFilters({ fileType: 'all' });
         } else {
-          // Toggle selection for files
+          // Toggle selection for files on single click
           toggleSelection(file.path);
         }
       }
-    }
+    }, 200); // 200ms delay to detect double clicks
   }
 
   function handleShare(item: FileItem) {
@@ -1677,7 +1746,7 @@ export default function FileManager({ user, onLogout, initialPath }: FileManager
           )}
 
           {/* Toolbar */}
-          <div className="border-b border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800/50">
+          <div className="border-b border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800/50 flex-shrink-0">
             <div className="px-4 py-2 flex items-center justify-between gap-4">
               {/* Search Bar */}
               <div className="flex-1 max-w-md">
@@ -1798,8 +1867,14 @@ export default function FileManager({ user, onLogout, initialPath }: FileManager
             </div>
           </div>
 
-          {/* File List - Table View */}
-          <div className="flex-1 overflow-auto relative" onContextMenu={handleEmptyContextMenu}>
+          {/* File List and Preview Container */}
+          <div className="flex-1 flex overflow-hidden">
+            {/* File List - Table View */}
+            <div 
+              className={`flex flex-col overflow-auto relative ${previewFile ? 'border-r border-gray-200 dark:border-gray-700' : 'flex-1'}`}
+              style={previewFile ? { width: `${Math.max(0, Math.min(100, 100 - previewWidth))}%`, minWidth: 0, flexShrink: 1 } : {}}
+              onContextMenu={handleEmptyContextMenu}
+            >
             {loading ? (
               <div className="flex flex-col items-center justify-center h-full">
                 <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mb-4"></div>
@@ -1958,6 +2033,27 @@ export default function FileManager({ user, onLogout, initialPath }: FileManager
                         key={file.path}
                         data-file-path={file.path}
                         onClick={(e) => handleRowClick(file, e)}
+                        onDoubleClick={(e) => {
+                          e.preventDefault();
+                          e.stopPropagation();
+                          // Clear any pending click timer to prevent selection
+                          if (clickTimerRef.current) {
+                            clearTimeout(clickTimerRef.current);
+                            clickTimerRef.current = null;
+                          }
+                          // Deselect if file was selected by single click
+                          if (selectedItems.has(file.path)) {
+                            toggleSelection(file.path);
+                          }
+                          if (file.type === 'directory') {
+                            navigateToPath(file.path);
+                            setIsGlobalSearch(false);
+                            setSearchQuery('');
+                            setSearchFilters({ fileType: 'all' });
+                          } else {
+                            setPreviewFile(file);
+                          }
+                        }}
                         onContextMenu={(e) => handleContextMenu(file, e)}
                         draggable={true}
                         onDragStart={(e) => {
@@ -2108,6 +2204,38 @@ export default function FileManager({ user, onLogout, initialPath }: FileManager
                   })}
                 </tbody>
               </table>
+            )}
+            </div>
+
+            {/* File Preview - Inline (only shown when file is double-clicked) */}
+            {previewFile && (
+              <div 
+                className={`relative overflow-hidden border-l border-gray-200 dark:border-gray-700 ${
+                  isResizingPreview ? '' : 'transition-all duration-300'
+                }`}
+                style={{ width: `${Math.max(0, Math.min(100, previewWidth))}%`, minWidth: 0 }}
+              >
+                {/* Resize Handle */}
+                <div
+                  onMouseDown={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    setIsResizingPreview(true);
+                  }}
+                  className={`absolute top-0 left-0 w-1 h-full cursor-col-resize hover:bg-blue-500 transition-colors ${
+                    isResizingPreview ? 'bg-blue-500' : 'bg-transparent'
+                  }`}
+                  style={{ zIndex: 10, pointerEvents: 'auto' }}
+                >
+                  <div className="absolute top-1/2 left-0 transform -translate-y-1/2 -translate-x-1/2 w-3 h-12 bg-gray-300 dark:bg-gray-600 rounded-full flex items-center justify-center opacity-0 hover:opacity-100 transition-opacity">
+                    <div className="w-0.5 h-8 bg-gray-500 dark:bg-gray-400 rounded-full"></div>
+                  </div>
+                </div>
+                <FilePreview
+                  file={previewFile}
+                  onClose={() => setPreviewFile(null)}
+                />
+              </div>
             )}
           </div>
         </div>
