@@ -705,6 +705,46 @@ export default function FileManager({ user, onLogout }: FileManagerProps) {
       }
     } catch (error) {
       console.error('Fehler beim Download:', error);
+      setToast({ message: 'Fehler beim Download', type: 'error' });
+    }
+  }
+
+  async function handleBulkDownload() {
+    if (selectedItems.size === 0) return;
+
+    const selectedFiles = files.filter(f => selectedItems.has(f.path));
+    if (selectedFiles.length === 0) return;
+
+    try {
+      setToast({ message: 'ZIP-Datei wird erstellt...', type: 'info' });
+
+      const paths = selectedFiles.map(f => f.path);
+      const res = await fetch('/api/files/download-zip', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ paths }),
+      });
+
+      if (!res.ok) {
+        const data = await res.json();
+        setToast({ message: data.error || 'Fehler beim Erstellen der ZIP-Datei', type: 'error' });
+        return;
+      }
+
+      const blob = await res.blob();
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = 'download.zip';
+      document.body.appendChild(a);
+      a.click();
+      window.URL.revokeObjectURL(url);
+      document.body.removeChild(a);
+
+      setToast({ message: `${selectedFiles.length} Element(e) erfolgreich heruntergeladen`, type: 'success' });
+    } catch (error) {
+      console.error('Fehler beim Bulk-Download:', error);
+      setToast({ message: 'Fehler beim Download', type: 'error' });
     }
   }
 
@@ -1008,15 +1048,26 @@ export default function FileManager({ user, onLogout }: FileManagerProps) {
               {/* Actions */}
               <div className="flex items-center gap-1.5">
                 {selectedItems.size > 0 && (
-                  <button
-                    onClick={openBulkDeleteModal}
-                    className="p-2 text-red-600 hover:text-red-700 dark:text-red-400 dark:hover:text-red-300 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg transition-colors"
-                    title={`${selectedItems.size} Element(e) löschen`}
-                  >
-                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                    </svg>
-                  </button>
+                  <>
+                    <button
+                      onClick={handleBulkDownload}
+                      className="p-2 text-blue-600 hover:text-blue-700 dark:text-blue-400 dark:hover:text-blue-300 hover:bg-blue-50 dark:hover:bg-blue-900/20 rounded-lg transition-colors"
+                      title={`${selectedItems.size} Element(e) herunterladen`}
+                    >
+                      <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+                      </svg>
+                    </button>
+                    <button
+                      onClick={openBulkDeleteModal}
+                      className="p-2 text-red-600 hover:text-red-700 dark:text-red-400 dark:hover:text-red-300 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg transition-colors"
+                      title={`${selectedItems.size} Element(e) löschen`}
+                    >
+                      <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                      </svg>
+                    </button>
+                  </>
                 )}
                 <button
                   onClick={handleCreateDirectory}
