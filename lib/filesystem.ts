@@ -74,11 +74,24 @@ export async function getDirectoryContents(userId: string, dirPath: string = '')
       const relativePath = dirPath ? path.join(dirPath, item) : item;
       const stats = await fs.stat(itemPath);
       
+      let size: number | undefined;
+      if (stats.isFile()) {
+        size = stats.size;
+      } else if (stats.isDirectory()) {
+        // Calculate directory size
+        try {
+          size = await getDirectorySize(itemPath);
+        } catch (error) {
+          // If calculation fails, leave size as undefined
+          size = undefined;
+        }
+      }
+      
       contents.push({
         name: item,
         path: relativePath,
         type: stats.isDirectory() ? 'directory' : 'file',
-        size: stats.isFile() ? stats.size : undefined,
+        size: size,
         modified: stats.mtime,
         metadata: metadata[item] || undefined,
       });
@@ -177,6 +190,44 @@ export async function getFile(userId: string, filePath: string): Promise<Buffer>
   const userDir = await ensureUserDirectory(userId);
   const fullPath = path.join(userDir, filePath);
   return fs.readFile(fullPath);
+}
+
+/**
+ * Calculate the size of a single directory (in bytes)
+ */
+async function getDirectorySize(dirPath: string): Promise<number> {
+  let totalSize = 0;
+  
+  try {
+    const items = await fs.readdir(dirPath);
+    
+    for (const item of items) {
+      // Skip metadata files
+      if (item === METADATA_FILE) continue;
+      
+      const itemPath = path.join(dirPath, item);
+      const stats = await fs.stat(itemPath);
+      
+      if (stats.isDirectory()) {
+        totalSize += await getDirectorySize(itemPath);
+      } else {
+        totalSize += stats.size;
+      }
+    }
+  } catch (error) {
+    // Ignore errors (e.g., permission denied)
+    console.error(`Error calculating size for ${dirPath}:`, error);
+  }
+  
+  return totalSize;
+}
+
+/**
+ * Calculate total storage used by a user (in bytes)
+ */
+export async function calculateStorageUsed(userId: string): Promise<number> {
+  const userDir = await ensureUserDirectory(userId);
+  return await getDirectorySize(userDir);
 }
 
 export async function renameItem(

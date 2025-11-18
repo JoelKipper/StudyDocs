@@ -12,6 +12,7 @@ import SettingsModal from './SettingsModal';
 import ShareModal from './ShareModal';
 import FilePreview from './FilePreview';
 import FileIcon from './FileIcon';
+import StorageQuota from './StorageQuota';
 import { useLanguage } from '@/contexts/LanguageContext';
 
 interface FileMetadata {
@@ -1830,6 +1831,11 @@ export default function FileManager({ user, onLogout, initialPath, initialFile: 
             />
           </div>
           
+          {/* Storage Quota - Bottom of Sidebar */}
+          <div className="border-t border-gray-200 dark:border-gray-700 p-3 bg-gray-50 dark:bg-gray-800/50 flex-shrink-0">
+            <StorageQuota />
+          </div>
+          
           {/* Resize Handle */}
           <div
             onMouseDown={(e) => {
@@ -2347,7 +2353,10 @@ export default function FileManager({ user, onLogout, initialPath, initialFile: 
                           {file.type === 'directory' ? 'Ordner' : getFileExtension(file.name) || 'Datei'}
                         </td>
                         <td className="px-4 py-3 text-sm text-gray-600 dark:text-gray-400 text-right hidden lg:table-cell font-mono">
-                          {file.type === 'directory' ? '-' : formatFileSize(file.size)}
+                          {file.type === 'directory' 
+                            ? (file.size !== undefined && file.size > 0 ? formatFileSize(file.size) : '-')
+                            : formatFileSize(file.size || 0)
+                          }
                         </td>
                         <td className="px-4 py-3 text-sm text-gray-600 dark:text-gray-400 hidden xl:table-cell">
                           {formatDate(file.modified)}
