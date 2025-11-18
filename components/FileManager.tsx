@@ -370,30 +370,57 @@ export default function FileManager({ user, onLogout, initialPath, initialFile: 
     lastSelectedIndexRef.current = null;
   }, [currentPath]);
 
+  const [isProcessingUpload, setIsProcessingUpload] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState<{ total: number; completed: number; current: string } | null>(null);
+  const [uploadErrors, setUploadErrors] = useState<Array<{ fileName: string; error: string }>>([]);
+
   useEffect(() => {
     async function processUploadQueue() {
-      if (uploadQueue.length === 0 || replaceModal.isOpen) return;
+      // Prevent multiple simultaneous uploads
+      if (uploadQueue.length === 0 || replaceModal.isOpen || isProcessingUpload) return;
 
+      setIsProcessingUpload(true);
       const { file, targetPath } = uploadQueue[0];
+      const totalFiles = uploadQueue.length;
       
-      // Check if file exists
-      try {
-        const checkRes = await fetch(
-          `/api/files/check?fileName=${encodeURIComponent(file.name)}&path=${encodeURIComponent(targetPath)}`
-        );
-        const checkData = await checkRes.json();
-        
-        if (checkData.exists) {
-          // Show replace modal
-          setReplaceModal({ isOpen: true, file, targetPath });
-          return;
-        }
-      } catch (error) {
-        console.error('Fehler beim Prüfen der Datei:', error);
+      // Initialize progress for all uploads (single or multiple)
+      if (!uploadProgress) {
+        setUploadProgress({
+          total: totalFiles,
+          completed: 0,
+          current: file.name
+        });
+      } else {
+        // Update current file name
+        setUploadProgress(prev => prev ? { ...prev, current: file.name } : null);
       }
-
-      // File doesn't exist, upload it
+      
       try {
+        // Check if file exists
+        try {
+          const checkRes = await fetch(
+            `/api/files/check?fileName=${encodeURIComponent(file.name)}&path=${encodeURIComponent(targetPath)}`
+          );
+          
+          if (!checkRes.ok) {
+            // Don't throw error, just continue with upload
+            console.warn('Fehler beim Prüfen der Datei, fahre mit Upload fort');
+          } else {
+            const checkData = await checkRes.json();
+            
+            if (checkData.exists) {
+              // Show replace modal
+              setReplaceModal({ isOpen: true, file, targetPath });
+              setIsProcessingUpload(false);
+              return;
+            }
+          }
+        } catch (error) {
+          console.error('Fehler beim Prüfen der Datei:', error);
+          // Continue with upload even if check fails
+        }
+
+        // File doesn't exist, upload it
         const formData = new FormData();
         formData.append('file', file);
         formData.append('path', targetPath);
@@ -405,20 +432,58 @@ export default function FileManager({ user, onLogout, initialPath, initialFile: 
 
         const data = await res.json();
         if (!res.ok) {
-          throw new Error(data.error || 'Fehler beim Hochladen');
+          // Only throw error if it's a real error, not a temporary network issue
+          const errorMessage = data.error || 'Fehler beim Hochladen';
+          if (errorMessage.includes('network') || errorMessage.includes('timeout') || errorMessage.includes('fetch')) {
+            // Retry once for network errors
+            console.warn('Netzwerkfehler, versuche erneut...');
+            const retryRes = await fetch('/api/files/upload', {
+              method: 'POST',
+              body: formData,
+            });
+            const retryData = await retryRes.json();
+            if (!retryRes.ok) {
+              throw new Error(retryData.error || errorMessage);
+            }
+          } else {
+            throw new Error(errorMessage);
+          }
+        }
+
+        // Update progress after successful upload
+        if (uploadProgress) {
+          const newCompleted = uploadProgress.completed + 1;
+          const remainingFiles = uploadQueue.length - 1; // -1 because we just processed one
+          const nextFile = remainingFiles > 0 ? uploadQueue[1]?.file.name : '';
+          setUploadProgress({
+            total: uploadProgress.total,
+            completed: newCompleted,
+            current: nextFile || ''
+          });
         }
       } catch (error: any) {
         console.error('Fehler beim Hochladen:', error);
+        // Only show error for real errors, not temporary issues
+        const errorMessage = error.message || 'Unbekannter Fehler';
+        if (!errorMessage.includes('network') && !errorMessage.includes('timeout') && !errorMessage.includes('fetch')) {
+          setUploadErrors(prev => [...prev, { fileName: file.name, error: errorMessage }]);
+        }
+      } finally {
+        // Process next file in queue
+        setUploadQueue((queue) => queue.slice(1));
+        setIsProcessingUpload(false);
       }
-      
-      // Process next file in queue
-      setUploadQueue((queue) => queue.slice(1));
     }
 
-    if (uploadQueue.length > 0 && !replaceModal.isOpen) {
-      processUploadQueue();
+    if (uploadQueue.length > 0 && !replaceModal.isOpen && !isProcessingUpload) {
+      // Add small delay to prevent race conditions
+      const timeoutId = setTimeout(() => {
+        processUploadQueue();
+      }, 100);
+      
+      return () => clearTimeout(timeoutId);
     }
-  }, [uploadQueue, replaceModal.isOpen]);
+  }, [uploadQueue, replaceModal.isOpen, isProcessingUpload]);
 
   async function uploadSingleFile(file: File, targetPath: string) {
     try {
@@ -443,8 +508,16 @@ export default function FileManager({ user, onLogout, initialPath, initialFile: 
 
   const handleExternalFilesDrop = useCallback(async (files: File[], targetPath: string) => {
     // Add all files to queue
-    setUploadQueue(files.map(file => ({ file, targetPath })));
-  }, []);
+    // Limit to prevent memory issues with too many files
+    const maxFiles = 100;
+    const filesToUpload = files.slice(0, maxFiles);
+    
+    if (files.length > maxFiles) {
+      setToast({ message: `${files.length} Dateien ausgewählt, nur die ersten ${maxFiles} werden hochgeladen.`, type: 'info' });
+    }
+    
+    setUploadQueue((prevQueue) => [...prevQueue, ...filesToUpload.map(file => ({ file, targetPath }))]);
+  }, [setToast]);
 
   async function handleReplaceConfirm() {
     if (replaceModal.file && replaceModal.targetPath) {
@@ -465,12 +538,40 @@ export default function FileManager({ user, onLogout, initialPath, initialFile: 
 
   // Track upload results
   useEffect(() => {
-    if (uploadQueue.length === 0 && replaceModal.isOpen === false) {
+    if (uploadQueue.length === 0 && replaceModal.isOpen === false && !isProcessingUpload) {
       // All files processed, refresh
       loadFiles();
       setTreeRefreshKey((k) => k + 1);
+      
+      // Show summary toast
+      if (uploadProgress) {
+        if (uploadProgress.total > 1) {
+          // Multiple files
+          const successCount = uploadProgress.total - uploadErrors.length;
+          if (uploadErrors.length === 0) {
+            setToast({ 
+              message: `${uploadProgress.total} Dateien erfolgreich hochgeladen`, 
+              type: 'success' 
+            });
+          } else {
+            setToast({ 
+              message: `${successCount} von ${uploadProgress.total} Dateien hochgeladen. ${uploadErrors.length} Fehler.`, 
+              type: 'error' 
+            });
+          }
+        } else {
+          // Single file
+          if (uploadErrors.length === 0) {
+            setToast({ message: t('fileUploaded'), type: 'success' });
+          } else {
+            setToast({ message: t('errorUploadingFile'), type: 'error' });
+          }
+        }
+        setUploadProgress(null);
+        setUploadErrors([]);
+      }
     }
-  }, [uploadQueue.length, replaceModal.isOpen]);
+  }, [uploadQueue.length, replaceModal.isOpen, isProcessingUpload, uploadProgress, uploadErrors.length]);
 
   // Keyboard shortcuts
   useEffect(() => {
@@ -1260,16 +1361,35 @@ export default function FileManager({ user, onLogout, initialPath, initialFile: 
 
   function handleRename(item: FileItem) {
     setRenamingItem(item);
+    
+    // Keep the full name including extension in the input
     setRenameValue(item.name);
-    // Focus input after state update
+    
+    // Focus input after state update and select only the name without extension
     setTimeout(() => {
-      renameInputRef.current?.focus();
-      renameInputRef.current?.select();
+      if (renameInputRef.current) {
+        renameInputRef.current.focus();
+        
+        // For files, select only the name without extension
+        if (item.type === 'file') {
+          const lastDotIndex = item.name.lastIndexOf('.');
+          if (lastDotIndex > 0) {
+            // Select from start to the dot (name without extension)
+            renameInputRef.current.setSelectionRange(0, lastDotIndex);
+          } else {
+            // No extension found, select all
+            renameInputRef.current.select();
+          }
+        } else {
+          // For directories, select all
+          renameInputRef.current.select();
+        }
+      }
     }, 0);
   }
 
   async function confirmRename() {
-    if (!renamingItem || !renameValue.trim() || renameValue === renamingItem.name) {
+    if (!renamingItem || !renameValue.trim()) {
       setRenamingItem(null);
       setRenameValue('');
       return;
@@ -1277,6 +1397,13 @@ export default function FileManager({ user, onLogout, initialPath, initialFile: 
 
     const oldName = renamingItem.name;
     const newName = renameValue.trim();
+    
+    // Check if name actually changed
+    if (newName === oldName) {
+      setRenamingItem(null);
+      setRenameValue('');
+      return;
+    }
 
     try {
       const res = await fetch('/api/files', {
@@ -2641,6 +2768,38 @@ export default function FileManager({ user, onLogout, initialPath, initialFile: 
         itemPath={shareModal.itemPath}
         itemType={shareModal.itemType}
       />
+
+      {/* Upload Progress Overlay */}
+      {uploadProgress && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center">
+          <div className="bg-white dark:bg-gray-800 rounded-lg shadow-xl p-6 max-w-md w-full mx-4">
+            <div className="flex items-center gap-4 mb-4">
+              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-500"></div>
+              <div className="flex-1">
+                <h3 className="text-lg font-semibold text-gray-900 dark:text-white">
+                  {uploadProgress.total > 1 ? 'Dateien werden hochgeladen...' : 'Datei wird hochgeladen...'}
+                </h3>
+                <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">
+                  {uploadProgress.current}
+                </p>
+              </div>
+            </div>
+            <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-2 mb-2">
+              <div
+                className="bg-blue-500 h-2 rounded-full transition-all duration-300"
+                style={{ width: `${(uploadProgress.completed / uploadProgress.total) * 100}%` }}
+              ></div>
+            </div>
+            <p className="text-sm text-gray-600 dark:text-gray-400 text-center">
+              {uploadProgress.total > 1 
+                ? `${uploadProgress.completed} von ${uploadProgress.total} Dateien hochgeladen`
+                : uploadProgress.completed === 1 
+                  ? 'Datei erfolgreich hochgeladen'
+                  : 'Datei wird hochgeladen...'}
+            </p>
+          </div>
+        </div>
+      )}
 
       {/* Toast */}
       {toast && (

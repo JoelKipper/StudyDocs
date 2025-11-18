@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getCurrentUser } from '@/lib/auth';
-import { getDirectoryContents, createDirectory, deleteItem, renameItem, moveItem, copyItem } from '@/lib/filesystem';
+import { getDirectoryContents, createDirectory, deleteItem, renameItem, moveItem, copyItem } from '@/lib/filesystem-supabase';
 
 export async function GET(request: NextRequest) {
   const user = await getCurrentUser();
@@ -12,7 +12,7 @@ export async function GET(request: NextRequest) {
   const dirPath = searchParams.get('path') || '';
   
   try {
-    const contents = await getDirectoryContents(user.id, dirPath);
+    const contents = await getDirectoryContents(dirPath);
     return NextResponse.json({ contents });
   } catch (error) {
     return NextResponse.json({ error: 'Fehler beim Laden des Verzeichnisses' }, { status: 500 });
@@ -30,12 +30,12 @@ export async function POST(request: NextRequest) {
     
     if (action === 'create-directory') {
       const dirPath = path ? `${path}/${name}` : name;
-      await createDirectory(user.id, dirPath, user);
+      await createDirectory(dirPath, user);
       return NextResponse.json({ success: true });
     }
     
     if (action === 'delete') {
-      await deleteItem(user.id, path);
+      await deleteItem(path);
       return NextResponse.json({ success: true });
     }
     
@@ -43,7 +43,7 @@ export async function POST(request: NextRequest) {
       if (!newName || !newName.trim()) {
         return NextResponse.json({ error: 'Neuer Name ist erforderlich' }, { status: 400 });
       }
-      await renameItem(user.id, path, newName.trim(), user);
+      await renameItem(path, newName.trim(), user);
       return NextResponse.json({ success: true });
     }
     
@@ -51,7 +51,7 @@ export async function POST(request: NextRequest) {
       if (!targetPath && targetPath !== '') {
         return NextResponse.json({ error: 'Zielverzeichnis ist erforderlich' }, { status: 400 });
       }
-      await moveItem(user.id, path, targetPath, user);
+      await moveItem(path, targetPath);
       return NextResponse.json({ success: true });
     }
     
@@ -59,7 +59,7 @@ export async function POST(request: NextRequest) {
       if (!targetPath && targetPath !== '') {
         return NextResponse.json({ error: 'Zielverzeichnis ist erforderlich' }, { status: 400 });
       }
-      await copyItem(user.id, path, targetPath, user);
+      await copyItem(path, targetPath, user);
       return NextResponse.json({ success: true });
     }
     

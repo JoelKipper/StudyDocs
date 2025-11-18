@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getCurrentUser } from '@/lib/auth';
-import { saveFile } from '@/lib/filesystem';
+import { saveFile } from '@/lib/filesystem-supabase';
 
 export async function POST(request: NextRequest) {
   const user = await getCurrentUser();
@@ -20,11 +20,11 @@ export async function POST(request: NextRequest) {
     const buffer = Buffer.from(await file.arrayBuffer());
     const filePath = path ? `${path}/${file.name}` : file.name;
     
-    await saveFile(user.id, filePath, buffer, user);
+    await saveFile(filePath, buffer, user);
     
     return NextResponse.json({ success: true, fileName: file.name });
-  } catch (error) {
-    return NextResponse.json({ error: 'Fehler beim Hochladen der Datei' }, { status: 500 });
+  } catch (error: any) {
+    return NextResponse.json({ error: error.message || 'Fehler beim Hochladen der Datei' }, { status: 500 });
   }
 }
 

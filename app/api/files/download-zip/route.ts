@@ -1,14 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getCurrentUser } from '@/lib/auth';
-import { getFile, getDirectoryContents } from '@/lib/filesystem';
+import { getFile, getDirectoryContents } from '@/lib/filesystem-supabase';
 import archiver from 'archiver';
 
 async function getAllFilesInDirectory(
-  userId: string,
   dirPath: string,
   basePath: string = ''
 ): Promise<Array<{ path: string; name: string; buffer: Buffer; relativePath: string }>> {
-  const contents = await getDirectoryContents(userId, dirPath);
+  const contents = await getDirectoryContents(dirPath);
   const files: Array<{ path: string; name: string; buffer: Buffer; relativePath: string }> = [];
 
   for (const item of contents) {
@@ -16,12 +15,12 @@ async function getAllFilesInDirectory(
 
     if (item.type === 'directory') {
       // Recursively get files from subdirectory
-      const subFiles = await getAllFilesInDirectory(userId, item.path, relativePath);
+      const subFiles = await getAllFilesInDirectory(item.path, relativePath);
       files.push(...subFiles);
     } else {
       // Get file buffer
       try {
-        const buffer = await getFile(userId, item.path);
+        const buffer = await getFile(item.path);
         files.push({ path: item.path, name: item.name, buffer, relativePath });
       } catch (error) {
         console.error(`Fehler beim Laden von ${item.path}:`, error);
@@ -35,7 +34,6 @@ async function getAllFilesInDirectory(
 
 // Helper function to find an item by path recursively
 async function findItemByPath(
-  userId: string,
   searchPath: string
 ): Promise<{ item: any; found: boolean }> {
   // Normalize path
@@ -44,7 +42,7 @@ async function findItemByPath(
   // Helper to recursively search
   async function searchInDirectory(dirPath: string): Promise<{ item: any; found: boolean }> {
     try {
-      const contents = await getDirectoryContents(userId, dirPath);
+      const contents = await getDirectoryContents(dirPath);
       
       for (const item of contents) {
         const normalizedItemPath = item.path.replace(/\\/g, '/');
@@ -115,13 +113,13 @@ export async function POST(request: NextRequest) {
         console.log(`Verarbeite Pfad: ${itemPath}`);
         
         // Find the item using recursive search
-        const { item, found } = await findItemByPath(user.id, itemPath);
+        const { item, found } = await findItemByPath(itemPath);
         
         if (!found || !item) {
           console.error(`Item nicht gefunden: ${itemPath}`);
           // Try to get as file directly (fallback)
           try {
-            const buffer = await getFile(user.id, itemPath);
+            const buffer = await getFile(itemPath);
             const fileName = itemPath.split('/').pop() || itemPath.split('\\').pop() || 'file';
             archive.append(buffer, { name: fileName });
             fileCount++;
@@ -136,7 +134,7 @@ export async function POST(request: NextRequest) {
 
         if (item.type === 'directory') {
           // Get all files in directory recursively
-          const files = await getAllFilesInDirectory(user.id, item.path, item.name);
+          const files = await getAllFilesInDirectory(item.path, item.name);
           console.log(`Ordner ${item.name} enthält ${files.length} Dateien`);
           for (const file of files) {
             archive.append(file.buffer, { name: file.relativePath });
@@ -145,7 +143,7 @@ export async function POST(request: NextRequest) {
         } else if (item.type === 'file') {
           // Single file
           try {
-            const buffer = await getFile(user.id, item.path);
+            const buffer = await getFile(item.path);
             archive.append(buffer, { name: item.name });
             fileCount++;
             console.log(`Datei hinzugefügt: ${item.name}`);

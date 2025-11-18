@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getCurrentUser } from '@/lib/auth';
-import { calculateStorageUsed } from '@/lib/filesystem';
+import { calculateStorageUsed } from '@/lib/filesystem-supabase';
 
 // Default storage quota: 5 GB (can be configured via environment variable)
 const DEFAULT_STORAGE_QUOTA = 5 * 1024 * 1024 * 1024; // 5 GB in bytes
@@ -12,15 +12,17 @@ export async function GET(request: NextRequest) {
   }
   
   try {
-    const used = await calculateStorageUsed(user.id);
+    const used = await calculateStorageUsed();
     const quota = process.env.STORAGE_QUOTA 
       ? parseInt(process.env.STORAGE_QUOTA, 10) 
       : DEFAULT_STORAGE_QUOTA;
     
+    const percentage = (used / quota) * 100;
+    
     return NextResponse.json({
       used,
       quota,
-      percentage: (used / quota) * 100,
+      percentage: parseFloat(percentage.toFixed(2)),
     });
   } catch (error: any) {
     console.error('Error calculating storage:', error);

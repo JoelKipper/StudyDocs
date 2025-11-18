@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getCurrentUser } from '@/lib/auth';
-import { getDirectoryContents } from '@/lib/filesystem';
+import { getDirectoryContents } from '@/lib/filesystem-supabase';
 
 interface FileItem {
   name: string;
@@ -12,13 +12,12 @@ interface FileItem {
 }
 
 async function getAllFilesRecursive(
-  userId: string,
   dirPath: string = ''
 ): Promise<FileItem[]> {
   const allFiles: FileItem[] = [];
   
   try {
-    const contents = await getDirectoryContents(userId, dirPath);
+    const contents = await getDirectoryContents(dirPath);
     
     for (const item of contents) {
       // Convert modified date to ISO string for JSON serialization
@@ -30,7 +29,7 @@ async function getAllFilesRecursive(
       
       // If it's a directory, recursively get its contents
       if (item.type === 'directory') {
-        const subFiles = await getAllFilesRecursive(userId, item.path);
+        const subFiles = await getAllFilesRecursive(item.path);
         allFiles.push(...subFiles);
       }
     }
@@ -57,7 +56,7 @@ export async function GET(request: NextRequest) {
     const dateTo = searchParams.get('dateTo');
 
     // Get all files recursively
-    const allFiles = await getAllFilesRecursive(user.id, '');
+    const allFiles = await getAllFilesRecursive('');
 
     // Apply filters
     let filtered = allFiles;

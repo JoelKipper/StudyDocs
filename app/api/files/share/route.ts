@@ -1,49 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getCurrentUser } from '@/lib/auth';
 import crypto from 'crypto';
-import fs from 'fs/promises';
-import path from 'path';
-
-const SHARES_FILE = path.join(process.cwd(), 'user-data', 'shares.json');
-
-interface ShareData {
-  userId: string;
-  itemPath: string;
-  createdAt: number;
-}
-
-async function loadShares(): Promise<Map<string, ShareData>> {
-  try {
-    const data = await fs.readFile(SHARES_FILE, 'utf-8');
-    const shares = JSON.parse(data);
-    const map = new Map<string, ShareData>();
-    for (const [token, shareData] of Object.entries(shares)) {
-      map.set(token, shareData as ShareData);
-    }
-    return map;
-  } catch {
-    return new Map();
-  }
-}
-
-async function saveShares(shares: Map<string, ShareData>) {
-  try {
-    await fs.mkdir(path.dirname(SHARES_FILE), { recursive: true });
-    const obj = Object.fromEntries(shares);
-    await fs.writeFile(SHARES_FILE, JSON.stringify(obj, null, 2), 'utf-8');
-  } catch (error) {
-    console.error('Error saving shares:', error);
-  }
-}
-
-async function cleanupOldShares(shares: Map<string, ShareData>) {
-  const thirtyDaysAgo = Date.now() - 30 * 24 * 60 * 60 * 1000;
-  for (const [token, data] of shares.entries()) {
-    if (data.createdAt < thirtyDaysAgo) {
-      shares.delete(token);
-    }
-  }
-}
+import { supabaseServer } from '@/lib/supabase-server';
 
 export async function POST(request: NextRequest) {
   const user = await getCurrentUser();
@@ -58,34 +16,35 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Pfad ist erforderlich' }, { status: 400 });
     }
 
-    // Verify that the item exists and belongs to the user
-    const userDir = path.join(process.cwd(), 'user-data', user.id);
-    const fullPath = path.join(userDir, itemPath);
+    // Verify that the item exists (check in file_metadata table)
+    const { data: item, error: itemError } = await supabaseServer
+      .from('file_metadata')
+      .select('path, type')
+      .eq('path', itemPath)
+      .single();
 
-    try {
-      await fs.access(fullPath);
-    } catch {
+    if (itemError || !item) {
       return NextResponse.json({ error: 'Datei oder Ordner nicht gefunden' }, { status: 404 });
     }
 
     // Generate a unique token
     const token = crypto.randomBytes(32).toString('hex');
 
-    // Load existing shares
-    const shares = await loadShares();
-    
-    // Clean up old shares
-    await cleanupOldShares(shares);
+    // Store the token in Supabase
+    const { error: insertError } = await supabaseServer
+      .from('shares')
+      .insert({
+        token: token,
+        user_id: user.id,
+        item_path: itemPath,
+        item_type: item.type,
+        created_at: new Date().toISOString(),
+      });
 
-    // Store the token
-    shares.set(token, {
-      userId: user.id,
-      itemPath: itemPath,
-      createdAt: Date.now(),
-    });
-
-    // Save shares
-    await saveShares(shares);
+    if (insertError) {
+      console.error('Error creating share:', insertError);
+      return NextResponse.json({ error: 'Fehler beim Erstellen des Share-Links' }, { status: 500 });
+    }
 
     return NextResponse.json({ token });
   } catch (error: any) {
@@ -103,41 +62,39 @@ export async function GET(request: NextRequest) {
   }
 
   try {
-    const shares = await loadShares();
-    const shareData = shares.get(token);
+    // Get share data from Supabase
+    const { data: shareData, error } = await supabaseServer
+      .from('shares')
+      .select('user_id, item_path, item_type, created_at')
+      .eq('token', token)
+      .single();
 
-    if (!shareData) {
+    if (error || !shareData) {
       return NextResponse.json({ error: 'Ungültiger oder abgelaufener Token' }, { status: 404 });
     }
 
-    // Check if token is expired
-    const thirtyDaysAgo = Date.now() - 30 * 24 * 60 * 60 * 1000;
-    if (shareData.createdAt < thirtyDaysAgo) {
-      shares.delete(token);
-      await saveShares(shares);
-      return NextResponse.json({ error: 'Ungültiger oder abgelaufener Token' }, { status: 404 });
-    }
+    // Check if share is older than 30 days
+    const createdAt = new Date(shareData.created_at);
+    const thirtyDaysAgo = new Date();
+    thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
 
-    // Determine if item is a file or directory
-    const userDir = path.join(process.cwd(), 'user-data', shareData.userId);
-    const fullPath = path.join(userDir, shareData.itemPath);
-    let itemType: 'file' | 'directory' = 'directory';
-    
-    try {
-      const stats = await fs.stat(fullPath);
-      itemType = stats.isFile() ? 'file' : 'directory';
-    } catch {
-      // If we can't stat, default to directory
+    if (createdAt < thirtyDaysAgo) {
+      // Delete expired share
+      await supabaseServer
+        .from('shares')
+        .delete()
+        .eq('token', token);
+      
+      return NextResponse.json({ error: 'Ungültiger oder abgelaufener Token' }, { status: 404 });
     }
 
     return NextResponse.json({
-      userId: shareData.userId,
-      itemPath: shareData.itemPath,
-      itemType: itemType,
+      userId: shareData.user_id,
+      itemPath: shareData.item_path,
+      itemType: shareData.item_type,
     });
   } catch (error: any) {
     console.error('Error getting share:', error);
     return NextResponse.json({ error: error.message || 'Serverfehler' }, { status: 500 });
   }
 }
-

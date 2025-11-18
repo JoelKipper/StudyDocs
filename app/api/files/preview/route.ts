@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getCurrentUser } from '@/lib/auth';
-import fs from 'fs/promises';
+import { getFile } from '@/lib/filesystem-supabase';
 import path from 'path';
 
 export async function GET(request: NextRequest) {
@@ -17,28 +17,8 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: 'Pfad ist erforderlich' }, { status: 400 });
     }
 
-    const userDir = path.join(process.cwd(), 'user-data', user.id);
-    const fullPath = path.join(userDir, filePath);
-
-    // Security check: ensure path is within user directory
-    const resolvedPath = path.resolve(fullPath);
-    const resolvedUserDir = path.resolve(userDir);
-    if (!resolvedPath.startsWith(resolvedUserDir)) {
-      return NextResponse.json({ error: 'Ungültiger Pfad' }, { status: 403 });
-    }
-
-    // Check if file exists
-    try {
-      const stats = await fs.stat(resolvedPath);
-      if (stats.isDirectory()) {
-        return NextResponse.json({ error: 'Verzeichnisse können nicht als Vorschau angezeigt werden' }, { status: 400 });
-      }
-    } catch {
-      return NextResponse.json({ error: 'Datei nicht gefunden' }, { status: 404 });
-    }
-
-    // Read file
-    const fileBuffer = await fs.readFile(resolvedPath);
+    // Get file from Supabase Storage
+    const fileBuffer = await getFile(filePath);
     const fileName = path.basename(filePath);
     const fileExtension = fileName.split('.').pop()?.toLowerCase() || '';
 

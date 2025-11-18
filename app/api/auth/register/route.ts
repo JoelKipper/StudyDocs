@@ -21,7 +21,12 @@ export async function POST(request: NextRequest) {
     });
     
     return NextResponse.json({ user, success: true });
-  } catch (error) {
+  } catch (error: any) {
+    // Check if it's a known error (e.g., user already exists)
+    if (error.message && error.message.includes('existiert bereits')) {
+      return NextResponse.json({ error: error.message }, { status: 400 });
+    }
+    console.error('Registration error:', error);
     return NextResponse.json({ error: 'Serverfehler' }, { status: 500 });
   }
 }

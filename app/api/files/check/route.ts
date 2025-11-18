@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getCurrentUser } from '@/lib/auth';
-import { getDirectoryContents } from '@/lib/filesystem';
+import { getDirectoryContents } from '@/lib/filesystem-supabase';
 
 export async function GET(request: NextRequest) {
   const user = await getCurrentUser();
@@ -17,7 +17,7 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: 'Dateiname ist erforderlich' }, { status: 400 });
     }
     
-    const contents = await getDirectoryContents(user.id, path);
+    const contents = await getDirectoryContents(path);
     const exists = contents.some(item => item.name === fileName && item.type === 'file');
     
     return NextResponse.json({ exists, fileName });

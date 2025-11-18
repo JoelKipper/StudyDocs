@@ -1,6 +1,7 @@
 import { cookies } from 'next/headers';
 import jwt from 'jsonwebtoken';
 import bcrypt from 'bcryptjs';
+import { supabase } from './supabase';
 
 const JWT_SECRET = process.env.JWT_SECRET || 'your-secret-key-change-in-production';
 
@@ -9,9 +10,6 @@ export interface User {
   email: string;
   name: string;
 }
-
-// In einer echten Anwendung würde dies aus einer Datenbank kommen
-const users: { [key: string]: { email: string; password: string; name: string } } = {};
 
 export async function hashPassword(password: string): Promise<string> {
   return bcrypt.hash(password, 10);
@@ -28,7 +26,19 @@ export async function createToken(user: User): Promise<string> {
 export async function verifyToken(token: string): Promise<User | null> {
   try {
     const decoded = jwt.verify(token, JWT_SECRET) as { userId: string; email: string };
-    return { id: decoded.userId, email: decoded.email, name: users[decoded.userId]?.name || decoded.email };
+    
+    // Get user from Supabase
+    const { data, error } = await supabase
+      .from('users')
+      .select('id, email, name')
+      .eq('id', decoded.userId)
+      .single();
+    
+    if (error || !data) {
+      return null;
+    }
+    
+    return { id: data.id, email: data.email, name: data.name };
   } catch {
     return null;
   }
@@ -42,20 +52,71 @@ export async function getCurrentUser(): Promise<User | null> {
 }
 
 export async function registerUser(email: string, password: string, name: string): Promise<User> {
-  const userId = Date.now().toString();
+  // Check if user with this email already exists
+  const { data: existingUser, error: checkError } = await supabase
+    .from('users')
+    .select('id')
+    .eq('email', email.toLowerCase())
+    .maybeSingle();
+  
+  // If we got data (not null), user exists
+  if (existingUser) {
+    throw new Error('Ein Benutzer mit dieser E-Mail existiert bereits');
+  }
+  
+  // If error is not "not found" error, something went wrong
+  if (checkError && checkError.code !== 'PGRST116') {
+    console.error('Error checking existing user:', checkError);
+    throw new Error('Fehler beim Überprüfen der E-Mail');
+  }
+  
+  // Hash password
   const hashedPassword = await hashPassword(password);
-  users[userId] = { email, password: hashedPassword, name };
-  return { id: userId, email, name };
+  
+  // Insert user into Supabase (id will be auto-generated as UUID)
+  const { data, error } = await supabase
+    .from('users')
+    .insert({
+      email: email.toLowerCase(),
+      password: hashedPassword,
+      name: name,
+    })
+    .select('id, email, name')
+    .single();
+  
+  if (error) {
+    console.error('Supabase error:', error);
+    // Check if it's a unique constraint violation (email already exists)
+    if (error.code === '23505') {
+      throw new Error('Ein Benutzer mit dieser E-Mail existiert bereits');
+    }
+    throw new Error('Fehler beim Registrieren des Benutzers');
+  }
+  
+  if (!data) {
+    throw new Error('Benutzer konnte nicht erstellt werden');
+  }
+  
+  return { id: data.id, email: data.email, name: data.name };
 }
 
 export async function loginUser(email: string, password: string): Promise<User | null> {
-  const userEntry = Object.entries(users).find(([_, user]) => user.email === email);
-  if (!userEntry) return null;
+  // Get user from Supabase
+  const { data: user, error } = await supabase
+    .from('users')
+    .select('id, email, name, password')
+    .eq('email', email.toLowerCase())
+    .single();
   
-  const [userId, user] = userEntry;
+  if (error || !user) {
+    return null;
+  }
+  
+  // Verify password
   const isValid = await verifyPassword(password, user.password);
-  if (!isValid) return null;
+  if (!isValid) {
+    return null;
+  }
   
-  return { id: userId, email: user.email, name: user.name };
+  return { id: user.id, email: user.email, name: user.name };
 }
-
