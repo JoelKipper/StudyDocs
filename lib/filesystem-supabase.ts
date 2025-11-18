@@ -715,7 +715,7 @@ export async function copyItem(itemPath: string, targetPath: string, user: { id:
   const normalizedNewPath = normalizePath(newPath);
   
   // Get item info
-  const { data: item, error: fetchError } = await supabase
+  const { data: item, error: fetchError } = await supabaseServer
     .from('file_metadata')
     .select('*')
     .eq('path', normalizedPath)
