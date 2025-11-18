@@ -19,7 +19,7 @@ export async function GET(request: NextRequest) {
     const buffer = await getFile(filePath);
     const fileName = filePath.split('/').pop() || 'download';
     
-    return new NextResponse(buffer, {
+    return new NextResponse(new Uint8Array(buffer), {
       headers: {
         'Content-Type': 'application/octet-stream',
         'Content-Disposition': `attachment; filename="${fileName}"`,
