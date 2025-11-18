@@ -77,7 +77,7 @@ export async function GET(request: NextRequest) {
       headers['Content-Disposition'] = `inline; filename="${encodeURIComponent(fileName)}"`;
     }
 
-    return new NextResponse(fileBuffer, {
+    return new NextResponse(new Uint8Array(fileBuffer), {
       headers,
     });
   } catch (error: any) {
