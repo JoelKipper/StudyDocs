@@ -8,12 +8,22 @@ import ContextMenu from './ContextMenu';
 import DeleteModal from './DeleteModal';
 import Toast from './Toast';
 
+interface FileMetadata {
+  createdBy: { id: string; name: string; email: string };
+  createdAt: string;
+  lastModifiedBy?: { id: string; name: string; email: string };
+  lastModifiedAt?: string;
+  renamedBy?: { id: string; name: string; email: string };
+  renamedAt?: string;
+}
+
 interface FileItem {
   name: string;
   path: string;
   type: 'file' | 'directory';
   size?: number;
   modified?: Date;
+  metadata?: FileMetadata;
 }
 
 type SortField = 'name' | 'size' | 'type' | 'modified';
@@ -65,6 +75,14 @@ export default function FileManager({ user, onLogout }: FileManagerProps) {
   const [renameValue, setRenameValue] = useState('');
   const renameInputRef = useRef<HTMLInputElement>(null);
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' | 'info' } | null>(null);
+  const [sidebarWidth, setSidebarWidth] = useState(() => {
+    if (typeof window !== 'undefined') {
+      const saved = localStorage.getItem(`studydocs-sidebar-width-${user.id}`);
+      return saved ? parseInt(saved, 10) : 256; // 256px = w-64
+    }
+    return 256;
+  });
+  const [isResizing, setIsResizing] = useState(false);
 
   // Save path to localStorage whenever it changes
   useEffect(() => {
@@ -72,6 +90,41 @@ export default function FileManager({ user, onLogout }: FileManagerProps) {
       localStorage.setItem(storageKey, currentPath);
     }
   }, [currentPath, storageKey]);
+
+  // Save sidebar width to localStorage
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      localStorage.setItem(`studydocs-sidebar-width-${user.id}`, sidebarWidth.toString());
+    }
+  }, [sidebarWidth, user.id]);
+
+  // Handle resize
+  useEffect(() => {
+    function handleMouseMove(e: MouseEvent) {
+      if (!isResizing) return;
+      
+      const newWidth = Math.max(200, Math.min(600, e.clientX));
+      setSidebarWidth(newWidth);
+    }
+
+    function handleMouseUp() {
+      setIsResizing(false);
+    }
+
+    if (isResizing) {
+      document.addEventListener('mousemove', handleMouseMove);
+      document.addEventListener('mouseup', handleMouseUp);
+      document.body.style.cursor = 'col-resize';
+      document.body.style.userSelect = 'none';
+    }
+
+    return () => {
+      document.removeEventListener('mousemove', handleMouseMove);
+      document.removeEventListener('mouseup', handleMouseUp);
+      document.body.style.cursor = '';
+      document.body.style.userSelect = '';
+    };
+  }, [isResizing]);
 
   useEffect(() => {
     loadFiles();
@@ -369,7 +422,10 @@ export default function FileManager({ user, onLogout }: FileManagerProps) {
 
       <div className="flex-1 flex overflow-hidden">
         {/* Sidebar - File Tree */}
-        <div className="w-64 bg-white dark:bg-gray-800 border-r border-gray-200 dark:border-gray-700 flex flex-col">
+        <div
+          className="bg-white dark:bg-gray-800 border-r border-gray-200 dark:border-gray-700 flex flex-col relative"
+          style={{ width: `${sidebarWidth}px`, minWidth: '200px', maxWidth: '600px' }}
+        >
           <div className="p-4 border-b border-gray-200 dark:border-gray-700">
             <h2 className="text-sm font-semibold text-gray-900 dark:text-white flex items-center gap-2">
               <svg className="w-4 h-4 text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -385,6 +441,22 @@ export default function FileManager({ user, onLogout }: FileManagerProps) {
               onNavigate={navigateToPath}
               onRefresh={handleRefresh}
             />
+          </div>
+          
+          {/* Resize Handle */}
+          <div
+            onMouseDown={(e) => {
+              e.preventDefault();
+              setIsResizing(true);
+            }}
+            className={`absolute top-0 right-0 w-1 h-full cursor-col-resize hover:bg-blue-500 transition-colors ${
+              isResizing ? 'bg-blue-500' : 'bg-transparent'
+            }`}
+            style={{ zIndex: 10 }}
+          >
+            <div className="absolute top-1/2 right-0 transform -translate-y-1/2 translate-x-1/2 w-3 h-12 bg-gray-300 dark:bg-gray-600 rounded-full flex items-center justify-center opacity-0 hover:opacity-100 transition-opacity">
+              <div className="w-0.5 h-8 bg-gray-500 dark:bg-gray-400 rounded-full"></div>
+            </div>
           </div>
         </div>
 
@@ -540,6 +612,9 @@ export default function FileManager({ user, onLogout }: FileManagerProps) {
                         )}
                       </div>
                     </th>
+                    <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600 dark:text-gray-400 uppercase tracking-wider hidden 2xl:table-cell">
+                      Erstellt von
+                    </th>
                     <th className="px-4 py-3 text-right text-xs font-semibold text-gray-600 dark:text-gray-400 uppercase tracking-wider w-24">
                       Aktionen
                     </th>
@@ -611,6 +686,22 @@ export default function FileManager({ user, onLogout }: FileManagerProps) {
                         </td>
                         <td className="px-4 py-3 text-sm text-gray-600 dark:text-gray-400 hidden xl:table-cell">
                           {formatDate(file.modified)}
+                        </td>
+                        <td className="px-4 py-3 text-sm text-gray-600 dark:text-gray-400 hidden 2xl:table-cell">
+                          {file.metadata ? (
+                            <div className="space-y-1">
+                              <div>
+                                <span className="font-medium">{file.metadata.createdBy.name}</span>
+                              </div>
+                              {file.metadata.renamedBy && (
+                                <div className="text-xs text-gray-500 dark:text-gray-500">
+                                  <span>Umbenannt von {file.metadata.renamedBy.name}</span>
+                                </div>
+                              )}
+                            </div>
+                          ) : (
+                            <span className="text-gray-400 dark:text-gray-500 text-xs">-</span>
+                          )}
                         </td>
                         <td className="px-4 py-3 text-right" onClick={(e) => e.stopPropagation()}>
                           <div className="flex items-center justify-end gap-2">

@@ -62,6 +62,11 @@ export default function DeleteModal({
               </p>
             </div>
           </div>
+          {itemType === 'directory' && (
+            <p className="text-sm text-orange-600 dark:text-orange-400 mb-4 px-2 py-2 bg-orange-50 dark:bg-orange-900/20 rounded-lg border border-orange-200 dark:border-orange-800">
+              ⚠️ <strong>Warnung:</strong> Der gesamte Inhalt des Verzeichnisses wird ebenfalls gelöscht.
+            </p>
+          )}
           <p className="text-sm text-gray-500 dark:text-gray-400 mb-6">
             Diese Aktion kann nicht rückgängig gemacht werden.
           </p>

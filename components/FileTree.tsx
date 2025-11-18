@@ -60,8 +60,12 @@ export default function FileTree({ currentPath, onNavigate, onRefresh }: FileTre
       const res = await fetch(`/api/files?path=${encodeURIComponent(path)}`);
       const data = await res.json();
       if (res.ok) {
-        const dirs = (data.contents || []).filter((item: FileItem) => item.type === 'directory');
-        const treeNodes: TreeNodeData[] = await Promise.all(
+        const allItems = data.contents || [];
+        const dirs = allItems.filter((item: FileItem) => item.type === 'directory');
+        const files = allItems.filter((item: FileItem) => item.type === 'file');
+        
+        // Load children for directories
+        const dirNodes: TreeNodeData[] = await Promise.all(
           dirs.map(async (dir: FileItem) => {
             const children = await loadTreeRecursive(dir.path);
             return {
@@ -71,7 +75,16 @@ export default function FileTree({ currentPath, onNavigate, onRefresh }: FileTre
             };
           })
         );
-        return treeNodes;
+        
+        // Add files as leaf nodes (no children)
+        const fileNodes: TreeNodeData[] = files.map((file: FileItem) => ({
+          ...file,
+          children: [],
+          loaded: true,
+        }));
+        
+        // Combine directories and files, directories first
+        return [...dirNodes, ...fileNodes];
       }
     } catch (error) {
       console.error('Fehler beim Laden:', error);
@@ -143,7 +156,7 @@ export default function FileTree({ currentPath, onNavigate, onRefresh }: FileTre
       ))}
       {tree.length === 0 && (
         <div className="text-center py-4 text-sm text-gray-400 dark:text-gray-500">
-          Keine Verzeichnisse
+          Leer
         </div>
       )}
     </div>
@@ -207,24 +220,50 @@ function TreeNode({
           )}
         </button>
         <button
-          onClick={() => onNavigate(item.path)}
+          onClick={() => {
+            if (item.type === 'directory') {
+              onNavigate(item.path);
+            } else {
+              // For files, navigate to parent directory
+              const parentPath = item.path.split('/').slice(0, -1).join('/');
+              onNavigate(parentPath);
+            }
+          }}
           className="flex-1 text-left flex items-center gap-2 min-w-0"
         >
-          <svg
-            className={`w-5 h-5 flex-shrink-0 transition-transform duration-200 ${
-              isActive ? 'text-white' : 'text-blue-500 group-hover:scale-110'
-            }`}
-            fill="none"
-            stroke="currentColor"
-            viewBox="0 0 24 24"
-          >
-            <path
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              strokeWidth={2}
-              d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z"
-            />
-          </svg>
+          {item.type === 'directory' ? (
+            <svg
+              className={`w-5 h-5 flex-shrink-0 transition-transform duration-200 ${
+                isActive ? 'text-white' : 'text-blue-500 group-hover:scale-110'
+              }`}
+              fill="none"
+              stroke="currentColor"
+              viewBox="0 0 24 24"
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth={2}
+                d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z"
+              />
+            </svg>
+          ) : (
+            <svg
+              className={`w-5 h-5 flex-shrink-0 transition-transform duration-200 ${
+                isActive ? 'text-white' : 'text-gray-400 group-hover:scale-110'
+              }`}
+              fill="none"
+              stroke="currentColor"
+              viewBox="0 0 24 24"
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth={2}
+                d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"
+              />
+            </svg>
+          )}
           <span className="truncate">{item.name}</span>
         </button>
       </div>

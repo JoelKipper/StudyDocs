@@ -20,7 +20,7 @@ export async function POST(request: NextRequest) {
     const buffer = Buffer.from(await file.arrayBuffer());
     const filePath = path ? `${path}/${file.name}` : file.name;
     
-    await saveFile(user.id, filePath, buffer);
+    await saveFile(user.id, filePath, buffer, user);
     
     return NextResponse.json({ success: true, fileName: file.name });
   } catch (error) {

@@ -30,7 +30,7 @@ export async function POST(request: NextRequest) {
     
     if (action === 'create-directory') {
       const dirPath = path ? `${path}/${name}` : name;
-      await createDirectory(user.id, dirPath);
+      await createDirectory(user.id, dirPath, user);
       return NextResponse.json({ success: true });
     }
     
@@ -43,7 +43,7 @@ export async function POST(request: NextRequest) {
       if (!newName || !newName.trim()) {
         return NextResponse.json({ error: 'Neuer Name ist erforderlich' }, { status: 400 });
       }
-      await renameItem(user.id, path, newName.trim());
+      await renameItem(user.id, path, newName.trim(), user);
       return NextResponse.json({ success: true });
     }
     
