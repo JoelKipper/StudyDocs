@@ -1914,7 +1914,7 @@ export default function FileManager({ user, onLogout, initialPath }: FileManager
                             setSelectedItems(new Set());
                           }
                         }}
-                        className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                        className="w-4 h-4 rounded border-2 border-gray-300 dark:border-gray-600 text-blue-600 dark:text-blue-500 bg-white dark:bg-gray-700 focus:ring-2 focus:ring-blue-500 dark:focus:ring-blue-400 focus:ring-offset-0 cursor-pointer transition-all duration-200 hover:border-blue-400 dark:hover:border-blue-500 checked:bg-blue-600 dark:checked:bg-blue-500 checked:border-blue-600 dark:checked:border-blue-500"
                       />
                     </th>
                     <th
@@ -1987,7 +1987,7 @@ export default function FileManager({ user, onLogout, initialPath }: FileManager
                         <input
                           type="checkbox"
                           disabled
-                          className="rounded border-gray-300 text-blue-600 focus:ring-blue-500 opacity-50"
+                          className="w-4 h-4 rounded border-2 border-gray-300 dark:border-gray-600 text-blue-600 dark:text-blue-500 bg-gray-100 dark:bg-gray-800 opacity-50 cursor-not-allowed"
                         />
                       </td>
                       <td className="px-4 py-3">
@@ -2101,7 +2101,7 @@ export default function FileManager({ user, onLogout, initialPath }: FileManager
                             type="checkbox"
                             checked={isSelected}
                             onChange={() => toggleSelection(file.path)}
-                            className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                            className="w-4 h-4 rounded border-2 border-gray-300 dark:border-gray-600 text-blue-600 dark:text-blue-500 bg-white dark:bg-gray-700 focus:ring-2 focus:ring-blue-500 dark:focus:ring-blue-400 focus:ring-offset-0 cursor-pointer transition-all duration-200 hover:border-blue-400 dark:hover:border-blue-500 checked:bg-blue-600 dark:checked:bg-blue-500 checked:border-blue-600 dark:checked:border-blue-500"
                           />
                         </td>
                         <td className="px-4 py-3">
