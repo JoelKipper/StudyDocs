@@ -220,3 +220,69 @@ export async function renameItem(
   await fs.rename(fullPath, newPath);
 }
 
+export async function moveItem(
+  userId: string,
+  itemPath: string,
+  targetDirPath: string,
+  user: { id: string; name: string; email: string }
+): Promise<void> {
+  const userDir = await ensureUserDirectory(userId);
+  const sourcePath = path.join(userDir, itemPath);
+  const itemName = path.basename(itemPath);
+  const sourceDir = path.dirname(itemPath);
+  const sourceDirPath = sourceDir === '.' ? '' : sourceDir;
+  const targetDir = targetDirPath === '' ? userDir : path.join(userDir, targetDirPath);
+  const targetPath = path.join(targetDir, itemName);
+  
+  // Check if target already exists
+  try {
+    await fs.access(targetPath);
+    throw new Error('Ein Element mit diesem Namen existiert bereits im Zielverzeichnis');
+  } catch (error: any) {
+    if (error.code !== 'ENOENT') {
+      throw error;
+    }
+  }
+  
+  // Load and update metadata
+  const sourceMetadata = await loadMetadata(userId, sourceDirPath);
+  const targetMetadata = await loadMetadata(userId, targetDirPath);
+  
+  if (sourceMetadata[itemName]) {
+    targetMetadata[itemName] = {
+      ...sourceMetadata[itemName],
+      lastModifiedBy: user,
+      lastModifiedAt: new Date().toISOString(),
+    };
+    delete sourceMetadata[itemName];
+    await saveMetadata(userId, sourceDirPath, sourceMetadata);
+    await saveMetadata(userId, targetDirPath, targetMetadata);
+  } else {
+    // If no metadata exists, create new metadata for moved item
+    targetMetadata[itemName] = {
+      createdBy: user,
+      createdAt: new Date().toISOString(),
+      lastModifiedBy: user,
+      lastModifiedAt: new Date().toISOString(),
+    };
+    await saveMetadata(userId, targetDirPath, targetMetadata);
+  }
+  
+  // Move the file/directory
+  await fs.rename(sourcePath, targetPath);
+  
+  // If moving a directory, also update metadata file location
+  const stats = await fs.stat(targetPath);
+  if (stats.isDirectory()) {
+    // Move metadata file if it exists
+    const oldMetadataPath = path.join(sourcePath, METADATA_FILE);
+    const newMetadataPath = path.join(targetPath, METADATA_FILE);
+    try {
+      await fs.access(oldMetadataPath);
+      await fs.rename(oldMetadataPath, newMetadataPath);
+    } catch {
+      // Metadata file doesn't exist, that's okay
+    }
+  }
+}
+

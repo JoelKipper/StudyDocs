@@ -1,11 +1,12 @@
 'use client';
 
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import FileTree from './FileTree';
 import FileUpload from './FileUpload';
 import CreateDirectory from './CreateDirectory';
 import ContextMenu from './ContextMenu';
 import DeleteModal from './DeleteModal';
+import ReplaceModal from './ReplaceModal';
 import Toast from './Toast';
 
 interface FileMetadata {
@@ -83,6 +84,20 @@ export default function FileManager({ user, onLogout }: FileManagerProps) {
     return 256;
   });
   const [isResizing, setIsResizing] = useState(false);
+  const [draggedItem, setDraggedItem] = useState<FileItem | null>(null);
+  const [dragOverItem, setDragOverItem] = useState<string | null>(null);
+  const [externalDragOver, setExternalDragOver] = useState(false);
+  const [externalDragTarget, setExternalDragTarget] = useState<string | null>(null);
+  const [replaceModal, setReplaceModal] = useState<{
+    isOpen: boolean;
+    file: File | null;
+    targetPath: string;
+  }>({
+    isOpen: false,
+    file: null,
+    targetPath: '',
+  });
+  const [uploadQueue, setUploadQueue] = useState<Array<{ file: File; targetPath: string }>>([]);
 
   // Save path to localStorage whenever it changes
   useEffect(() => {
@@ -133,6 +148,152 @@ export default function FileManager({ user, onLogout }: FileManagerProps) {
   useEffect(() => {
     setSelectedItems(new Set());
   }, [currentPath]);
+
+  useEffect(() => {
+    async function processUploadQueue() {
+      if (uploadQueue.length === 0 || replaceModal.isOpen) return;
+
+      const { file, targetPath } = uploadQueue[0];
+      
+      // Check if file exists
+      try {
+        const checkRes = await fetch(
+          `/api/files/check?fileName=${encodeURIComponent(file.name)}&path=${encodeURIComponent(targetPath)}`
+        );
+        const checkData = await checkRes.json();
+        
+        if (checkData.exists) {
+          // Show replace modal
+          setReplaceModal({ isOpen: true, file, targetPath });
+          return;
+        }
+      } catch (error) {
+        console.error('Fehler beim Prüfen der Datei:', error);
+      }
+
+      // File doesn't exist, upload it
+      try {
+        const formData = new FormData();
+        formData.append('file', file);
+        formData.append('path', targetPath);
+
+        const res = await fetch('/api/files/upload', {
+          method: 'POST',
+          body: formData,
+        });
+
+        const data = await res.json();
+        if (!res.ok) {
+          throw new Error(data.error || 'Fehler beim Hochladen');
+        }
+      } catch (error: any) {
+        console.error('Fehler beim Hochladen:', error);
+      }
+      
+      // Process next file in queue
+      setUploadQueue((queue) => queue.slice(1));
+    }
+
+    if (uploadQueue.length > 0 && !replaceModal.isOpen) {
+      processUploadQueue();
+    }
+  }, [uploadQueue, replaceModal.isOpen]);
+
+  async function uploadSingleFile(file: File, targetPath: string) {
+    try {
+      const formData = new FormData();
+      formData.append('file', file);
+      formData.append('path', targetPath);
+
+      const res = await fetch('/api/files/upload', {
+        method: 'POST',
+        body: formData,
+      });
+
+      const data = await res.json();
+      if (!res.ok) {
+        throw new Error(data.error || 'Fehler beim Hochladen');
+      }
+      return { success: true, fileName: file.name };
+    } catch (error: any) {
+      return { success: false, fileName: file.name, error: error.message };
+    }
+  }
+
+  const handleExternalFilesDrop = useCallback(async (files: File[], targetPath: string) => {
+    // Add all files to queue
+    setUploadQueue(files.map(file => ({ file, targetPath })));
+  }, []);
+
+  async function handleReplaceConfirm() {
+    if (replaceModal.file && replaceModal.targetPath) {
+      // Upload file with replacement
+      await uploadSingleFile(replaceModal.file, replaceModal.targetPath);
+      
+      // Process next file in queue
+      setUploadQueue((queue) => queue.slice(1));
+      setReplaceModal({ isOpen: false, file: null, targetPath: '' });
+    }
+  }
+
+  function handleReplaceCancel() {
+    // Skip this file and process next
+    setUploadQueue((queue) => queue.slice(1));
+    setReplaceModal({ isOpen: false, file: null, targetPath: '' });
+  }
+
+  // Track upload results
+  useEffect(() => {
+    if (uploadQueue.length === 0 && replaceModal.isOpen === false) {
+      // All files processed, refresh
+      loadFiles();
+      setTreeRefreshKey((k) => k + 1);
+    }
+  }, [uploadQueue.length, replaceModal.isOpen]);
+
+  // Handle external file drag and drop
+  useEffect(() => {
+    function handleDragOver(e: DragEvent) {
+      // Check if dragging files from external source
+      if (e.dataTransfer?.types.includes('Files')) {
+        e.preventDefault();
+        e.stopPropagation();
+        setExternalDragOver(true);
+      }
+    }
+
+    function handleDragLeave(e: DragEvent) {
+      // Only reset if leaving the window
+      if (!e.relatedTarget || (e.relatedTarget as Node).nodeName === 'HTML') {
+        setExternalDragOver(false);
+        setExternalDragTarget(null);
+      }
+    }
+
+    function handleDrop(e: DragEvent) {
+      e.preventDefault();
+      e.stopPropagation();
+      setExternalDragOver(false);
+      
+      const files = Array.from(e.dataTransfer?.files || []);
+      if (files.length > 0) {
+        // Use currentPath as fallback if no specific target was set
+        const target = externalDragTarget !== null ? externalDragTarget : currentPath;
+        handleExternalFilesDrop(files, target);
+      }
+      setExternalDragTarget(null);
+    }
+
+    window.addEventListener('dragover', handleDragOver);
+    window.addEventListener('dragleave', handleDragLeave);
+    window.addEventListener('drop', handleDrop);
+
+    return () => {
+      window.removeEventListener('dragover', handleDragOver);
+      window.removeEventListener('dragleave', handleDragLeave);
+      window.removeEventListener('drop', handleDrop);
+    };
+  }, [externalDragTarget, currentPath, handleExternalFilesDrop]);
 
   async function loadFiles() {
     setLoading(true);
@@ -381,6 +542,120 @@ export default function FileManager({ user, onLogout }: FileManagerProps) {
     }
   }
 
+  function handleDragStart(file: FileItem, e: React.DragEvent) {
+    setDraggedItem(file);
+    e.dataTransfer.effectAllowed = 'move';
+    e.dataTransfer.setData('text/plain', file.path);
+    
+    // Create a custom drag image
+    const dragImage = document.createElement('div');
+    dragImage.innerHTML = file.name;
+    dragImage.style.position = 'absolute';
+    dragImage.style.top = '-1000px';
+    dragImage.style.padding = '8px 12px';
+    dragImage.style.background = 'rgba(59, 130, 246, 0.9)';
+    dragImage.style.color = 'white';
+    dragImage.style.borderRadius = '6px';
+    dragImage.style.fontSize = '14px';
+    document.body.appendChild(dragImage);
+    e.dataTransfer.setDragImage(dragImage, 0, 0);
+    setTimeout(() => document.body.removeChild(dragImage), 0);
+  }
+
+  function handleDragOver(file: FileItem, e: React.DragEvent) {
+    if (file.type === 'directory' && draggedItem && draggedItem.path !== file.path) {
+      e.preventDefault();
+      e.dataTransfer.dropEffect = 'move';
+      setDragOverItem(file.path);
+    }
+  }
+
+  function handleDragLeave() {
+    setDragOverItem(null);
+  }
+
+  async function handleDrop(targetDir: FileItem, e: React.DragEvent) {
+    e.preventDefault();
+    e.stopPropagation();
+    setDragOverItem(null);
+    
+    if (!draggedItem || targetDir.type !== 'directory') {
+      setDraggedItem(null);
+      return;
+    }
+    
+    // Don't move item into itself
+    if (draggedItem.path === targetDir.path) {
+      setDraggedItem(null);
+      return;
+    }
+    
+    // Don't move directory into its own subdirectory
+    if (draggedItem.type === 'directory' && targetDir.path.startsWith(draggedItem.path + '/')) {
+      setToast({ message: 'Ein Verzeichnis kann nicht in sich selbst verschoben werden', type: 'error' });
+      setDraggedItem(null);
+      return;
+    }
+    
+    try {
+      const res = await fetch('/api/files', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'move',
+          path: draggedItem.path,
+          targetPath: targetDir.path,
+        }),
+      });
+
+      const data = await res.json();
+
+      if (res.ok) {
+        loadFiles();
+        setTreeRefreshKey((k) => k + 1);
+        setToast({ message: `"${draggedItem.name}" wurde nach "${targetDir.name}" verschoben`, type: 'success' });
+      } else {
+        setToast({ message: data.error || 'Fehler beim Verschieben', type: 'error' });
+      }
+    } catch (error) {
+      console.error('Fehler beim Verschieben:', error);
+      setToast({ message: 'Fehler beim Verschieben', type: 'error' });
+    } finally {
+      setDraggedItem(null);
+    }
+  }
+
+  function handleDragEnd() {
+    setDraggedItem(null);
+    setDragOverItem(null);
+  }
+
+  function handleExternalDragOver(file: FileItem, e: React.DragEvent) {
+    // Check if dragging external files
+    if (e.dataTransfer.types.includes('Files') && file.type === 'directory') {
+      e.preventDefault();
+      e.stopPropagation();
+      setExternalDragTarget(file.path);
+      setDragOverItem(file.path);
+    }
+  }
+
+  function handleExternalDragLeave() {
+    setExternalDragTarget(null);
+    setDragOverItem(null);
+  }
+
+  function handleExternalDrop(file: FileItem, e: React.DragEvent) {
+    if (e.dataTransfer.files.length > 0 && file.type === 'directory') {
+      e.preventDefault();
+      e.stopPropagation();
+      const files = Array.from(e.dataTransfer.files);
+      handleExternalFilesDrop(files, file.path);
+      setExternalDragTarget(null);
+      setDragOverItem(null);
+    }
+  }
+
   function handleRefresh() {
     loadFiles();
     setTreeRefreshKey((k) => k + 1);
@@ -440,6 +715,7 @@ export default function FileManager({ user, onLogout }: FileManagerProps) {
               currentPath={currentPath}
               onNavigate={navigateToPath}
               onRefresh={handleRefresh}
+              onExternalDrop={handleExternalFilesDrop}
             />
           </div>
           
@@ -461,7 +737,55 @@ export default function FileManager({ user, onLogout }: FileManagerProps) {
         </div>
 
         {/* Main Content */}
-        <div className="flex-1 flex flex-col overflow-hidden bg-white dark:bg-gray-900">
+        <div 
+          className={`flex-1 flex flex-col overflow-hidden bg-white dark:bg-gray-900 relative ${
+            externalDragOver ? 'ring-2 ring-blue-500 ring-offset-2' : ''
+          }`}
+          onDragOver={(e) => {
+            if (e.dataTransfer.types.includes('Files')) {
+              e.preventDefault();
+              setExternalDragOver(true);
+              setExternalDragTarget(currentPath);
+            }
+          }}
+          onDragLeave={(e) => {
+            if (!e.currentTarget.contains(e.relatedTarget as Node)) {
+              setExternalDragOver(false);
+              setExternalDragTarget(null);
+            }
+          }}
+          onDrop={(e) => {
+            if (e.dataTransfer.files.length > 0) {
+              e.preventDefault();
+              e.stopPropagation();
+              const files = Array.from(e.dataTransfer.files);
+              handleExternalFilesDrop(files, currentPath);
+              setExternalDragOver(false);
+              setExternalDragTarget(null);
+            }
+          }}
+        >
+          {/* External Drag Overlay */}
+          {externalDragOver && (
+            <div className="absolute inset-0 z-50 bg-blue-500/10 border-4 border-dashed border-blue-500 flex items-center justify-center pointer-events-none">
+              <div className="bg-white dark:bg-gray-800 px-6 py-4 rounded-xl shadow-2xl border border-blue-500">
+                <div className="flex items-center gap-3">
+                  <svg className="w-8 h-8 text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
+                  </svg>
+                  <div>
+                    <p className="font-semibold text-gray-900 dark:text-white">Dateien hier ablegen</p>
+                    <p className="text-sm text-gray-600 dark:text-gray-400">
+                      {externalDragTarget !== null && externalDragTarget !== currentPath
+                        ? `In: ${externalDragTarget.split('/').pop() || 'Root'}`
+                        : `In: ${currentPath || 'Root'}`}
+                    </p>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+
           {/* Toolbar */}
           <div className="border-b border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800/50">
             <div className="px-4 py-2 flex items-center justify-between gap-4">
@@ -628,11 +952,44 @@ export default function FileManager({ user, onLogout }: FileManagerProps) {
                         key={file.path}
                         onClick={(e) => handleRowClick(file, e)}
                         onContextMenu={(e) => handleContextMenu(file, e)}
+                        draggable={true}
+                        onDragStart={(e) => {
+                          // Only handle internal drags
+                          if (!e.dataTransfer.types.includes('Files')) {
+                            handleDragStart(file, e);
+                          }
+                        }}
+                        onDragEnd={handleDragEnd}
+                        onDragOver={(e) => {
+                          // Handle both internal and external drags
+                          if (e.dataTransfer.types.includes('Files') && !draggedItem) {
+                            handleExternalDragOver(file, e);
+                          } else {
+                            handleDragOver(file, e);
+                          }
+                        }}
+                        onDragLeave={(e) => {
+                          if (e.dataTransfer.types.includes('Files') && !draggedItem) {
+                            handleExternalDragLeave();
+                          } else {
+                            handleDragLeave();
+                          }
+                        }}
+                        onDrop={(e) => {
+                          // Handle both internal and external drops
+                          if (e.dataTransfer.files.length > 0 && !draggedItem) {
+                            handleExternalDrop(file, e);
+                          } else {
+                            handleDrop(file, e);
+                          }
+                        }}
                         className={`group cursor-pointer transition-colors ${
                           isSelected
                             ? 'bg-blue-50 dark:bg-blue-900/20 hover:bg-blue-100 dark:hover:bg-blue-900/30'
+                            : dragOverItem === file.path && file.type === 'directory'
+                            ? 'bg-green-100 dark:bg-green-900/30 border-2 border-green-500 dark:border-green-600'
                             : 'hover:bg-gray-50 dark:hover:bg-gray-800/50'
-                        }`}
+                        } ${draggedItem?.path === file.path ? 'opacity-50' : ''}`}
                       >
                         <td className="px-4 py-3" onClick={(e) => e.stopPropagation()}>
                           <input
@@ -786,6 +1143,14 @@ export default function FileManager({ user, onLogout }: FileManagerProps) {
           itemType={deleteModal.item.type}
         />
       )}
+
+      {/* Replace Modal */}
+      <ReplaceModal
+        isOpen={replaceModal.isOpen}
+        onClose={handleReplaceCancel}
+        onConfirm={handleReplaceConfirm}
+        fileName={replaceModal.file?.name || ''}
+      />
 
       {/* Toast */}
       {toast && (

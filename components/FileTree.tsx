@@ -12,6 +12,7 @@ interface FileTreeProps {
   currentPath: string;
   onNavigate: (path: string) => void;
   onRefresh: () => void;
+  onExternalDrop?: (files: File[], targetPath: string) => void;
 }
 
 interface TreeNodeData extends FileItem {
@@ -19,7 +20,7 @@ interface TreeNodeData extends FileItem {
   loaded?: boolean;
 }
 
-export default function FileTree({ currentPath, onNavigate, onRefresh }: FileTreeProps) {
+export default function FileTree({ currentPath, onNavigate, onRefresh, onExternalDrop }: FileTreeProps) {
   const [tree, setTree] = useState<TreeNodeData[]>([]);
   const [expanded, setExpanded] = useState<Set<string>>(new Set([''])); // Root expanded by default
   const [loading, setLoading] = useState(true);
@@ -122,6 +123,20 @@ export default function FileTree({ currentPath, onNavigate, onRefresh }: FileTre
     <div className="space-y-1 animate-fade-in">
       <button
         onClick={() => onNavigate('')}
+        onDragOver={(e) => {
+          if (e.dataTransfer.types.includes('Files')) {
+            e.preventDefault();
+            e.stopPropagation();
+          }
+        }}
+        onDrop={(e) => {
+          if (e.dataTransfer.files.length > 0 && onExternalDrop) {
+            e.preventDefault();
+            e.stopPropagation();
+            const files = Array.from(e.dataTransfer.files);
+            onExternalDrop(files, '');
+          }
+        }}
         className={`group w-full text-left px-3 py-2.5 rounded-lg text-sm font-medium transition-all duration-200 flex items-center gap-2 ${
           isActive('')
             ? 'bg-gradient-to-r from-blue-500 to-blue-600 text-white shadow-lg shadow-blue-500/30'
@@ -152,6 +167,7 @@ export default function FileTree({ currentPath, onNavigate, onRefresh }: FileTre
           onNavigate={onNavigate}
           isExpanded={isExpanded}
           onToggleExpand={toggleExpand}
+          onExternalDrop={onExternalDrop}
         />
       ))}
       {tree.length === 0 && (
@@ -170,6 +186,7 @@ interface TreeNodeProps {
   onNavigate: (path: string) => void;
   isExpanded: (path: string) => boolean;
   onToggleExpand: (path: string) => void;
+  onExternalDrop?: (files: File[], targetPath: string) => void;
 }
 
 function TreeNode({
@@ -179,6 +196,7 @@ function TreeNode({
   onNavigate,
   isExpanded,
   onToggleExpand,
+  onExternalDrop,
 }: TreeNodeProps) {
   const hasChildren = item.children && item.children.length > 0;
   const isActive = currentPath === item.path;
@@ -193,6 +211,20 @@ function TreeNode({
             : 'hover:bg-gray-100 dark:hover:bg-gray-700/50 text-gray-700 dark:text-gray-300'
         }`}
         style={{ paddingLeft: `${level * 20 + 12}px` }}
+        onDragOver={(e) => {
+          if (item.type === 'directory' && e.dataTransfer.types.includes('Files')) {
+            e.preventDefault();
+            e.stopPropagation();
+          }
+        }}
+        onDrop={(e) => {
+          if (item.type === 'directory' && e.dataTransfer.files.length > 0 && onExternalDrop) {
+            e.preventDefault();
+            e.stopPropagation();
+            const files = Array.from(e.dataTransfer.files);
+            onExternalDrop(files, item.path);
+          }
+        }}
       >
         <button
           onClick={(e) => {
@@ -284,6 +316,7 @@ function TreeNode({
                 onNavigate={onNavigate}
                 isExpanded={isExpanded}
                 onToggleExpand={onToggleExpand}
+                onExternalDrop={onExternalDrop}
               />
             </div>
           ))}
