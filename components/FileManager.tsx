@@ -38,9 +38,10 @@ interface FileManagerProps {
   user: { id: string; name: string; email: string };
   onLogout: () => void;
   initialPath?: string;
+  initialFile?: string;
 }
 
-export default function FileManager({ user, onLogout, initialPath }: FileManagerProps) {
+export default function FileManager({ user, onLogout, initialPath, initialFile: initialFileProp }: FileManagerProps) {
   const { t, formatSize, language } = useLanguage();
   const storageKey = `studydocs-path-${user.id}`;
   
@@ -55,6 +56,9 @@ export default function FileManager({ user, onLogout, initialPath }: FileManager
     }
     return '';
   });
+  
+  // Track if initialFile has been processed
+  const [initialFileProcessed, setInitialFileProcessed] = useState(false);
   
   const [files, setFiles] = useState<FileItem[]>([]);
   const [allFiles, setAllFiles] = useState<FileItem[]>([]); // All files for global search
@@ -317,6 +321,17 @@ export default function FileManager({ user, onLogout, initialPath }: FileManager
       observer.disconnect();
     };
   }, [files, sortField, sortDirection, loading, visibleRange]);
+
+  // When files are loaded and we have an initialFile (from share link), open it in preview
+  useEffect(() => {
+    if (initialFileProp && files.length > 0 && !previewFile && !loading && !initialFileProcessed) {
+      const file = files.find(f => f.name === initialFileProp && f.type === 'file');
+      if (file) {
+        setPreviewFile(file);
+        setInitialFileProcessed(true);
+      }
+    }
+  }, [files, initialFileProp, previewFile, loading, initialFileProcessed]);
 
   // When files are loaded and we have a pending rename directory, set it to rename mode
   useEffect(() => {

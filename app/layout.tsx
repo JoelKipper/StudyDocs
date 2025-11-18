@@ -64,7 +64,7 @@ export default function RootLayout({
           }}
         />
       </head>
-      <body>
+      <body className="bg-gray-50 dark:bg-gray-900">
         <ThemeProvider>
           <LanguageProvider>{children}</LanguageProvider>
         </ThemeProvider>

@@ -118,9 +118,22 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: 'Ungültiger oder abgelaufener Token' }, { status: 404 });
     }
 
+    // Determine if item is a file or directory
+    const userDir = path.join(process.cwd(), 'user-data', shareData.userId);
+    const fullPath = path.join(userDir, shareData.itemPath);
+    let itemType: 'file' | 'directory' = 'directory';
+    
+    try {
+      const stats = await fs.stat(fullPath);
+      itemType = stats.isFile() ? 'file' : 'directory';
+    } catch {
+      // If we can't stat, default to directory
+    }
+
     return NextResponse.json({
       userId: shareData.userId,
       itemPath: shareData.itemPath,
+      itemType: itemType,
     });
   } catch (error: any) {
     console.error('Error getting share:', error);

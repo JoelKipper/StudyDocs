@@ -12,48 +12,78 @@ export default function SharePage() {
   const [error, setError] = useState('');
 
   useEffect(() => {
+    let cancelled = false;
+
     async function handleShare() {
       const token = params.token as string;
 
       if (!token) {
-        setError(language === 'de' ? 'Ungültiger Link' : 'Invalid link');
-        setLoading(false);
+        if (!cancelled) {
+          setError(language === 'de' ? 'Ungültiger Link' : 'Invalid link');
+          setLoading(false);
+        }
         return;
       }
 
       try {
         // Get share data from API
         const res = await fetch(`/api/files/share?token=${token}`);
+        if (cancelled) return;
+        
         const data = await res.json();
 
         if (!res.ok) {
-          setError(data.error || (language === 'de' ? 'Link nicht gefunden oder abgelaufen' : 'Link not found or expired'));
-          setLoading(false);
+          if (!cancelled) {
+            setError(data.error || (language === 'de' ? 'Link nicht gefunden oder abgelaufen' : 'Link not found or expired'));
+            setLoading(false);
+          }
           return;
         }
 
         // Check if user is logged in
         const userRes = await fetch('/api/auth/me');
+        if (cancelled) return;
+        
         const userData = await userRes.json();
 
         if (!userRes.ok || !userData.user) {
           // User is not logged in, redirect to login with return URL
           const returnUrl = encodeURIComponent(`/share/${token}`);
+          cancelled = true; // Prevent any state updates
           router.push(`/?returnUrl=${returnUrl}`);
           return;
         }
 
-        // User is logged in, navigate to the shared item
-        // Navigate to the file manager with the path
-        window.location.href = `/?path=${encodeURIComponent(data.itemPath)}`;
+        // User is logged in, navigate to the shared item immediately
+        cancelled = true; // Prevent any state updates
+        // If it's a file, open it in preview; if it's a directory, navigate to it
+        if (data.itemType === 'file') {
+          // Extract directory path and file name
+          const pathParts = data.itemPath.split('/');
+          const fileName = pathParts.pop() || '';
+          const dirPath = pathParts.join('/');
+          // Navigate immediately without changing state
+          window.location.replace(`/?path=${encodeURIComponent(dirPath)}&file=${encodeURIComponent(fileName)}`);
+        } else {
+          // Navigate to the directory
+          window.location.replace(`/?path=${encodeURIComponent(data.itemPath)}`);
+        }
+        // Don't set loading to false - let the navigation happen
       } catch (err) {
-        console.error('Error handling share:', err);
-        setError(language === 'de' ? 'Fehler beim Laden' : 'Error loading');
-        setLoading(false);
+        // Only show error if we're not cancelled (navigating)
+        if (!cancelled) {
+          console.error('Error handling share:', err);
+          setError(language === 'de' ? 'Fehler beim Laden' : 'Error loading');
+          setLoading(false);
+        }
       }
     }
 
     handleShare();
+    
+    return () => {
+      cancelled = true;
+    };
   }, [params.token, router, language]);
 
   if (loading) {

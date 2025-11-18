@@ -9,6 +9,7 @@ export default function Home() {
   const [user, setUser] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [initialPath, setInitialPath] = useState<string>('');
+  const [initialFile, setInitialFile] = useState<string>('');
   const router = useRouter();
   const searchParams = useSearchParams();
 
@@ -19,6 +20,12 @@ export default function Home() {
     const pathParam = searchParams.get('path');
     if (pathParam) {
       setInitialPath(decodeURIComponent(pathParam));
+    }
+    
+    // Check for file parameter in URL (for share links)
+    const fileParam = searchParams.get('file');
+    if (fileParam) {
+      setInitialFile(decodeURIComponent(fileParam));
     }
   }, [searchParams]);
 
@@ -64,6 +71,6 @@ export default function Home() {
     return <LoginForm onLogin={handleLogin} />;
   }
 
-  return <FileManager user={user} onLogout={handleLogout} initialPath={initialPath} />;
+  return <FileManager user={user} onLogout={handleLogout} initialPath={initialPath} initialFile={initialFile} />;
 }
 
