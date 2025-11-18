@@ -166,38 +166,44 @@ export async function POST(request: NextRequest) {
     archive.finalize();
 
     // Wait for archive to finish (with timeout)
-    await new Promise<void>((resolve, reject) => {
-      const timeout = setTimeout(() => {
-        if (!archiveEnded) {
-          reject(new Error('Timeout beim Erstellen der ZIP-Datei'));
+    try {
+      await new Promise<void>((resolve, reject) => {
+        const timeout = setTimeout(() => {
+          if (!archiveEnded) {
+            reject(new Error('Timeout beim Erstellen der ZIP-Datei'));
+          }
+        }, 30000); // 30 second timeout
+
+        if (archiveError) {
+          clearTimeout(timeout);
+          reject(archiveError);
+          return;
         }
-      }, 30000); // 30 second timeout
 
-      if (archiveError) {
-        clearTimeout(timeout);
-        reject(archiveError);
-        return;
-      }
+        if (archiveEnded) {
+          clearTimeout(timeout);
+          resolve();
+          return;
+        }
 
-      if (archiveEnded) {
-        clearTimeout(timeout);
-        resolve();
-        return;
-      }
+        archive.once('end', () => {
+          clearTimeout(timeout);
+          resolve();
+        });
 
-      archive.once('end', () => {
-        clearTimeout(timeout);
-        resolve();
+        archive.once('error', (err: Error) => {
+          clearTimeout(timeout);
+          reject(err);
+        });
       });
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      return NextResponse.json({ error: 'Fehler beim Erstellen der ZIP-Datei: ' + errorMessage }, { status: 500 });
+    }
 
-      archive.once('error', (err: Error) => {
-        clearTimeout(timeout);
-        reject(err);
-      });
-    });
-
+    // Check for archiveError after promise (in case it was set but promise didn't reject)
     if (archiveError) {
-      const errorMessage = archiveError.message || String(archiveError);
+      const errorMessage = (archiveError as Error).message;
       return NextResponse.json({ error: 'Fehler beim Erstellen der ZIP-Datei: ' + errorMessage }, { status: 500 });
     }
 
