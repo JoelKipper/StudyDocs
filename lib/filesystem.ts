@@ -286,3 +286,115 @@ export async function moveItem(
   }
 }
 
+export async function copyItem(
+  userId: string,
+  itemPath: string,
+  targetDirPath: string,
+  user: { id: string; name: string; email: string }
+): Promise<void> {
+  const userDir = await ensureUserDirectory(userId);
+  const sourcePath = path.join(userDir, itemPath);
+  const itemName = path.basename(itemPath);
+  const sourceDir = path.dirname(itemPath);
+  const sourceDirPath = sourceDir === '.' ? '' : sourceDir;
+  const targetDir = targetDirPath === '' ? userDir : path.join(userDir, targetDirPath);
+  const targetPath = path.join(targetDir, itemName);
+  
+  // Check if target already exists
+  try {
+    await fs.access(targetPath);
+    throw new Error('Ein Element mit diesem Namen existiert bereits im Zielverzeichnis');
+  } catch (error: any) {
+    if (error.code !== 'ENOENT') {
+      throw error;
+    }
+  }
+  
+  // Check if source exists
+  const stats = await fs.stat(sourcePath);
+  
+  if (stats.isDirectory()) {
+    // Copy directory recursively
+    await fs.mkdir(targetPath, { recursive: true });
+    
+    // Copy all files and subdirectories
+    const entries = await fs.readdir(sourcePath, { withFileTypes: true });
+    for (const entry of entries) {
+      const sourceEntryPath = path.join(sourcePath, entry.name);
+      const targetEntryPath = path.join(targetPath, entry.name);
+      
+      if (entry.isDirectory()) {
+        // Recursively copy subdirectory
+        const subItemPath = itemPath ? `${itemPath}/${entry.name}` : entry.name;
+        const subTargetDirPath = targetDirPath ? `${targetDirPath}/${itemName}` : itemName;
+        await copyItem(userId, subItemPath, subTargetDirPath, user);
+      } else if (entry.isFile() && entry.name !== METADATA_FILE) {
+        // Copy file
+        await fs.copyFile(sourceEntryPath, targetEntryPath);
+      }
+    }
+    
+    // Copy metadata file if it exists
+    const sourceMetadataPath = path.join(sourcePath, METADATA_FILE);
+    const targetMetadataPath = path.join(targetPath, METADATA_FILE);
+    try {
+      await fs.access(sourceMetadataPath);
+      const metadataContent = await fs.readFile(sourceMetadataPath, 'utf-8');
+      await fs.writeFile(targetMetadataPath, metadataContent, 'utf-8');
+    } catch {
+      // Metadata file doesn't exist, that's okay
+    }
+    
+    // Update metadata for copied directory
+    const targetMetadata = await loadMetadata(userId, targetDirPath);
+    const sourceMetadata = await loadMetadata(userId, sourceDirPath);
+    
+    if (sourceMetadata[itemName]) {
+      // Copy metadata with new creation info
+      targetMetadata[itemName] = {
+        ...sourceMetadata[itemName],
+        createdBy: user,
+        createdAt: new Date().toISOString(),
+        lastModifiedBy: user,
+        lastModifiedAt: new Date().toISOString(),
+      };
+    } else {
+      // Create new metadata for copied directory
+      targetMetadata[itemName] = {
+        createdBy: user,
+        createdAt: new Date().toISOString(),
+        lastModifiedBy: user,
+        lastModifiedAt: new Date().toISOString(),
+      };
+    }
+    await saveMetadata(userId, targetDirPath, targetMetadata);
+  } else {
+    // Copy file
+    await fs.copyFile(sourcePath, targetPath);
+    
+    // Update metadata for copied file
+    const targetMetadata = await loadMetadata(userId, targetDirPath);
+    const sourceMetadata = await loadMetadata(userId, sourceDirPath);
+    
+    if (sourceMetadata[itemName]) {
+      // Copy metadata with new creation info
+      targetMetadata[itemName] = {
+        ...sourceMetadata[itemName],
+        createdBy: user,
+        createdAt: new Date().toISOString(),
+        lastModifiedBy: user,
+        lastModifiedAt: new Date().toISOString(),
+      };
+    } else {
+      // Create new metadata for copied file
+      targetMetadata[itemName] = {
+        createdBy: user,
+        createdAt: new Date().toISOString(),
+        lastModifiedBy: user,
+        lastModifiedAt: new Date().toISOString(),
+      };
+    }
+    await saveMetadata(userId, targetDirPath, targetMetadata);
+  }
+}
+

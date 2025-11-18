@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getCurrentUser } from '@/lib/auth';
-import { getDirectoryContents, createDirectory, deleteItem, renameItem, moveItem } from '@/lib/filesystem';
+import { getDirectoryContents, createDirectory, deleteItem, renameItem, moveItem, copyItem } from '@/lib/filesystem';
 
 export async function GET(request: NextRequest) {
   const user = await getCurrentUser();
@@ -52,6 +52,14 @@ export async function POST(request: NextRequest) {
         return NextResponse.json({ error: 'Zielverzeichnis ist erforderlich' }, { status: 400 });
       }
       await moveItem(user.id, path, targetPath, user);
+      return NextResponse.json({ success: true });
+    }
+    
+    if (action === 'copy') {
+      if (!targetPath && targetPath !== '') {
+        return NextResponse.json({ error: 'Zielverzeichnis ist erforderlich' }, { status: 400 });
+      }
+      await copyItem(user.id, path, targetPath, user);
       return NextResponse.json({ success: true });
     }
     

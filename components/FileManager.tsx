@@ -8,6 +8,7 @@ import DeleteModal from './DeleteModal';
 import ReplaceModal from './ReplaceModal';
 import Toast from './Toast';
 import SearchBar from './SearchBar';
+import SettingsModal from './SettingsModal';
 
 interface FileMetadata {
   createdBy: { id: string; name: string; email: string };
@@ -97,6 +98,12 @@ export default function FileManager({ user, onLogout }: FileManagerProps) {
   }>({
     fileType: 'all',
   });
+  const [copiedItems, setCopiedItems] = useState<FileItem[]>([]);
+  const [isCopyMode, setIsCopyMode] = useState(false); // true = copy, false = cut
+  const [focusedIndex, setFocusedIndex] = useState<number | null>(null);
+  const [actionHistory, setActionHistory] = useState<Array<{ type: string; data: any }>>([]);
+  const [settingsOpen, setSettingsOpen] = useState(false);
+  const fileListRef = useRef<HTMLDivElement>(null);
   const [sidebarWidth, setSidebarWidth] = useState(() => {
     if (typeof window !== 'undefined') {
       const saved = localStorage.getItem(`studydocs-sidebar-width-${user.id}`);
@@ -293,6 +300,218 @@ export default function FileManager({ user, onLogout }: FileManagerProps) {
     }
   }, [uploadQueue.length, replaceModal.isOpen]);
 
+  // Keyboard shortcuts
+  useEffect(() => {
+    function handleKeyDown(e: KeyboardEvent) {
+      // Don't handle shortcuts when typing in inputs
+      const target = e.target as HTMLElement;
+      if (
+        target.tagName === 'INPUT' ||
+        target.tagName === 'TEXTAREA' ||
+        target.isContentEditable
+      ) {
+        // Allow Escape to close modals even in inputs
+        if (e.key === 'Escape') {
+          if (renamingItem) {
+            cancelRename();
+          }
+          if (creatingNewDirectory) {
+            cancelCreateDirectory();
+          }
+        }
+        return;
+      }
+
+      // Ctrl/Cmd + A: Select all (toggle - if all selected, deselect all)
+      if ((e.ctrlKey || e.metaKey) && e.key === 'a') {
+        e.preventDefault();
+        const filesToSelect = isGlobalSearch ? allFiles : files;
+        if (filesToSelect.length === 0) return;
+        
+        // Check if all items are already selected
+        const allSelected = filesToSelect.every(f => selectedItems.has(f.path));
+        
+        if (allSelected) {
+          // Deselect all
+          setSelectedItems(new Set());
+        } else {
+          // Select all
+          setSelectedItems(new Set(filesToSelect.map(f => f.path)));
+        }
+        return;
+      }
+
+      // Ctrl/Cmd + C: Copy
+      if ((e.ctrlKey || e.metaKey) && e.key === 'c') {
+        e.preventDefault();
+        const selectedFiles = (isGlobalSearch ? allFiles : files).filter(f => selectedItems.has(f.path));
+        if (selectedFiles.length > 0) {
+          setCopiedItems(selectedFiles);
+          setIsCopyMode(true);
+          setToast({ message: `${selectedFiles.length} Element(e) kopiert`, type: 'success' });
+        }
+        return;
+      }
+
+      // Ctrl/Cmd + X: Cut
+      if ((e.ctrlKey || e.metaKey) && e.key === 'x') {
+        e.preventDefault();
+        const selectedFiles = (isGlobalSearch ? allFiles : files).filter(f => selectedItems.has(f.path));
+        if (selectedFiles.length > 0) {
+          setCopiedItems(selectedFiles);
+          setIsCopyMode(false);
+          setToast({ message: `${selectedFiles.length} Element(e) ausgeschnitten`, type: 'success' });
+        }
+        return;
+      }
+
+      // Ctrl/Cmd + V: Paste
+      if ((e.ctrlKey || e.metaKey) && e.key === 'v') {
+        e.preventDefault();
+        if (copiedItems.length > 0) {
+          handlePaste();
+        }
+        return;
+      }
+
+      // Ctrl/Cmd + N: New directory
+      if ((e.ctrlKey || e.metaKey) && e.key === 'n') {
+        e.preventDefault();
+        handleCreateDirectory();
+        return;
+      }
+
+      // Ctrl/Cmd + U: Upload
+      if ((e.ctrlKey || e.metaKey) && e.key === 'u') {
+        e.preventDefault();
+        const fileInput = document.querySelector('input[type="file"]') as HTMLInputElement;
+        fileInput?.click();
+        return;
+      }
+
+      // Ctrl/Cmd + Z: Undo
+      if ((e.ctrlKey || e.metaKey) && e.key === 'z' && !e.shiftKey) {
+        e.preventDefault();
+        if (actionHistory.length > 0) {
+          handleUndo();
+        }
+        return;
+      }
+
+      // Delete / Backspace: Delete selected items
+      if ((e.key === 'Delete' || e.key === 'Backspace') && selectedItems.size > 0) {
+        e.preventDefault();
+        const selectedFiles = (isGlobalSearch ? allFiles : files).filter(f => selectedItems.has(f.path));
+        if (selectedFiles.length > 0) {
+          setDeleteModal({ visible: true, item: null, items: selectedFiles });
+        }
+        return;
+      }
+
+      // F2: Rename selected item
+      if (e.key === 'F2' && selectedItems.size === 1) {
+        e.preventDefault();
+        const selectedFile = (isGlobalSearch ? allFiles : files).find(f => selectedItems.has(f.path));
+        if (selectedFile) {
+          handleRename(selectedFile);
+        }
+        return;
+      }
+
+      // Enter: Open selected item or first item
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        const sortedFilesList = getSortedFiles();
+        const filesToUse = isGlobalSearch ? allFiles : sortedFilesList;
+        if (selectedItems.size > 0) {
+          const selectedFile = filesToUse.find(f => selectedItems.has(f.path));
+          if (selectedFile) {
+            if (selectedFile.type === 'directory') {
+              navigateToPath(selectedFile.path);
+            } else {
+              handleDownload(selectedFile);
+            }
+          }
+        } else if (filesToUse.length > 0) {
+          // Open first item if nothing selected
+          const firstItem = filesToUse[0];
+          if (firstItem.type === 'directory') {
+            navigateToPath(firstItem.path);
+          } else {
+            handleDownload(firstItem);
+          }
+        }
+        return;
+      }
+
+      // Arrow Keys: Navigate through files
+      if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(e.key)) {
+        e.preventDefault();
+        const sortedFilesList = getSortedFiles();
+        const filesToUse = isGlobalSearch ? allFiles : sortedFilesList;
+        if (filesToUse.length === 0) return;
+
+        let newIndex = focusedIndex;
+        if (newIndex === null) {
+          // Start from first item or first selected
+          if (selectedItems.size > 0) {
+            const firstSelected = filesToUse.findIndex(f => selectedItems.has(f.path));
+            newIndex = firstSelected >= 0 ? firstSelected : 0;
+          } else {
+            newIndex = 0;
+          }
+        }
+
+        if (e.key === 'ArrowDown') {
+          newIndex = Math.min(newIndex + 1, filesToUse.length - 1);
+        } else if (e.key === 'ArrowUp') {
+          newIndex = Math.max(newIndex - 1, 0);
+        } else if (e.key === 'ArrowRight') {
+          // Navigate into directory
+          const currentFile = filesToUse[newIndex];
+          if (currentFile && currentFile.type === 'directory') {
+            navigateToPath(currentFile.path);
+            return;
+          }
+        } else if (e.key === 'ArrowLeft') {
+          // Navigate up
+          if (currentPath) {
+            navigateUp();
+            return;
+          }
+        }
+
+        setFocusedIndex(newIndex);
+        const focusedFile = filesToUse[newIndex];
+        if (focusedFile) {
+          // Select the focused item
+          setSelectedItems(new Set([focusedFile.path]));
+          // Scroll into view
+          setTimeout(() => {
+            const row = document.querySelector(`[data-file-path="${focusedFile.path}"]`) as HTMLElement;
+            row?.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+          }, 0);
+        }
+        return;
+      }
+    }
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [
+    selectedItems,
+    files,
+    allFiles,
+    isGlobalSearch,
+    copiedItems,
+    currentPath,
+    actionHistory,
+    focusedIndex,
+    renamingItem,
+    creatingNewDirectory,
+  ]);
+
   // Handle external file drag and drop
   useEffect(() => {
     function handleDragOver(e: DragEvent) {
@@ -344,6 +563,7 @@ export default function FileManager({ user, onLogout }: FileManagerProps) {
       const data = await res.json();
       if (res.ok) {
         setFiles(data.contents || []);
+        setFocusedIndex(null); // Reset focus when loading new directory
       }
     } catch (error) {
       console.error('Fehler beim Laden der Dateien:', error);
@@ -736,6 +956,9 @@ export default function FileManager({ user, onLogout }: FileManagerProps) {
       return;
     }
 
+    const oldName = renamingItem.name;
+    const newName = renameValue.trim();
+
     try {
       const res = await fetch('/api/files', {
         method: 'POST',
@@ -743,13 +966,23 @@ export default function FileManager({ user, onLogout }: FileManagerProps) {
         body: JSON.stringify({
           action: 'rename',
           path: renamingItem.path,
-          newName: renameValue.trim(),
+          newName: newName,
         }),
       });
 
       const data = await res.json();
 
       if (res.ok) {
+        // Save to history for undo
+        setActionHistory(prev => [...prev, {
+          type: 'rename',
+          data: { 
+            item: renamingItem,
+            oldName: oldName,
+            newName: newName
+          }
+        }]);
+
         loadFiles();
         setTreeRefreshKey((k) => k + 1);
         setRenamingItem(null);
@@ -829,6 +1062,12 @@ export default function FileManager({ user, onLogout }: FileManagerProps) {
         });
       }
 
+      // Save to history for undo - store items with their full data for potential restoration
+      setActionHistory(prev => [...prev, {
+        type: 'delete',
+        data: { items: itemsToDelete.map(item => ({ ...item })) }
+      }]);
+
       // Clear selection
       setSelectedItems(new Set());
       
@@ -839,6 +1078,232 @@ export default function FileManager({ user, onLogout }: FileManagerProps) {
       setToast({ message: 'Fehler beim Löschen', type: 'error' });
     } finally {
       setDeleteModal({ visible: false, item: null, items: [] });
+    }
+  }
+
+  async function handleCopy() {
+    const selectedFiles = (isGlobalSearch ? allFiles : files).filter(f => selectedItems.has(f.path));
+    if (selectedFiles.length > 0) {
+      setCopiedItems(selectedFiles);
+      setIsCopyMode(true);
+      setToast({ message: `${selectedFiles.length} Element(e) kopiert`, type: 'success' });
+    }
+  }
+
+  async function handleCut() {
+    const selectedFiles = (isGlobalSearch ? allFiles : files).filter(f => selectedItems.has(f.path));
+    if (selectedFiles.length > 0) {
+      setCopiedItems(selectedFiles);
+      setIsCopyMode(false);
+      setToast({ message: `${selectedFiles.length} Element(e) ausgeschnitten`, type: 'success' });
+    }
+  }
+
+  async function handlePaste() {
+    if (copiedItems.length === 0) return;
+
+    try {
+      setToast({ message: `${copiedItems.length} Element(e) werden ${isCopyMode ? 'kopiert' : 'verschoben'}...`, type: 'info' });
+
+      const action = isCopyMode ? 'copy' : 'move';
+      const errors: string[] = [];
+      const successfulItems: FileItem[] = [];
+
+      for (const item of copiedItems) {
+        try {
+          const res = await fetch('/api/files', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              action: action,
+              path: item.path,
+              targetPath: currentPath,
+            }),
+          });
+
+          if (!res.ok) {
+            const data = await res.json();
+            errors.push(item.name);
+            console.error(`Fehler beim ${isCopyMode ? 'Kopieren' : 'Verschieben'} von ${item.name}:`, data.error);
+          } else {
+            successfulItems.push(item);
+          }
+        } catch (error: any) {
+          errors.push(item.name);
+          console.error(`Fehler beim ${isCopyMode ? 'Kopieren' : 'Verschieben'} von ${item.name}:`, error);
+        }
+      }
+
+      if (errors.length > 0) {
+        setToast({ 
+          message: `Fehler beim ${isCopyMode ? 'Kopieren' : 'Verschieben'} von ${errors.length} Element(en)`, 
+          type: 'error' 
+        });
+      } else {
+        // Save to history for undo - store the new paths after move/copy
+        const newItems = successfulItems.map(item => {
+          const newPath = currentPath ? `${currentPath}/${item.name}` : item.name;
+          return { ...item, path: newPath };
+        });
+
+        setActionHistory(prev => [...prev, {
+          type: isCopyMode ? 'copy' : 'move',
+          data: { 
+            items: successfulItems,
+            newItems: newItems,
+            from: successfulItems[0]?.path.split('/').slice(0, -1).join('/') || '',
+            to: currentPath 
+          }
+        }]);
+
+        setToast({ 
+          message: `${successfulItems.length} Element(e) erfolgreich ${isCopyMode ? 'kopiert' : 'verschoben'}`, 
+          type: 'success' 
+        });
+
+        // Clear copied items if cut mode (keep them for copy mode so user can paste multiple times)
+        if (!isCopyMode) {
+          setCopiedItems([]);
+        }
+      }
+
+      loadFiles();
+      setTreeRefreshKey((k) => k + 1);
+    } catch (error: any) {
+      console.error('Fehler beim Einfügen:', error);
+      setToast({ message: error.message || 'Fehler beim Einfügen', type: 'error' });
+    }
+  }
+
+  async function handleUndo() {
+    if (actionHistory.length === 0) return;
+
+    const lastAction = actionHistory[actionHistory.length - 1];
+    
+    try {
+      setToast({ message: 'Rückgängig wird gemacht...', type: 'info' });
+
+      if (lastAction.type === 'delete') {
+        // Undo delete: Recreate items (this is complex - we'd need to restore file contents)
+        // For now, just show a message that undo for delete is not fully supported
+        setToast({ 
+          message: 'Rückgängig für Löschungen wird noch nicht vollständig unterstützt', 
+          type: 'info' 
+        });
+        setActionHistory(prev => prev.slice(0, -1));
+        loadFiles();
+        setTreeRefreshKey((k) => k + 1);
+        return;
+      }
+
+      if (lastAction.type === 'move') {
+        // Undo move: Move items back to original location
+        const { newItems, from, to } = lastAction.data;
+        
+        for (const item of newItems) {
+          try {
+            const res = await fetch('/api/files', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                action: 'move',
+                path: item.path,
+                targetPath: from,
+              }),
+            });
+
+            if (!res.ok) {
+              const data = await res.json();
+              throw new Error(data.error || 'Fehler beim Rückgängig machen');
+            }
+          } catch (error: any) {
+            console.error(`Fehler beim Rückgängig machen von ${item.name}:`, error);
+          }
+        }
+
+        setToast({ message: 'Verschoben rückgängig gemacht', type: 'success' });
+        setActionHistory(prev => prev.slice(0, -1));
+        
+        // Navigate to original location if we're currently in the target location
+        if (currentPath === to) {
+          navigateToPath(from);
+        } else {
+          loadFiles();
+        }
+        setTreeRefreshKey((k) => k + 1);
+        return;
+      }
+
+      if (lastAction.type === 'copy') {
+        // Undo copy: Delete the copied items
+        const { newItems } = lastAction.data;
+        
+        for (const item of newItems) {
+          try {
+            const res = await fetch('/api/files', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                action: 'delete',
+                path: item.path,
+              }),
+            });
+
+            if (!res.ok) {
+              const data = await res.json();
+              throw new Error(data.error || 'Fehler beim Rückgängig machen');
+            }
+          } catch (error: any) {
+            console.error(`Fehler beim Rückgängig machen von ${item.name}:`, error);
+          }
+        }
+
+        setToast({ message: 'Kopieren rückgängig gemacht', type: 'success' });
+        setActionHistory(prev => prev.slice(0, -1));
+        loadFiles();
+        setTreeRefreshKey((k) => k + 1);
+        return;
+      }
+
+      if (lastAction.type === 'rename') {
+        // Undo rename: Rename back to original name
+        const { item, oldName, newName } = lastAction.data;
+        const itemPath = item.path.split('/').slice(0, -1).join('/');
+        const fullOldPath = itemPath ? `${itemPath}/${oldName}` : oldName;
+
+        try {
+          const res = await fetch('/api/files', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              action: 'rename',
+              path: item.path,
+              newName: oldName,
+            }),
+          });
+
+          if (!res.ok) {
+            const data = await res.json();
+            throw new Error(data.error || 'Fehler beim Rückgängig machen');
+          }
+
+          setToast({ message: 'Umbenennen rückgängig gemacht', type: 'success' });
+          setActionHistory(prev => prev.slice(0, -1));
+          loadFiles();
+          setTreeRefreshKey((k) => k + 1);
+        } catch (error: any) {
+          console.error('Fehler beim Rückgängig machen:', error);
+          setToast({ message: error.message || 'Fehler beim Rückgängig machen', type: 'error' });
+        }
+        return;
+      }
+
+      // Unknown action type
+      setActionHistory(prev => prev.slice(0, -1));
+      loadFiles();
+    } catch (error: any) {
+      console.error('Fehler beim Rückgängig machen:', error);
+      setToast({ message: error.message || 'Fehler beim Rückgängig machen', type: 'error' });
     }
   }
 
@@ -1044,15 +1509,27 @@ export default function FileManager({ user, onLogout }: FileManagerProps) {
                 </div>
               </div>
             </div>
-            <button
-              onClick={onLogout}
-              className="p-2 text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors"
-              title="Abmelden"
-            >
-              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
-              </svg>
-            </button>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => setSettingsOpen(true)}
+                className="p-2 text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors"
+                title="Einstellungen"
+              >
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                </svg>
+              </button>
+              <button
+                onClick={onLogout}
+                className="p-2 text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors"
+                title="Abmelden"
+              >
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
+                </svg>
+              </button>
+            </div>
           </div>
         </div>
       </header>
@@ -1462,6 +1939,7 @@ export default function FileManager({ user, onLogout }: FileManagerProps) {
                     return (
                       <tr
                         key={file.path}
+                        data-file-path={file.path}
                         onClick={(e) => handleRowClick(file, e)}
                         onContextMenu={(e) => handleContextMenu(file, e)}
                         draggable={true}
@@ -1498,6 +1976,8 @@ export default function FileManager({ user, onLogout }: FileManagerProps) {
                         className={`group cursor-pointer transition-colors ${
                           isSelected
                             ? 'bg-blue-50 dark:bg-blue-900/20 hover:bg-blue-100 dark:hover:bg-blue-900/30'
+                            : focusedIndex !== null && sortedFiles.findIndex(f => f.path === file.path) === focusedIndex
+                            ? 'bg-blue-100 dark:bg-blue-900/40 ring-2 ring-blue-500 dark:ring-blue-400'
                             : dragOverItem === file.path && file.type === 'directory'
                             ? 'bg-green-100 dark:bg-green-900/30 border-2 border-green-500 dark:border-green-600'
                             : 'hover:bg-gray-50 dark:hover:bg-gray-800/50'
@@ -1672,6 +2152,9 @@ export default function FileManager({ user, onLogout }: FileManagerProps) {
         onConfirm={handleReplaceConfirm}
         fileName={replaceModal.file?.name || ''}
       />
+
+      {/* Settings Modal */}
+      <SettingsModal isOpen={settingsOpen} onClose={() => setSettingsOpen(false)} />
 
       {/* Toast */}
       {toast && (
