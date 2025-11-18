@@ -147,6 +147,7 @@ export default function FileManager({ user, onLogout, initialPath }: FileManager
   });
   const [previewFile, setPreviewFile] = useState<FileItem | null>(null);
   const clickTimerRef = useRef<NodeJS.Timeout | null>(null);
+  const lastSelectedIndexRef = useRef<number | null>(null);
   const [previewWidth, setPreviewWidth] = useState(() => {
     if (typeof window !== 'undefined') {
       const saved = localStorage.getItem(`studydocs-preview-width-${user.id}`);
@@ -338,6 +339,7 @@ export default function FileManager({ user, onLogout, initialPath }: FileManager
 
   useEffect(() => {
     setSelectedItems(new Set());
+    lastSelectedIndexRef.current = null;
   }, [currentPath]);
 
   useEffect(() => {
@@ -920,13 +922,31 @@ export default function FileManager({ user, onLogout, initialPath }: FileManager
   }
 
   function toggleSelection(path: string) {
-    const newSelected = new Set(selectedItems);
-    if (newSelected.has(path)) {
-      newSelected.delete(path);
-    } else {
-      newSelected.add(path);
-    }
-    setSelectedItems(newSelected);
+    setSelectedItems((prev) => {
+      const newSet = new Set(prev);
+      if (newSet.has(path)) {
+        newSet.delete(path);
+      } else {
+        newSet.add(path);
+      }
+      return newSet;
+    });
+  }
+
+  function selectRange(startIndex: number, endIndex: number) {
+    const sorted = getSortedFiles();
+    const start = Math.min(startIndex, endIndex);
+    const end = Math.max(startIndex, endIndex);
+    
+    setSelectedItems((prev) => {
+      const newSet = new Set(prev);
+      for (let i = start; i <= end; i++) {
+        if (sorted[i]) {
+          newSet.add(sorted[i].path);
+        }
+      }
+      return newSet;
+    });
   }
 
   function handleRowClick(file: FileItem, e: React.MouseEvent) {
@@ -935,6 +955,10 @@ export default function FileManager({ user, onLogout, initialPath }: FileManager
     if (target.closest('input[type="checkbox"]') || target.closest('button')) {
       return;
     }
+
+    // Check for Cmd (Mac) or Ctrl (Windows/Linux) key
+    const isMetaKey = e.metaKey || e.ctrlKey;
+    const isShiftKey = e.shiftKey;
 
     // Ignore double clicks in onClick handler - they're handled by onDoubleClick
     if (e.detail === 2) {
@@ -946,12 +970,44 @@ export default function FileManager({ user, onLogout, initialPath }: FileManager
       return;
     }
 
+    // Handle Shift + Click: Range selection
+    if (isShiftKey && !isMetaKey) {
+      e.preventDefault();
+      e.stopPropagation();
+      const sorted = getSortedFiles();
+      const currentIndex = sorted.findIndex(f => f.path === file.path);
+      
+      if (currentIndex !== -1) {
+        if (lastSelectedIndexRef.current !== null) {
+          // Select range from last selected to current
+          selectRange(lastSelectedIndexRef.current, currentIndex);
+        } else {
+          // If no last selection, just select this one
+          toggleSelection(file.path);
+          lastSelectedIndexRef.current = currentIndex;
+        }
+      }
+      return;
+    }
+
+    // Handle Cmd/Ctrl + Click: Toggle selection
+    if (isMetaKey) {
+      e.preventDefault();
+      e.stopPropagation();
+      const sorted = getSortedFiles();
+      const currentIndex = sorted.findIndex(f => f.path === file.path);
+      toggleSelection(file.path);
+      lastSelectedIndexRef.current = currentIndex;
+      return;
+    }
+
+    // Normal click: Navigate or clear selection
     // Clear any existing timer
     if (clickTimerRef.current) {
       clearTimeout(clickTimerRef.current);
     }
 
-    // Delay selection to detect double clicks
+    // Delay navigation to detect double clicks
     clickTimerRef.current = setTimeout(() => {
       clickTimerRef.current = null;
       // Single click - execute action
@@ -961,6 +1017,9 @@ export default function FileManager({ user, onLogout, initialPath }: FileManager
         setIsGlobalSearch(false);
         setSearchQuery('');
         setSearchFilters({ fileType: 'all' });
+        // Clear selection on navigation
+        setSelectedItems(new Set());
+        lastSelectedIndexRef.current = null;
       } else {
         // For global search results, navigate to parent directory
         if (isGlobalSearch) {
@@ -969,9 +1028,12 @@ export default function FileManager({ user, onLogout, initialPath }: FileManager
           setIsGlobalSearch(false);
           setSearchQuery('');
           setSearchFilters({ fileType: 'all' });
+          setSelectedItems(new Set());
+          lastSelectedIndexRef.current = null;
         } else {
-          // Toggle selection for files on single click
-          toggleSelection(file.path);
+          // Normal click on file: clear selection and navigate to parent (or preview)
+          setSelectedItems(new Set());
+          lastSelectedIndexRef.current = null;
         }
       }
     }, 200); // 200ms delay to detect double clicks
@@ -1969,20 +2031,23 @@ export default function FileManager({ user, onLogout, initialPath }: FileManager
               <table className="w-full">
                 <thead className="bg-gray-50 dark:bg-gray-800/50 border-b border-gray-200 dark:border-gray-700 sticky top-0 z-10">
                   <tr>
-                    <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600 dark:text-gray-400 uppercase tracking-wider w-12">
-                      <input
-                        type="checkbox"
-                        checked={selectedItems.size === sortedFiles.length && sortedFiles.length > 0}
-                        onChange={(e) => {
-                          if (e.target.checked) {
-                            setSelectedItems(new Set(sortedFiles.map(f => f.path)));
-                          } else {
-                            setSelectedItems(new Set());
-                          }
-                        }}
-                        className="w-4 h-4 rounded border-2 border-gray-300 dark:border-gray-600 text-blue-600 dark:text-blue-500 bg-white dark:bg-gray-700 focus:ring-2 focus:ring-blue-500 dark:focus:ring-blue-400 focus:ring-offset-0 cursor-pointer transition-all duration-200 hover:border-blue-400 dark:hover:border-blue-500 checked:bg-blue-600 dark:checked:bg-blue-500 checked:border-blue-600 dark:checked:border-blue-500"
-                      />
-                    </th>
+                    {selectedItems.size > 0 && (
+                      <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600 dark:text-gray-400 uppercase tracking-wider w-12">
+                        <input
+                          type="checkbox"
+                          checked={selectedItems.size === sortedFiles.length && sortedFiles.length > 0}
+                          onChange={(e) => {
+                            if (e.target.checked) {
+                              setSelectedItems(new Set(sortedFiles.map(f => f.path)));
+                            } else {
+                              setSelectedItems(new Set());
+                              lastSelectedIndexRef.current = null;
+                            }
+                          }}
+                          className="w-4 h-4 rounded border-2 border-gray-300 dark:border-gray-600 text-blue-600 dark:text-blue-500 bg-white dark:bg-gray-700 focus:ring-2 focus:ring-blue-500 dark:focus:ring-blue-400 focus:ring-offset-0 cursor-pointer transition-all duration-200 hover:border-blue-400 dark:hover:border-blue-500 checked:bg-blue-600 dark:checked:bg-blue-500 checked:border-blue-600 dark:checked:border-blue-500"
+                        />
+                      </th>
+                    )}
                     <th
                       className="px-4 py-3 text-left text-xs font-semibold text-gray-600 dark:text-gray-400 uppercase tracking-wider cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
                       onClick={() => handleSort('name')}
@@ -2049,13 +2114,15 @@ export default function FileManager({ user, onLogout, initialPath }: FileManager
                       key="NEW_DIRECTORY_TEMP"
                       className="group cursor-pointer transition-colors bg-blue-50 dark:bg-blue-900/20 hover:bg-blue-100 dark:hover:bg-blue-900/30"
                     >
-                      <td className="px-4 py-3" onClick={(e) => e.stopPropagation()}>
-                        <input
-                          type="checkbox"
-                          disabled
-                          className="w-4 h-4 rounded border-2 border-gray-300 dark:border-gray-600 text-blue-600 dark:text-blue-500 bg-gray-100 dark:bg-gray-800 opacity-50 cursor-not-allowed"
-                        />
-                      </td>
+                      {selectedItems.size > 0 && (
+                        <td className="px-4 py-3" onClick={(e) => e.stopPropagation()}>
+                          <input
+                            type="checkbox"
+                            disabled
+                            className="w-4 h-4 rounded border-2 border-gray-300 dark:border-gray-600 text-blue-600 dark:text-blue-500 bg-gray-100 dark:bg-gray-800 opacity-50 cursor-not-allowed"
+                          />
+                        </td>
+                      )}
                       <td className="px-4 py-3">
                         <div className="flex items-center gap-3">
                           <div className="w-8 h-8 bg-blue-100 dark:bg-blue-900/30 rounded flex items-center justify-center flex-shrink-0">
@@ -2164,14 +2231,21 @@ export default function FileManager({ user, onLogout, initialPath }: FileManager
                             : 'hover:bg-gray-50 dark:hover:bg-gray-800/50'
                         } ${draggedItem?.path === file.path ? 'opacity-50' : ''}`}
                       >
-                        <td className="px-4 py-3" onClick={(e) => e.stopPropagation()}>
-                          <input
-                            type="checkbox"
-                            checked={isSelected}
-                            onChange={() => toggleSelection(file.path)}
-                            className="w-4 h-4 rounded border-2 border-gray-300 dark:border-gray-600 text-blue-600 dark:text-blue-500 bg-white dark:bg-gray-700 focus:ring-2 focus:ring-blue-500 dark:focus:ring-blue-400 focus:ring-offset-0 cursor-pointer transition-all duration-200 hover:border-blue-400 dark:hover:border-blue-500 checked:bg-blue-600 dark:checked:bg-blue-500 checked:border-blue-600 dark:checked:border-blue-500"
-                          />
-                        </td>
+                        {selectedItems.size > 0 && (
+                          <td className="px-4 py-3" onClick={(e) => e.stopPropagation()}>
+                            <input
+                              type="checkbox"
+                              checked={isSelected}
+                              onChange={() => {
+                                toggleSelection(file.path);
+                                const sorted = getSortedFiles();
+                                const currentIndex = sorted.findIndex(f => f.path === file.path);
+                                lastSelectedIndexRef.current = currentIndex;
+                              }}
+                              className="w-4 h-4 rounded border-2 border-gray-300 dark:border-gray-600 text-blue-600 dark:text-blue-500 bg-white dark:bg-gray-700 focus:ring-2 focus:ring-blue-500 dark:focus:ring-blue-400 focus:ring-offset-0 cursor-pointer transition-all duration-200 hover:border-blue-400 dark:hover:border-blue-500 checked:bg-blue-600 dark:checked:bg-blue-500 checked:border-blue-600 dark:checked:border-blue-500"
+                            />
+                          </td>
+                        )}
                         <td className="px-4 py-3">
                           <div className="flex items-center gap-3">
                             {file.type === 'directory' ? (
