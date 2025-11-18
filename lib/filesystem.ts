@@ -84,3 +84,22 @@ export async function getFile(userId: string, filePath: string): Promise<Buffer>
   return fs.readFile(fullPath);
 }
 
+export async function renameItem(userId: string, itemPath: string, newName: string): Promise<void> {
+  const userDir = await ensureUserDirectory(userId);
+  const fullPath = path.join(userDir, itemPath);
+  const dir = path.dirname(fullPath);
+  const newPath = path.join(dir, newName);
+  
+  // Check if new name already exists
+  try {
+    await fs.access(newPath);
+    throw new Error('Ein Element mit diesem Namen existiert bereits');
+  } catch (error: any) {
+    if (error.code !== 'ENOENT') {
+      throw error;
+    }
+  }
+  
+  await fs.rename(fullPath, newPath);
+}
+

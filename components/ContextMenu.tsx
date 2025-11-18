@@ -1,0 +1,141 @@
+'use client';
+
+import { useEffect, useRef } from 'react';
+
+interface ContextMenuProps {
+  x: number;
+  y: number;
+  onClose: () => void;
+  onOpen?: () => void;
+  onDownload?: () => void;
+  onDelete: () => void;
+  onRename?: () => void;
+  itemType: 'file' | 'directory';
+}
+
+export default function ContextMenu({
+  x,
+  y,
+  onClose,
+  onOpen,
+  onDownload,
+  onDelete,
+  onRename,
+  itemType,
+}: ContextMenuProps) {
+  const menuRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    function handleClickOutside(event: MouseEvent) {
+      if (menuRef.current && !menuRef.current.contains(event.target as Node)) {
+        onClose();
+      }
+    }
+
+    function handleEscape(event: KeyboardEvent) {
+      if (event.key === 'Escape') {
+        onClose();
+      }
+    }
+
+    document.addEventListener('mousedown', handleClickOutside);
+    document.addEventListener('keydown', handleEscape);
+
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+      document.removeEventListener('keydown', handleEscape);
+    };
+  }, [onClose]);
+
+  useEffect(() => {
+    if (menuRef.current) {
+      const rect = menuRef.current.getBoundingClientRect();
+      const viewportWidth = window.innerWidth;
+      const viewportHeight = window.innerHeight;
+
+      // Adjust position if menu would go off screen
+      let adjustedX = x;
+      let adjustedY = y;
+
+      if (x + rect.width > viewportWidth) {
+        adjustedX = viewportWidth - rect.width - 10;
+      }
+      if (y + rect.height > viewportHeight) {
+        adjustedY = viewportHeight - rect.height - 10;
+      }
+
+      menuRef.current.style.left = `${adjustedX}px`;
+      menuRef.current.style.top = `${adjustedY}px`;
+    }
+  }, [x, y]);
+
+  return (
+    <div
+      ref={menuRef}
+      className="fixed z-50 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg shadow-xl py-1 min-w-[180px] animate-scale-in"
+      style={{ left: `${x}px`, top: `${y}px` }}
+      onClick={(e) => e.stopPropagation()}
+    >
+      {itemType === 'directory' && onOpen && (
+        <button
+          onClick={() => {
+            onOpen();
+            onClose();
+          }}
+          className="w-full text-left px-4 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 flex items-center gap-2 transition-colors"
+        >
+          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z" />
+          </svg>
+          Öffnen
+        </button>
+      )}
+
+      {itemType === 'file' && onDownload && (
+        <button
+          onClick={() => {
+            onDownload();
+            onClose();
+          }}
+          className="w-full text-left px-4 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 flex items-center gap-2 transition-colors"
+        >
+          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+          </svg>
+          Herunterladen
+        </button>
+      )}
+
+      {onRename && (
+        <button
+          onClick={() => {
+            onRename();
+            onClose();
+          }}
+          className="w-full text-left px-4 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 flex items-center gap-2 transition-colors"
+        >
+          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+          </svg>
+          Umbenennen
+        </button>
+      )}
+
+      <div className="border-t border-gray-200 dark:border-gray-700 my-1" />
+
+      <button
+        onClick={() => {
+          onDelete();
+          onClose();
+        }}
+        className="w-full text-left px-4 py-2 text-sm text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 flex items-center gap-2 transition-colors"
+      >
+        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+        </svg>
+        Löschen
+      </button>
+    </div>
+  );
+}
+

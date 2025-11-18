@@ -1,9 +1,12 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import FileTree from './FileTree';
 import FileUpload from './FileUpload';
 import CreateDirectory from './CreateDirectory';
+import ContextMenu from './ContextMenu';
+import DeleteModal from './DeleteModal';
+import Toast from './Toast';
 
 interface FileItem {
   name: string;
@@ -40,6 +43,28 @@ export default function FileManager({ user, onLogout }: FileManagerProps) {
   const [sortField, setSortField] = useState<SortField>('name');
   const [sortDirection, setSortDirection] = useState<SortDirection>('asc');
   const [selectedItems, setSelectedItems] = useState<Set<string>>(new Set());
+  const [contextMenu, setContextMenu] = useState<{
+    visible: boolean;
+    x: number;
+    y: number;
+    item: FileItem | null;
+  }>({
+    visible: false,
+    x: 0,
+    y: 0,
+    item: null,
+  });
+  const [deleteModal, setDeleteModal] = useState<{
+    visible: boolean;
+    item: FileItem | null;
+  }>({
+    visible: false,
+    item: null,
+  });
+  const [renamingItem, setRenamingItem] = useState<FileItem | null>(null);
+  const [renameValue, setRenameValue] = useState('');
+  const renameInputRef = useRef<HTMLInputElement>(null);
+  const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' | 'info' } | null>(null);
 
   // Save path to localStorage whenever it changes
   useEffect(() => {
@@ -161,32 +186,123 @@ export default function FileManager({ user, onLogout }: FileManagerProps) {
   }
 
   function handleRowClick(file: FileItem, e: React.MouseEvent) {
+    // Don't navigate if clicking on checkbox or action buttons
+    const target = e.target as HTMLElement;
+    if (target.closest('input[type="checkbox"]') || target.closest('button')) {
+      return;
+    }
+
     if (e.detail === 2) {
-      // Double click
+      // Double click - download file or navigate to directory
       if (file.type === 'directory') {
         navigateToPath(file.path);
       } else {
         handleDownload(file);
       }
     } else {
-      // Single click - toggle selection
-      toggleSelection(file.path);
+      // Single click
+      if (file.type === 'directory') {
+        // Navigate directly into directory on single click
+        navigateToPath(file.path);
+      } else {
+        // Toggle selection for files
+        toggleSelection(file.path);
+      }
     }
   }
 
-  async function handleDelete(item: FileItem) {
-    if (!confirm(`Möchten Sie "${item.name}" wirklich löschen?`)) return;
+  function handleContextMenu(file: FileItem, e: React.MouseEvent) {
+    e.preventDefault();
+    e.stopPropagation();
+    
+    setContextMenu({
+      visible: true,
+      x: e.clientX,
+      y: e.clientY,
+      item: file,
+    });
+  }
+
+  function handleRename(item: FileItem) {
+    setRenamingItem(item);
+    setRenameValue(item.name);
+    // Focus input after state update
+    setTimeout(() => {
+      renameInputRef.current?.focus();
+      renameInputRef.current?.select();
+    }, 0);
+  }
+
+  async function confirmRename() {
+    if (!renamingItem || !renameValue.trim() || renameValue === renamingItem.name) {
+      setRenamingItem(null);
+      setRenameValue('');
+      return;
+    }
 
     try {
       const res = await fetch('/api/files', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'delete', path: item.path }),
+        body: JSON.stringify({
+          action: 'rename',
+          path: renamingItem.path,
+          newName: renameValue.trim(),
+        }),
+      });
+
+      const data = await res.json();
+
+      if (res.ok) {
+        loadFiles();
+        setTreeRefreshKey((k) => k + 1);
+        setRenamingItem(null);
+        setRenameValue('');
+        setToast({ message: 'Erfolgreich umbenannt', type: 'success' });
+      } else {
+        setToast({ message: data.error || 'Fehler beim Umbenennen', type: 'error' });
+        setRenamingItem(null);
+        setRenameValue('');
+      }
+    } catch (error) {
+      console.error('Fehler beim Umbenennen:', error);
+      setToast({ message: 'Fehler beim Umbenennen', type: 'error' });
+      setRenamingItem(null);
+      setRenameValue('');
+    }
+  }
+
+  function cancelRename() {
+    setRenamingItem(null);
+    setRenameValue('');
+  }
+
+  function handleRenameKeyDown(e: React.KeyboardEvent<HTMLInputElement>) {
+    if (e.key === 'Enter') {
+      confirmRename();
+    } else if (e.key === 'Escape') {
+      cancelRename();
+    }
+  }
+
+  function openDeleteModal(item: FileItem) {
+    setDeleteModal({ visible: true, item });
+  }
+
+  async function confirmDelete() {
+    if (!deleteModal.item) return;
+
+    try {
+      const res = await fetch('/api/files', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'delete', path: deleteModal.item.path }),
       });
 
       if (res.ok) {
         loadFiles();
         setTreeRefreshKey((k) => k + 1);
+        setDeleteModal({ visible: false, item: null });
       }
     } catch (error) {
       console.error('Fehler beim Löschen:', error);
@@ -436,6 +552,7 @@ export default function FileManager({ user, onLogout }: FileManagerProps) {
                       <tr
                         key={file.path}
                         onClick={(e) => handleRowClick(file, e)}
+                        onContextMenu={(e) => handleContextMenu(file, e)}
                         className={`group cursor-pointer transition-colors ${
                           isSelected
                             ? 'bg-blue-50 dark:bg-blue-900/20 hover:bg-blue-100 dark:hover:bg-blue-900/30'
@@ -466,9 +583,23 @@ export default function FileManager({ user, onLogout }: FileManagerProps) {
                               </div>
                             )}
                             <div className="flex-1 min-w-0">
-                              <div className="font-medium text-gray-900 dark:text-white truncate">
-                                {file.name}
-                              </div>
+                              {renamingItem?.path === file.path ? (
+                                <input
+                                  ref={renameInputRef}
+                                  type="text"
+                                  value={renameValue}
+                                  onChange={(e) => setRenameValue(e.target.value)}
+                                  onBlur={confirmRename}
+                                  onKeyDown={handleRenameKeyDown}
+                                  onClick={(e) => e.stopPropagation()}
+                                  className="w-full px-2 py-1 border border-blue-500 rounded text-sm font-medium text-gray-900 dark:text-white bg-white dark:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                  autoFocus
+                                />
+                              ) : (
+                                <div className="font-medium text-gray-900 dark:text-white truncate">
+                                  {file.name}
+                                </div>
+                              )}
                             </div>
                           </div>
                         </td>
@@ -495,7 +626,10 @@ export default function FileManager({ user, onLogout }: FileManagerProps) {
                               </button>
                             )}
                             <button
-                              onClick={() => handleDelete(file)}
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                openDeleteModal(file);
+                              }}
                               className="p-1.5 text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20 rounded transition-colors"
                               title="Löschen"
                             >
@@ -536,6 +670,40 @@ export default function FileManager({ user, onLogout }: FileManagerProps) {
           background: #64748b;
         }
       `}</style>
+
+      {/* Context Menu */}
+      {contextMenu.visible && contextMenu.item && (
+        <ContextMenu
+          x={contextMenu.x}
+          y={contextMenu.y}
+          onClose={() => setContextMenu({ visible: false, x: 0, y: 0, item: null })}
+          onOpen={contextMenu.item.type === 'directory' ? () => navigateToPath(contextMenu.item!.path) : undefined}
+          onDownload={contextMenu.item.type === 'file' ? () => handleDownload(contextMenu.item!) : undefined}
+          onDelete={() => openDeleteModal(contextMenu.item!)}
+          onRename={() => handleRename(contextMenu.item!)}
+          itemType={contextMenu.item.type}
+        />
+      )}
+
+      {/* Delete Modal */}
+      {deleteModal.visible && deleteModal.item && (
+        <DeleteModal
+          isOpen={deleteModal.visible}
+          onClose={() => setDeleteModal({ visible: false, item: null })}
+          onConfirm={confirmDelete}
+          itemName={deleteModal.item.name}
+          itemType={deleteModal.item.type}
+        />
+      )}
+
+      {/* Toast */}
+      {toast && (
+        <Toast
+          message={toast.message}
+          type={toast.type}
+          onClose={() => setToast(null)}
+        />
+      )}
     </div>
   );
 }
