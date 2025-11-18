@@ -1,18 +1,26 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import LoginForm from '@/components/LoginForm';
 import FileManager from '@/components/FileManager';
 
 export default function Home() {
   const [user, setUser] = useState<any>(null);
   const [loading, setLoading] = useState(true);
+  const [initialPath, setInitialPath] = useState<string>('');
   const router = useRouter();
+  const searchParams = useSearchParams();
 
   useEffect(() => {
     checkAuth();
-  }, []);
+    
+    // Check for path parameter in URL
+    const pathParam = searchParams.get('path');
+    if (pathParam) {
+      setInitialPath(decodeURIComponent(pathParam));
+    }
+  }, [searchParams]);
 
   async function checkAuth() {
     try {
@@ -30,6 +38,12 @@ export default function Home() {
 
   async function handleLogin(userData: any) {
     setUser(userData);
+    
+    // Check if there's a returnUrl after login
+    const returnUrl = searchParams.get('returnUrl');
+    if (returnUrl) {
+      router.push(decodeURIComponent(returnUrl));
+    }
   }
 
   async function handleLogout() {
@@ -50,6 +64,6 @@ export default function Home() {
     return <LoginForm onLogin={handleLogin} />;
   }
 
-  return <FileManager user={user} onLogout={handleLogout} />;
+  return <FileManager user={user} onLogout={handleLogout} initialPath={initialPath} />;
 }
 

@@ -68,6 +68,7 @@ export const translations = {
     open: 'Öffnen',
     createDirectory: 'Neues Verzeichnis',
     createDirectoryHere: 'Hier neues Verzeichnis erstellen',
+    share: 'Teilen',
     
     // Search
     search: 'Suchen',
@@ -230,6 +231,7 @@ export const translations = {
     open: 'Open',
     createDirectory: 'New Directory',
     createDirectoryHere: 'Create new directory here',
+    share: 'Share',
     
     // Search
     search: 'Search',

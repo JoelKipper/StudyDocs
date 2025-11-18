@@ -9,6 +9,7 @@ import ReplaceModal from './ReplaceModal';
 import Toast from './Toast';
 import SearchBar from './SearchBar';
 import SettingsModal from './SettingsModal';
+import ShareModal from './ShareModal';
 import { useLanguage } from '@/contexts/LanguageContext';
 
 interface FileMetadata {
@@ -35,14 +36,18 @@ type SortDirection = 'asc' | 'desc';
 interface FileManagerProps {
   user: { id: string; name: string; email: string };
   onLogout: () => void;
+  initialPath?: string;
 }
 
-export default function FileManager({ user, onLogout }: FileManagerProps) {
+export default function FileManager({ user, onLogout, initialPath }: FileManagerProps) {
   const { t, formatSize, language } = useLanguage();
   const storageKey = `studydocs-path-${user.id}`;
   
-  // Load saved path from localStorage on mount
+  // Load saved path from localStorage on mount, or use initialPath if provided
   const [currentPath, setCurrentPath] = useState(() => {
+    if (initialPath) {
+      return initialPath;
+    }
     if (typeof window !== 'undefined') {
       const saved = localStorage.getItem(storageKey);
       return saved || '';
@@ -128,6 +133,17 @@ export default function FileManager({ user, onLogout }: FileManagerProps) {
     targetPath: '',
   });
   const [uploadQueue, setUploadQueue] = useState<Array<{ file: File; targetPath: string }>>([]);
+  const [shareModal, setShareModal] = useState<{
+    isOpen: boolean;
+    itemName: string;
+    itemPath: string;
+    itemType: 'file' | 'directory';
+  }>({
+    isOpen: false,
+    itemName: '',
+    itemPath: '',
+    itemType: 'file',
+  });
 
   // Save path to localStorage whenever it changes
   useEffect(() => {
@@ -826,6 +842,15 @@ export default function FileManager({ user, onLogout }: FileManagerProps) {
         }
       }
     }
+  }
+
+  function handleShare(item: FileItem) {
+    setShareModal({
+      isOpen: true,
+      itemName: item.name,
+      itemPath: item.path,
+      itemType: item.type,
+    });
   }
 
   function handleContextMenu(file: FileItem, e: React.MouseEvent) {
@@ -2121,6 +2146,7 @@ export default function FileManager({ user, onLogout }: FileManagerProps) {
           onDelete={contextMenu.item ? () => openDeleteModal(contextMenu.item!) : undefined}
           onRename={contextMenu.item ? () => handleRename(contextMenu.item!) : undefined}
           onCreateDirectory={contextMenu.isEmpty ? handleCreateDirectoryFromContext : undefined}
+          onShare={contextMenu.item ? () => handleShare(contextMenu.item!) : undefined}
           itemType={contextMenu.isEmpty ? 'empty' : (contextMenu.item?.type || 'file')}
         />
       )}
@@ -2147,6 +2173,15 @@ export default function FileManager({ user, onLogout }: FileManagerProps) {
 
       {/* Settings Modal */}
       <SettingsModal isOpen={settingsOpen} onClose={() => setSettingsOpen(false)} />
+
+      {/* Share Modal */}
+      <ShareModal
+        isOpen={shareModal.isOpen}
+        onClose={() => setShareModal({ isOpen: false, itemName: '', itemPath: '', itemType: 'file' })}
+        itemName={shareModal.itemName}
+        itemPath={shareModal.itemPath}
+        itemType={shareModal.itemType}
+      />
 
       {/* Toast */}
       {toast && (
