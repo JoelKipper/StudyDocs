@@ -52,6 +52,7 @@ export default function FileTree({ currentPath, onNavigate, onRefresh, onExterna
     return defaultExpanded;
   });
   const [loading, setLoading] = useState(true);
+  const [treeLoaded, setTreeLoaded] = useState(false); // Track when tree is loaded to trigger animation
   const [draggedItem, setDraggedItem] = useState<string | null>(null);
   const [draggedItemType, setDraggedItemType] = useState<'file' | 'directory' | null>(null);
   const [dragOverPath, setDragOverPath] = useState<string | null>(null);
@@ -90,9 +91,16 @@ export default function FileTree({ currentPath, onNavigate, onRefresh, onExterna
 
   async function loadFullTree() {
     setLoading(true);
+    setTreeLoaded(false); // Reset animation trigger
     try {
       const rootTree = await loadTreeRecursive('');
       setTree(rootTree);
+      // Trigger animation immediately after state update using requestAnimationFrame
+      requestAnimationFrame(() => {
+        requestAnimationFrame(() => {
+          setTreeLoaded(true);
+        });
+      });
     } catch (error) {
       console.error('Fehler beim Laden des Baums:', error);
     } finally {
@@ -256,24 +264,31 @@ export default function FileTree({ currentPath, onNavigate, onRefresh, onExterna
         </svg>
         <span>Root</span>
       </button>
-      {tree.map((item) => (
-        <TreeNode
+      {tree.map((item, index) => (
+        <div
           key={item.path}
-          item={item}
-          level={0}
-          currentPath={currentPath}
-          onNavigate={onNavigate}
-          isExpanded={isExpanded}
-          onToggleExpand={toggleExpand}
-          onExternalDrop={onExternalDrop}
-          onMoveItem={onMoveItem}
-          draggedItem={draggedItem}
-          draggedItemType={draggedItemType}
-          dragOverPath={dragOverPath}
-          setDraggedItem={setDraggedItem}
-          setDraggedItemType={setDraggedItemType}
-          setDragOverPath={setDragOverPath}
-        />
+          className={treeLoaded ? 'animate-slide-down-stagger' : 'opacity-0'}
+          style={{
+            animationDelay: treeLoaded ? `${index * 50}ms` : '0ms',
+          }}
+        >
+          <TreeNode
+            item={item}
+            level={0}
+            currentPath={currentPath}
+            onNavigate={onNavigate}
+            isExpanded={isExpanded}
+            onToggleExpand={toggleExpand}
+            onExternalDrop={onExternalDrop}
+            onMoveItem={onMoveItem}
+            draggedItem={draggedItem}
+            draggedItemType={draggedItemType}
+            dragOverPath={dragOverPath}
+            setDraggedItem={setDraggedItem}
+            setDraggedItemType={setDraggedItemType}
+            setDragOverPath={setDragOverPath}
+          />
+        </div>
       ))}
       {tree.length === 0 && (
         <div className="text-center py-4 text-sm text-gray-400 dark:text-gray-500">

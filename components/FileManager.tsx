@@ -158,6 +158,7 @@ export default function FileManager({ user, onLogout, initialPath }: FileManager
   const [isResizingPreview, setIsResizingPreview] = useState(false);
   const [visibleRange, setVisibleRange] = useState({ start: 0, end: 50 }); // Virtualisierung: nur sichtbare Zeilen rendern
   const fileListContainerRef = useRef<HTMLDivElement>(null);
+  const [filesLoaded, setFilesLoaded] = useState(false); // Track when files are loaded to trigger animation
 
   // Save path to localStorage whenever it changes
   useEffect(() => {
@@ -254,6 +255,7 @@ export default function FileManager({ user, onLogout, initialPath }: FileManager
     loadFiles();
     // Reset visible range when path changes - will be updated when files load
     setVisibleRange({ start: 0, end: 100 });
+    setFilesLoaded(false); // Reset animation trigger when path changes
   }, [currentPath]);
 
   // Update visible range when files change
@@ -704,12 +706,19 @@ export default function FileManager({ user, onLogout, initialPath }: FileManager
 
   async function loadFiles() {
     setLoading(true);
+    setFilesLoaded(false); // Reset animation trigger - items will be hidden
     try {
       const res = await fetch(`/api/files?path=${encodeURIComponent(currentPath)}`);
       const data = await res.json();
       if (res.ok) {
         setFiles(data.contents || []);
         setFocusedIndex(null); // Reset focus when loading new directory
+        // Trigger animation immediately after state update using requestAnimationFrame
+        requestAnimationFrame(() => {
+          requestAnimationFrame(() => {
+            setFilesLoaded(true);
+          });
+        });
       }
     } catch (error) {
       console.error('Fehler beim Laden der Dateien:', error);
@@ -1873,10 +1882,10 @@ export default function FileManager({ user, onLogout, initialPath }: FileManager
           )}
 
           {/* Toolbar */}
-          <div className="border-b border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800/50 flex-shrink-0">
-            <div className="px-4 py-2 flex items-center justify-between gap-4">
+          <div className="border-b border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800/50 flex-shrink-0 relative">
+            <div className="px-4 py-2 flex items-center gap-4">
               {/* Navigation */}
-              <div className="flex items-center gap-2 flex-1 min-w-0">
+              <div className="flex items-center gap-2 flex-shrink-0">
                 <button
                   onClick={navigateUp}
                   disabled={!currentPath}
@@ -1923,7 +1932,7 @@ export default function FileManager({ user, onLogout, initialPath }: FileManager
               </div>
 
               {/* Search Bar */}
-              <div className="flex-1 max-w-md">
+              <div className="flex-1 max-w-md min-w-0">
                 <SearchBar
                   searchQuery={searchQuery}
                   onSearchChange={setSearchQuery}
@@ -1953,30 +1962,41 @@ export default function FileManager({ user, onLogout, initialPath }: FileManager
                 )}
               </div>
 
-              {/* Actions */}
-              <div className="flex items-center gap-1.5">
-                {selectedItems.size > 0 && (
-                  <>
-                    <button
-                      onClick={handleBulkDownload}
-                      className="p-2 text-blue-600 hover:text-blue-700 dark:text-blue-400 dark:hover:text-blue-300 hover:bg-blue-50 dark:hover:bg-blue-900/20 rounded-lg transition-colors"
-                      title={`${selectedItems.size} ${t('itemsDownloaded')}`}
-                    >
-                      <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
-                      </svg>
-                    </button>
-                    <button
-                      onClick={openBulkDeleteModal}
-                      className="p-2 text-red-600 hover:text-red-700 dark:text-red-400 dark:hover:text-red-300 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg transition-colors"
-                      title={`${selectedItems.size} ${t('itemsSelected')} - ${t('delete')}`}
-                    >
-                      <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                      </svg>
-                    </button>
-                  </>
-                )}
+              {/* Spacer to push buttons to the right */}
+              <div className="flex-1"></div>
+
+              {/* Actions - Always visible on the right */}
+              <div className="flex items-center gap-1.5 flex-shrink-0">
+                {/* Bulk Actions - Always visible, but grayed out when nothing selected */}
+                <button
+                  onClick={handleBulkDownload}
+                  disabled={selectedItems.size === 0}
+                  className={`p-2 rounded-lg transition-all duration-200 ${
+                    selectedItems.size > 0
+                      ? 'text-blue-600 hover:text-blue-700 dark:text-blue-400 dark:hover:text-blue-300 hover:bg-blue-50 dark:hover:bg-blue-900/20'
+                      : 'text-gray-400 dark:text-gray-500 opacity-50 cursor-not-allowed'
+                  }`}
+                  title={selectedItems.size > 0 ? `${selectedItems.size} ${t('itemsDownloaded')}` : t('selectItemsToDownload')}
+                >
+                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+                  </svg>
+                </button>
+                <button
+                  onClick={openBulkDeleteModal}
+                  disabled={selectedItems.size === 0}
+                  className={`p-2 rounded-lg transition-all duration-200 ${
+                    selectedItems.size > 0
+                      ? 'text-red-600 hover:text-red-700 dark:text-red-400 dark:hover:text-red-300 hover:bg-red-50 dark:hover:bg-red-900/20'
+                      : 'text-gray-400 dark:text-gray-500 opacity-50 cursor-not-allowed'
+                  }`}
+                  title={selectedItems.size > 0 ? `${selectedItems.size} ${t('itemsSelected')} - ${t('delete')}` : t('selectItemsToDelete')}
+                >
+                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                  </svg>
+                </button>
+                {/* Always available buttons */}
                 <button
                   onClick={handleCreateDirectory}
                   className="p-2 text-gray-600 hover:text-gray-900 dark:text-gray-400 dark:hover:text-gray-100 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors"
@@ -2031,23 +2051,25 @@ export default function FileManager({ user, onLogout, initialPath }: FileManager
               <table className="w-full">
                 <thead className="bg-gray-50 dark:bg-gray-800/50 border-b border-gray-200 dark:border-gray-700 sticky top-0 z-10">
                   <tr>
-                    {selectedItems.size > 0 && (
-                      <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600 dark:text-gray-400 uppercase tracking-wider w-12">
-                        <input
-                          type="checkbox"
-                          checked={selectedItems.size === sortedFiles.length && sortedFiles.length > 0}
-                          onChange={(e) => {
-                            if (e.target.checked) {
-                              setSelectedItems(new Set(sortedFiles.map(f => f.path)));
-                            } else {
-                              setSelectedItems(new Set());
-                              lastSelectedIndexRef.current = null;
-                            }
-                          }}
-                          className="w-4 h-4 rounded border-2 border-gray-300 dark:border-gray-600 text-blue-600 dark:text-blue-500 bg-white dark:bg-gray-700 focus:ring-2 focus:ring-blue-500 dark:focus:ring-blue-400 focus:ring-offset-0 cursor-pointer transition-all duration-200 hover:border-blue-400 dark:hover:border-blue-500 checked:bg-blue-600 dark:checked:bg-blue-500 checked:border-blue-600 dark:checked:border-blue-500"
-                        />
-                      </th>
-                    )}
+                    <th 
+                      className={`px-4 py-3 text-left text-xs font-semibold text-gray-600 dark:text-gray-400 uppercase tracking-wider transition-all duration-300 overflow-hidden ${
+                        selectedItems.size > 0 ? 'w-12 opacity-100' : 'w-0 opacity-0'
+                      }`}
+                    >
+                      <input
+                        type="checkbox"
+                        checked={selectedItems.size === sortedFiles.length && sortedFiles.length > 0}
+                        onChange={(e) => {
+                          if (e.target.checked) {
+                            setSelectedItems(new Set(sortedFiles.map(f => f.path)));
+                          } else {
+                            setSelectedItems(new Set());
+                            lastSelectedIndexRef.current = null;
+                          }
+                        }}
+                        className="w-4 h-4 rounded border-2 border-gray-300 dark:border-gray-600 text-blue-600 dark:text-blue-500 bg-white dark:bg-gray-700 focus:ring-2 focus:ring-blue-500 dark:focus:ring-blue-400 focus:ring-offset-0 cursor-pointer transition-all duration-200 hover:border-blue-400 dark:hover:border-blue-500 checked:bg-blue-600 dark:checked:bg-blue-500 checked:border-blue-600 dark:checked:border-blue-500"
+                      />
+                    </th>
                     <th
                       className="px-4 py-3 text-left text-xs font-semibold text-gray-600 dark:text-gray-400 uppercase tracking-wider cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
                       onClick={() => handleSort('name')}
@@ -2112,17 +2134,23 @@ export default function FileManager({ user, onLogout, initialPath }: FileManager
                   {creatingNewDirectory && (
                     <tr
                       key="NEW_DIRECTORY_TEMP"
-                      className="group cursor-pointer transition-colors bg-blue-50 dark:bg-blue-900/20 hover:bg-blue-100 dark:hover:bg-blue-900/30"
+                      className="group cursor-pointer transition-colors bg-blue-50 dark:bg-blue-900/20 hover:bg-blue-100 dark:hover:bg-blue-900/30 animate-slide-down-stagger"
+                      style={{
+                        animationDelay: '0ms',
+                      }}
                     >
-                      {selectedItems.size > 0 && (
-                        <td className="px-4 py-3" onClick={(e) => e.stopPropagation()}>
-                          <input
-                            type="checkbox"
-                            disabled
-                            className="w-4 h-4 rounded border-2 border-gray-300 dark:border-gray-600 text-blue-600 dark:text-blue-500 bg-gray-100 dark:bg-gray-800 opacity-50 cursor-not-allowed"
-                          />
-                        </td>
-                      )}
+                      <td 
+                        className={`px-4 py-3 transition-all duration-300 overflow-hidden ${
+                          selectedItems.size > 0 ? 'w-auto opacity-100' : 'w-0 opacity-0'
+                        }`}
+                        onClick={(e) => e.stopPropagation()}
+                      >
+                        <input
+                          type="checkbox"
+                          disabled
+                          className="w-4 h-4 rounded border-2 border-gray-300 dark:border-gray-600 text-blue-600 dark:text-blue-500 bg-gray-100 dark:bg-gray-800 opacity-50 cursor-not-allowed"
+                        />
+                      </td>
                       <td className="px-4 py-3">
                         <div className="flex items-center gap-3">
                           <div className="w-8 h-8 bg-blue-100 dark:bg-blue-900/30 rounded flex items-center justify-center flex-shrink-0">
@@ -2164,9 +2192,12 @@ export default function FileManager({ user, onLogout, initialPath }: FileManager
                     const isSelected = selectedItems.has(file.path);
                     return (
                       <tr
-                        key={file.path}
+                        key={`${file.path}-${filesLoaded}`}
                         data-file-path={file.path}
                         data-index={actualIndex}
+                        style={{
+                          animationDelay: filesLoaded ? `${index * 50}ms` : '0ms',
+                        }}
                         onClick={(e) => handleRowClick(file, e)}
                         onDoubleClick={(e) => {
                           e.preventDefault();
@@ -2222,6 +2253,8 @@ export default function FileManager({ user, onLogout, initialPath }: FileManager
                           }
                         }}
                         className={`group cursor-pointer transition-colors ${
+                          filesLoaded ? 'animate-slide-down-stagger' : 'opacity-0'
+                        } ${
                           isSelected
                             ? 'bg-blue-50 dark:bg-blue-900/20 hover:bg-blue-100 dark:hover:bg-blue-900/30'
                             : focusedIndex !== null && sortedFiles.findIndex(f => f.path === file.path) === focusedIndex
@@ -2231,21 +2264,24 @@ export default function FileManager({ user, onLogout, initialPath }: FileManager
                             : 'hover:bg-gray-50 dark:hover:bg-gray-800/50'
                         } ${draggedItem?.path === file.path ? 'opacity-50' : ''}`}
                       >
-                        {selectedItems.size > 0 && (
-                          <td className="px-4 py-3" onClick={(e) => e.stopPropagation()}>
-                            <input
-                              type="checkbox"
-                              checked={isSelected}
-                              onChange={() => {
-                                toggleSelection(file.path);
-                                const sorted = getSortedFiles();
-                                const currentIndex = sorted.findIndex(f => f.path === file.path);
-                                lastSelectedIndexRef.current = currentIndex;
-                              }}
-                              className="w-4 h-4 rounded border-2 border-gray-300 dark:border-gray-600 text-blue-600 dark:text-blue-500 bg-white dark:bg-gray-700 focus:ring-2 focus:ring-blue-500 dark:focus:ring-blue-400 focus:ring-offset-0 cursor-pointer transition-all duration-200 hover:border-blue-400 dark:hover:border-blue-500 checked:bg-blue-600 dark:checked:bg-blue-500 checked:border-blue-600 dark:checked:border-blue-500"
-                            />
-                          </td>
-                        )}
+                        <td 
+                          className={`px-4 py-3 transition-all duration-300 overflow-hidden ${
+                            selectedItems.size > 0 ? 'w-auto opacity-100' : 'w-0 opacity-0'
+                          }`}
+                          onClick={(e) => e.stopPropagation()}
+                        >
+                          <input
+                            type="checkbox"
+                            checked={isSelected}
+                            onChange={() => {
+                              toggleSelection(file.path);
+                              const sorted = getSortedFiles();
+                              const currentIndex = sorted.findIndex(f => f.path === file.path);
+                              lastSelectedIndexRef.current = currentIndex;
+                            }}
+                            className="w-4 h-4 rounded border-2 border-gray-300 dark:border-gray-600 text-blue-600 dark:text-blue-500 bg-white dark:bg-gray-700 focus:ring-2 focus:ring-blue-500 dark:focus:ring-blue-400 focus:ring-offset-0 cursor-pointer transition-all duration-200 hover:border-blue-400 dark:hover:border-blue-500 checked:bg-blue-600 dark:checked:bg-blue-500 checked:border-blue-600 dark:checked:border-blue-500"
+                          />
+                        </td>
                         <td className="px-4 py-3">
                           <div className="flex items-center gap-3">
                             {file.type === 'directory' ? (

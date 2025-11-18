@@ -40,8 +40,9 @@ body {
   }
   
   .animate-slide-down-stagger {
-    animation: slideDownStagger 0.4s ease-out forwards;
+    animation: slideDownStagger 0.4s cubic-bezier(0.4, 0, 0.2, 1) forwards;
     opacity: 0;
+    transform: translateY(-20px);
   }
 }
 
@@ -68,7 +69,7 @@ body {
 @keyframes slideDownStagger {
   from {
     opacity: 0;
-    transform: translateY(-15px);
+    transform: translateY(-20px);
   }
   to {
     opacity: 1;

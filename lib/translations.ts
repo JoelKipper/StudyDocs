@@ -98,6 +98,8 @@ export const translations = {
     creatingZip: 'ZIP-Datei wird erstellt...',
     zipError: 'Fehler beim Erstellen der ZIP-Datei',
     noFilesToDownload: 'Keine Dateien zum Herunterladen gefunden',
+    selectItemsToDownload: 'Elemente zum Herunterladen auswählen',
+    selectItemsToDelete: 'Elemente zum Löschen auswählen',
     
     // Copy/Paste
     copied: 'kopiert',
@@ -261,6 +263,8 @@ export const translations = {
     creatingZip: 'Creating ZIP file...',
     zipError: 'Error creating ZIP file',
     noFilesToDownload: 'No files found to download',
+    selectItemsToDownload: 'Select items to download',
+    selectItemsToDelete: 'Select items to delete',
     
     // Copy/Paste
     copied: 'copied',
