@@ -97,7 +97,7 @@ export async function POST(request: NextRequest) {
       chunks.push(chunk);
     });
 
-    archive.on('error', (err) => {
+    archive.on('error', (err: Error) => {
       console.error('Archive error:', err);
       archiveError = err;
     });
@@ -190,14 +190,14 @@ export async function POST(request: NextRequest) {
         resolve();
       });
 
-      archive.once('error', (err) => {
+      archive.once('error', (err: Error) => {
         clearTimeout(timeout);
         reject(err);
       });
     });
 
     if (archiveError) {
-      const errorMessage = archiveError instanceof Error ? archiveError.message : String(archiveError);
+      const errorMessage = archiveError.message || String(archiveError);
       return NextResponse.json({ error: 'Fehler beim Erstellen der ZIP-Datei: ' + errorMessage }, { status: 500 });
     }
 
