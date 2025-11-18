@@ -15,6 +15,7 @@ interface FileTreeProps {
   onRefresh: () => void;
   onExternalDrop?: (files: File[], targetPath: string) => void;
   onMoveItem?: (itemPath: string, targetPath: string) => Promise<void>;
+  onFileDoubleClick?: (filePath: string, fileName: string) => void;
   userId: string;
 }
 
@@ -23,7 +24,7 @@ interface TreeNodeData extends FileItem {
   loaded?: boolean;
 }
 
-export default function FileTree({ currentPath, onNavigate, onRefresh, onExternalDrop, onMoveItem, userId }: FileTreeProps) {
+export default function FileTree({ currentPath, onNavigate, onRefresh, onExternalDrop, onMoveItem, onFileDoubleClick, userId }: FileTreeProps) {
   const storageKey = `studydocs-tree-expanded-${userId}`;
   
   // Load expanded state from localStorage
@@ -282,6 +283,7 @@ export default function FileTree({ currentPath, onNavigate, onRefresh, onExterna
             onToggleExpand={toggleExpand}
             onExternalDrop={onExternalDrop}
             onMoveItem={onMoveItem}
+            onFileDoubleClick={onFileDoubleClick}
             draggedItem={draggedItem}
             draggedItemType={draggedItemType}
             dragOverPath={dragOverPath}
@@ -309,6 +311,7 @@ interface TreeNodeProps {
   onToggleExpand: (path: string) => void;
   onExternalDrop?: (files: File[], targetPath: string) => void;
   onMoveItem?: (itemPath: string, targetPath: string) => Promise<void>;
+  onFileDoubleClick?: (filePath: string, fileName: string) => void;
   draggedItem: string | null;
   draggedItemType: 'file' | 'directory' | null;
   dragOverPath: string | null;
@@ -326,6 +329,7 @@ function TreeNode({
   onToggleExpand,
   onExternalDrop,
   onMoveItem,
+  onFileDoubleClick,
   draggedItem,
   draggedItemType,
   dragOverPath,
@@ -525,6 +529,13 @@ function TreeNode({
               onNavigate(parentPath);
             }
           }}
+          onDoubleClick={(e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            if (item.type === 'file' && onFileDoubleClick) {
+              onFileDoubleClick(item.path, item.name);
+            }
+          }}
           className="flex-1 text-left flex items-center gap-2 min-w-0"
         >
           {item.type === 'directory' ? (
@@ -574,6 +585,7 @@ function TreeNode({
                 onToggleExpand={onToggleExpand}
                 onExternalDrop={onExternalDrop}
                 onMoveItem={onMoveItem}
+                onFileDoubleClick={onFileDoubleClick}
                 draggedItem={draggedItem}
                 draggedItemType={draggedItemType}
                 dragOverPath={dragOverPath}

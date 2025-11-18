@@ -17,9 +17,10 @@ interface FavoritesListProps {
   userId: string;
   onFavoriteRemoved?: () => void;
   refreshKey?: number;
+  onFileDoubleClick?: (filePath: string, fileName: string) => void;
 }
 
-export default function FavoritesList({ currentPath, onNavigate, userId, onFavoriteRemoved, refreshKey }: FavoritesListProps) {
+export default function FavoritesList({ currentPath, onNavigate, userId, onFavoriteRemoved, refreshKey, onFileDoubleClick }: FavoritesListProps) {
   const { t, language } = useLanguage();
   const [favorites, setFavorites] = useState<FavoriteItem[]>([]);
   const [loading, setLoading] = useState(true);
@@ -128,6 +129,13 @@ export default function FavoritesList({ currentPath, onNavigate, userId, onFavor
                   // For files, navigate to parent directory
                   const parentPath = favorite.path.split('/').slice(0, -1).join('/');
                   onNavigate(parentPath);
+                }
+              }}
+              onDoubleClick={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                if (!isDirectory && onFileDoubleClick) {
+                  onFileDoubleClick(favorite.path, favorite.name);
                 }
               }}
               className="flex-1 text-left truncate min-w-0"

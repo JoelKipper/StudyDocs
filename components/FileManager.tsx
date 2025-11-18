@@ -1897,6 +1897,15 @@ export default function FileManager({ user, onLogout, initialPath, initialFile: 
                 onRefresh={handleRefresh}
                 onExternalDrop={handleExternalFilesDrop}
                 userId={user.id}
+                onFileDoubleClick={async (filePath: string, fileName: string) => {
+                  // Create a FileItem from the file and open it in preview
+                  const fileItem: FileItem = {
+                    name: fileName,
+                    path: filePath,
+                    type: 'file',
+                  };
+                  setPreviewFile(fileItem);
+                }}
                 onMoveItem={async (itemPath: string, targetPath: string) => {
                   try {
                     const res = await fetch('/api/files', {
@@ -1937,6 +1946,16 @@ export default function FileManager({ user, onLogout, initialPath, initialFile: 
                 onNavigate={navigateToPath}
                 userId={user.id}
                 refreshKey={treeRefreshKey}
+                onFileDoubleClick={async (filePath: string, fileName: string) => {
+                  // Create a FileItem from the favorite and open it in preview
+                  const fileItem: FileItem = {
+                    name: fileName,
+                    path: filePath,
+                    type: 'file',
+                  };
+                  setPreviewFile(fileItem);
+                  // Don't navigate - keep the current view and just show the preview
+                }}
                 onFavoriteRemoved={() => {
                   // Reload favorites to update the count
                   fetch('/api/files/favorites')
@@ -2158,18 +2177,18 @@ export default function FileManager({ user, onLogout, initialPath, initialFile: 
           {/* File List and Preview Container */}
           <div className="flex-1 flex overflow-hidden">
             {/* File List - Table View */}
-            <div 
-              ref={fileListContainerRef}
-              className={`flex flex-col overflow-auto relative ${previewFile ? 'border-r border-gray-200 dark:border-gray-700' : 'flex-1'}`}
-              style={previewFile ? { width: `${Math.max(0, Math.min(100, 100 - previewWidth))}%`, minWidth: 0, flexShrink: 1 } : {}}
-              onContextMenu={handleEmptyContextMenu}
-            >
+            {!previewFile && (
+              <div 
+                ref={fileListContainerRef}
+                className="flex flex-col overflow-auto relative flex-1"
+                onContextMenu={handleEmptyContextMenu}
+              >
             {loading ? (
               <div className="flex flex-col items-center justify-center h-full">
                 <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mb-4"></div>
                 <p className="text-gray-500 dark:text-gray-400">{t('loading')}</p>
               </div>
-            ) : sortedFiles.length === 0 ? (
+            ) : sortedFiles.length === 0 && !creatingNewDirectory ? (
               <div className="flex flex-col items-center justify-center h-full">
                 <div className="w-16 h-16 bg-gray-100 dark:bg-gray-700 rounded-full flex items-center justify-center mb-4">
                   {searchQuery || searchFilters.fileType !== 'all' || searchFilters.minSize || searchFilters.maxSize || searchFilters.dateFrom || searchFilters.dateTo ? (
@@ -2534,31 +2553,13 @@ export default function FileManager({ user, onLogout, initialPath, initialFile: 
               <div style={{ height: `${(sortedFiles.length - visibleRange.end) * 48}px` }} />
             )}
             </div>
+            )}
 
-            {/* File Preview - Inline (only shown when file is double-clicked) */}
+            {/* File Preview - Fullscreen (only shown when file is double-clicked) */}
             {previewFile && (
               <div 
-                className={`relative overflow-hidden border-l border-gray-200 dark:border-gray-700 ${
-                  isResizingPreview ? '' : 'transition-all duration-300'
-                }`}
-                style={{ width: `${Math.max(0, Math.min(100, previewWidth))}%`, minWidth: 0 }}
+                className="relative overflow-hidden flex-1 bg-gray-50 dark:bg-gray-900"
               >
-                {/* Resize Handle */}
-                <div
-                  onMouseDown={(e) => {
-                    e.preventDefault();
-                    e.stopPropagation();
-                    setIsResizingPreview(true);
-                  }}
-                  className={`absolute top-0 left-0 w-1 h-full cursor-col-resize hover:bg-blue-500 transition-colors ${
-                    isResizingPreview ? 'bg-blue-500' : 'bg-transparent'
-                  }`}
-                  style={{ zIndex: 10, pointerEvents: 'auto' }}
-                >
-                  <div className="absolute top-1/2 left-0 transform -translate-y-1/2 -translate-x-1/2 w-3 h-12 bg-gray-300 dark:bg-gray-600 rounded-full flex items-center justify-center opacity-0 hover:opacity-100 transition-opacity">
-                    <div className="w-0.5 h-8 bg-gray-500 dark:bg-gray-400 rounded-full"></div>
-                  </div>
-                </div>
                 <FilePreview
                   file={previewFile}
                   onClose={() => setPreviewFile(null)}
