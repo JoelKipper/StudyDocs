@@ -69,9 +69,11 @@ export default function FileManager({ user, onLogout }: FileManagerProps) {
   const [deleteModal, setDeleteModal] = useState<{
     visible: boolean;
     item: FileItem | null;
+    items: FileItem[];
   }>({
     visible: false,
     item: null,
+    items: [],
   });
   const [renamingItem, setRenamingItem] = useState<FileItem | null>(null);
   const [renameValue, setRenameValue] = useState('');
@@ -627,26 +629,63 @@ export default function FileManager({ user, onLogout }: FileManagerProps) {
   }
 
   function openDeleteModal(item: FileItem) {
-    setDeleteModal({ visible: true, item });
+    setDeleteModal({ visible: true, item, items: [item] });
+  }
+
+  function openBulkDeleteModal() {
+    const selectedFiles = files.filter(f => selectedItems.has(f.path));
+    if (selectedFiles.length === 0) return;
+    setDeleteModal({ visible: true, item: null, items: selectedFiles });
   }
 
   async function confirmDelete() {
-    if (!deleteModal.item) return;
+    const itemsToDelete = deleteModal.items.length > 0 ? deleteModal.items : (deleteModal.item ? [deleteModal.item] : []);
+    if (itemsToDelete.length === 0) return;
 
     try {
-      const res = await fetch('/api/files', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'delete', path: deleteModal.item.path }),
-      });
+      // Delete all items
+      const deletePromises = itemsToDelete.map(item =>
+        fetch('/api/files', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ action: 'delete', path: item.path }),
+        })
+      );
 
-      if (res.ok) {
-        loadFiles();
-        setTreeRefreshKey((k) => k + 1);
-        setDeleteModal({ visible: false, item: null });
+      const results = await Promise.all(deletePromises);
+      const errors: string[] = [];
+
+      for (let i = 0; i < results.length; i++) {
+        const res = results[i];
+        const data = await res.json();
+        if (!res.ok) {
+          errors.push(itemsToDelete[i].name);
+        }
       }
+
+      if (errors.length > 0) {
+        setToast({ 
+          message: `Fehler beim Löschen von ${errors.length} Element(en)`, 
+          type: 'error' 
+        });
+      } else {
+        const count = itemsToDelete.length;
+        setToast({ 
+          message: `${count} Element(e) erfolgreich gelöscht`, 
+          type: 'success' 
+        });
+      }
+
+      // Clear selection
+      setSelectedItems(new Set());
+      
+      loadFiles();
+      setTreeRefreshKey((k) => k + 1);
     } catch (error) {
       console.error('Fehler beim Löschen:', error);
+      setToast({ message: 'Fehler beim Löschen', type: 'error' });
+    } finally {
+      setDeleteModal({ visible: false, item: null, items: [] });
     }
   }
 
@@ -968,6 +1007,17 @@ export default function FileManager({ user, onLogout }: FileManagerProps) {
 
               {/* Actions */}
               <div className="flex items-center gap-1.5">
+                {selectedItems.size > 0 && (
+                  <button
+                    onClick={openBulkDeleteModal}
+                    className="p-2 text-red-600 hover:text-red-700 dark:text-red-400 dark:hover:text-red-300 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg transition-colors"
+                    title={`${selectedItems.size} Element(e) löschen`}
+                  >
+                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                    </svg>
+                  </button>
+                )}
                 <button
                   onClick={handleCreateDirectory}
                   className="p-2 text-gray-600 hover:text-gray-900 dark:text-gray-400 dark:hover:text-gray-100 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors"
@@ -1318,13 +1368,14 @@ export default function FileManager({ user, onLogout }: FileManagerProps) {
       )}
 
       {/* Delete Modal */}
-      {deleteModal.visible && deleteModal.item && (
+      {deleteModal.visible && (deleteModal.item || deleteModal.items.length > 0) && (
         <DeleteModal
           isOpen={deleteModal.visible}
-          onClose={() => setDeleteModal({ visible: false, item: null })}
+          onClose={() => setDeleteModal({ visible: false, item: null, items: [] })}
           onConfirm={confirmDelete}
-          itemName={deleteModal.item.name}
-          itemType={deleteModal.item.type}
+          itemName={deleteModal.item?.name}
+          itemType={deleteModal.item?.type}
+          items={deleteModal.items.length > 0 ? deleteModal.items.map(item => ({ name: item.name, type: item.type })) : undefined}
         />
       )}
 

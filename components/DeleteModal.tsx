@@ -6,8 +6,9 @@ interface DeleteModalProps {
   isOpen: boolean;
   onClose: () => void;
   onConfirm: () => void;
-  itemName: string;
-  itemType: 'file' | 'directory';
+  itemName?: string;
+  itemType?: 'file' | 'directory';
+  items?: Array<{ name: string; type: 'file' | 'directory' }>;
 }
 
 export default function DeleteModal({
@@ -16,7 +17,10 @@ export default function DeleteModal({
   onConfirm,
   itemName,
   itemType,
+  items,
 }: DeleteModalProps) {
+  const isBulkDelete = items && items.length > 0;
+  const hasDirectories = items?.some(item => item.type === 'directory') || itemType === 'directory';
   useEffect(() => {
     function handleEscape(event: KeyboardEvent) {
       if (event.key === 'Escape') {
@@ -55,16 +59,43 @@ export default function DeleteModal({
             </div>
             <div className="flex-1">
               <h3 className="text-lg font-semibold text-gray-900 dark:text-white">
-                {itemType === 'directory' ? 'Verzeichnis löschen?' : 'Datei löschen?'}
+                {isBulkDelete 
+                  ? `${items.length} Element(e) löschen?`
+                  : (itemType === 'directory' ? 'Verzeichnis löschen?' : 'Datei löschen?')
+                }
               </h3>
-              <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">
-                Möchten Sie <span className="font-medium text-gray-900 dark:text-white">"{itemName}"</span> wirklich löschen?
-              </p>
+              {isBulkDelete ? (
+                <div className="mt-2">
+                  <p className="text-sm text-gray-600 dark:text-gray-400 mb-2">
+                    Möchten Sie die folgenden Elemente wirklich löschen?
+                  </p>
+                  <div className="max-h-40 overflow-y-auto bg-gray-50 dark:bg-gray-700/50 rounded-lg p-2 space-y-1">
+                    {items.map((item, index) => (
+                      <div key={index} className="text-sm text-gray-700 dark:text-gray-300 flex items-center gap-2">
+                        {item.type === 'directory' ? (
+                          <svg className="w-4 h-4 text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z" />
+                          </svg>
+                        ) : (
+                          <svg className="w-4 h-4 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                          </svg>
+                        )}
+                        <span className="font-medium">{item.name}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              ) : (
+                <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">
+                  Möchten Sie <span className="font-medium text-gray-900 dark:text-white">"{itemName}"</span> wirklich löschen?
+                </p>
+              )}
             </div>
           </div>
-          {itemType === 'directory' && (
+          {hasDirectories && (
             <p className="text-sm text-orange-600 dark:text-orange-400 mb-4 px-2 py-2 bg-orange-50 dark:bg-orange-900/20 rounded-lg border border-orange-200 dark:border-orange-800">
-              ⚠️ <strong>Warnung:</strong> Der gesamte Inhalt des Verzeichnisses wird ebenfalls gelöscht.
+              ⚠️ <strong>Warnung:</strong> Der gesamte Inhalt der Verzeichnisse wird ebenfalls gelöscht.
             </p>
           )}
           <p className="text-sm text-gray-500 dark:text-gray-400 mb-6">
