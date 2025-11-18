@@ -26,6 +26,7 @@ export default function FileTree({ currentPath, onNavigate, onRefresh, onExterna
   const [expanded, setExpanded] = useState<Set<string>>(new Set([''])); // Root expanded by default
   const [loading, setLoading] = useState(true);
   const [draggedItem, setDraggedItem] = useState<string | null>(null);
+  const [draggedItemType, setDraggedItemType] = useState<'file' | 'directory' | null>(null);
   const [dragOverPath, setDragOverPath] = useState<string | null>(null);
 
   useEffect(() => {
@@ -180,6 +181,7 @@ export default function FileTree({ currentPath, onNavigate, onRefresh, onExterna
 
   function handleRootDragEnd() {
     setDraggedItem(null);
+    setDraggedItemType(null);
     setDragOverPath(null);
   }
 
@@ -226,8 +228,10 @@ export default function FileTree({ currentPath, onNavigate, onRefresh, onExterna
           onExternalDrop={onExternalDrop}
           onMoveItem={onMoveItem}
           draggedItem={draggedItem}
+          draggedItemType={draggedItemType}
           dragOverPath={dragOverPath}
           setDraggedItem={setDraggedItem}
+          setDraggedItemType={setDraggedItemType}
           setDragOverPath={setDragOverPath}
         />
       ))}
@@ -250,8 +254,10 @@ interface TreeNodeProps {
   onExternalDrop?: (files: File[], targetPath: string) => void;
   onMoveItem?: (itemPath: string, targetPath: string) => Promise<void>;
   draggedItem: string | null;
+  draggedItemType: 'file' | 'directory' | null;
   dragOverPath: string | null;
   setDraggedItem: (path: string | null) => void;
+  setDraggedItemType: (type: 'file' | 'directory' | null) => void;
   setDragOverPath: (path: string | null) => void;
 }
 
@@ -265,41 +271,46 @@ function TreeNode({
   onExternalDrop,
   onMoveItem,
   draggedItem,
+  draggedItemType,
   dragOverPath,
   setDraggedItem,
+  setDraggedItemType,
   setDragOverPath,
 }: TreeNodeProps) {
   const hasChildren = item.children && item.children.length > 0;
   const isActive = currentPath === item.path;
   const expanded = isExpanded(item.path);
   const isDragged = draggedItem === item.path;
-  const isDragOver = dragOverPath === item.path && item.type === 'directory';
+  const isDragOver = dragOverPath === item.path;
 
   async function handleDragStart(e: React.DragEvent) {
-    if (item.type === 'directory') {
-      setDraggedItem(item.path);
-      e.dataTransfer.effectAllowed = 'move';
-      e.dataTransfer.setData('text/plain', item.path);
-      
-      // Create a custom drag image
-      const dragImage = document.createElement('div');
-      dragImage.innerHTML = item.name;
-      dragImage.style.position = 'absolute';
-      dragImage.style.top = '-1000px';
-      dragImage.style.padding = '8px 12px';
-      dragImage.style.background = 'rgba(59, 130, 246, 0.9)';
-      dragImage.style.color = 'white';
-      dragImage.style.borderRadius = '6px';
-      dragImage.style.fontSize = '14px';
-      document.body.appendChild(dragImage);
-      e.dataTransfer.setDragImage(dragImage, 0, 0);
-      setTimeout(() => document.body.removeChild(dragImage), 0);
-    }
+    // Allow dragging both files and directories
+    setDraggedItem(item.path);
+    setDraggedItemType(item.type);
+    e.dataTransfer.effectAllowed = 'move';
+    e.dataTransfer.setData('text/plain', item.path);
+    
+    // Create a custom drag image
+    const dragImage = document.createElement('div');
+    dragImage.innerHTML = item.name;
+    dragImage.style.position = 'absolute';
+    dragImage.style.top = '-1000px';
+    dragImage.style.padding = '8px 12px';
+    dragImage.style.background = 'rgba(59, 130, 246, 0.9)';
+    dragImage.style.color = 'white';
+    dragImage.style.borderRadius = '6px';
+    dragImage.style.fontSize = '14px';
+    document.body.appendChild(dragImage);
+    e.dataTransfer.setDragImage(dragImage, 0, 0);
+    setTimeout(() => document.body.removeChild(dragImage), 0);
   }
 
   function handleDragOver(e: React.DragEvent) {
+    // Only allow dropping on directories
+    if (item.type !== 'directory') return;
+    
     // Handle external file drops
-    if (item.type === 'directory' && e.dataTransfer.types.includes('Files')) {
+    if (e.dataTransfer.types.includes('Files')) {
       e.preventDefault();
       e.stopPropagation();
       if (dragOverPath !== item.path) {
@@ -308,17 +319,25 @@ function TreeNode({
       return;
     }
     
-    // Handle internal item moves
-    if (item.type === 'directory' && draggedItem && draggedItem !== item.path) {
-      // Don't allow moving into itself
-      // Allow moving to parent (one level up) - check if draggedItem is a child of item
-      // Don't allow moving into its own subdirectories
-      const draggedParent = draggedItem.split('/').slice(0, -1).join('/');
-      const isParent = draggedParent === item.path;
-      const isSubdirectory = item.path.startsWith(draggedItem + '/');
-      
-      // Allow if it's the parent directory or if it's not a subdirectory
-      if (isParent || (!isSubdirectory && draggedItem !== item.path)) {
+    // Handle internal item moves (both files and directories)
+    if (draggedItem && draggedItem !== item.path && draggedItemType) {
+      // For directories: check if target is a subdirectory
+      if (draggedItemType === 'directory') {
+        const draggedParent = draggedItem.split('/').slice(0, -1).join('/');
+        const isParent = draggedParent === item.path;
+        const isSubdirectory = item.path.startsWith(draggedItem + '/');
+        
+        // Allow if it's the parent directory or if it's not a subdirectory
+        if (isParent || (!isSubdirectory && draggedItem !== item.path)) {
+          e.preventDefault();
+          e.stopPropagation();
+          e.dataTransfer.dropEffect = 'move';
+          if (dragOverPath !== item.path) {
+            setDragOverPath(item.path);
+          }
+        }
+      } else {
+        // For files: allow dropping on any directory
         e.preventDefault();
         e.stopPropagation();
         e.dataTransfer.dropEffect = 'move';
@@ -354,24 +373,29 @@ function TreeNode({
       return;
     }
     
-    // Handle internal item moves
-    if (item.type === 'directory' && draggedItem && onMoveItem) {
+    // Handle internal item moves (both files and directories)
+    if (item.type === 'directory' && draggedItem && draggedItemType && onMoveItem) {
       // Don't move item into itself
       if (draggedItem === item.path) {
         setDraggedItem(null);
+        setDraggedItemType(null);
         return;
       }
       
-      // Don't move directory into its own subdirectory
-      // But allow moving to parent (one level up)
-      const draggedParent = draggedItem.split('/').slice(0, -1).join('/');
-      const isParent = draggedParent === item.path;
-      const isSubdirectory = item.path.startsWith(draggedItem + '/');
-      
-      if (isSubdirectory && !isParent) {
-        setDraggedItem(null);
-        return;
+      if (draggedItemType === 'directory') {
+        // For directories: Don't move directory into its own subdirectory
+        // But allow moving to parent (one level up)
+        const draggedParent = draggedItem.split('/').slice(0, -1).join('/');
+        const isParent = draggedParent === item.path;
+        const isSubdirectory = item.path.startsWith(draggedItem + '/');
+        
+        if (isSubdirectory && !isParent) {
+          setDraggedItem(null);
+          setDraggedItemType(null);
+          return;
+        }
       }
+      // For files: no additional validation needed, can be moved to any directory
       
       try {
         await onMoveItem(draggedItem, item.path);
@@ -379,12 +403,14 @@ function TreeNode({
         console.error('Fehler beim Verschieben:', error);
       } finally {
         setDraggedItem(null);
+        setDraggedItemType(null);
       }
     }
   }
 
   function handleDragEnd() {
     setDraggedItem(null);
+    setDraggedItemType(null);
     setDragOverPath(null);
   }
 
@@ -401,7 +427,7 @@ function TreeNode({
             : 'hover:bg-gray-100 dark:hover:bg-gray-700/50 text-gray-700 dark:text-gray-300'
         }`}
         style={{ paddingLeft: `${level * 20 + 12}px` }}
-        draggable={item.type === 'directory'}
+        draggable={true}
         onDragStart={handleDragStart}
         onDragOver={handleDragOver}
         onDragLeave={handleDragLeave}
@@ -501,8 +527,10 @@ function TreeNode({
                 onExternalDrop={onExternalDrop}
                 onMoveItem={onMoveItem}
                 draggedItem={draggedItem}
+                draggedItemType={draggedItemType}
                 dragOverPath={dragOverPath}
                 setDraggedItem={setDraggedItem}
+                setDraggedItemType={setDraggedItemType}
                 setDragOverPath={setDragOverPath}
               />
             </div>
