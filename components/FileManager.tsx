@@ -925,6 +925,38 @@ export default function FileManager({ user, onLogout }: FileManagerProps) {
               onNavigate={navigateToPath}
               onRefresh={handleRefresh}
               onExternalDrop={handleExternalFilesDrop}
+              onMoveItem={async (itemPath: string, targetPath: string) => {
+                try {
+                  const res = await fetch('/api/files', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                      action: 'move',
+                      path: itemPath,
+                      targetPath: targetPath,
+                    }),
+                  });
+
+                  const data = await res.json();
+
+                  if (res.ok) {
+                    loadFiles();
+                    setTreeRefreshKey((k) => k + 1);
+                    // Find item name for toast message
+                    const item = files.find(f => f.path === itemPath);
+                    const target = files.find(f => f.path === targetPath);
+                    setToast({ 
+                      message: `"${item?.name || 'Element'}" wurde nach "${target?.name || 'Root'}" verschoben`, 
+                      type: 'success' 
+                    });
+                  } else {
+                    setToast({ message: data.error || 'Fehler beim Verschieben', type: 'error' });
+                  }
+                } catch (error) {
+                  console.error('Fehler beim Verschieben:', error);
+                  setToast({ message: 'Fehler beim Verschieben', type: 'error' });
+                }
+              }}
             />
           </div>
           

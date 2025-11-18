@@ -13,6 +13,7 @@ interface FileTreeProps {
   onNavigate: (path: string) => void;
   onRefresh: () => void;
   onExternalDrop?: (files: File[], targetPath: string) => void;
+  onMoveItem?: (itemPath: string, targetPath: string) => Promise<void>;
 }
 
 interface TreeNodeData extends FileItem {
@@ -20,10 +21,12 @@ interface TreeNodeData extends FileItem {
   loaded?: boolean;
 }
 
-export default function FileTree({ currentPath, onNavigate, onRefresh, onExternalDrop }: FileTreeProps) {
+export default function FileTree({ currentPath, onNavigate, onRefresh, onExternalDrop, onMoveItem }: FileTreeProps) {
   const [tree, setTree] = useState<TreeNodeData[]>([]);
   const [expanded, setExpanded] = useState<Set<string>>(new Set([''])); // Root expanded by default
   const [loading, setLoading] = useState(true);
+  const [draggedItem, setDraggedItem] = useState<string | null>(null);
+  const [dragOverPath, setDragOverPath] = useState<string | null>(null);
 
   useEffect(() => {
     loadFullTree();
@@ -119,27 +122,80 @@ export default function FileTree({ currentPath, onNavigate, onRefresh, onExterna
     );
   }
 
+  function handleRootDragOver(e: React.DragEvent) {
+    // Handle external file drops
+    if (e.dataTransfer.types.includes('Files')) {
+      e.preventDefault();
+      e.stopPropagation();
+      if (dragOverPath !== '') {
+        setDragOverPath('');
+      }
+      return;
+    }
+    
+    // Handle internal item moves
+    if (draggedItem && draggedItem !== '') {
+      e.preventDefault();
+      e.stopPropagation();
+      e.dataTransfer.dropEffect = 'move';
+      if (dragOverPath !== '') {
+        setDragOverPath('');
+      }
+    }
+  }
+
+  function handleRootDragLeave() {
+    setDragOverPath(null);
+  }
+
+  async function handleRootDrop(e: React.DragEvent) {
+    e.preventDefault();
+    e.stopPropagation();
+    setDragOverPath(null);
+    
+    // Handle external file drops
+    if (e.dataTransfer.files.length > 0 && onExternalDrop) {
+      const files = Array.from(e.dataTransfer.files);
+      onExternalDrop(files, '');
+      return;
+    }
+    
+    // Handle internal item moves
+    if (draggedItem && onMoveItem) {
+      // Don't move root into root (shouldn't happen, but just in case)
+      if (draggedItem === '') {
+        setDraggedItem(null);
+        return;
+      }
+      
+      try {
+        await onMoveItem(draggedItem, '');
+      } catch (error) {
+        console.error('Fehler beim Verschieben:', error);
+      } finally {
+        setDraggedItem(null);
+      }
+    }
+  }
+
+  function handleRootDragEnd() {
+    setDraggedItem(null);
+    setDragOverPath(null);
+  }
+
   return (
     <div className="space-y-1 animate-fade-in">
       <button
         onClick={() => onNavigate('')}
-        onDragOver={(e) => {
-          if (e.dataTransfer.types.includes('Files')) {
-            e.preventDefault();
-            e.stopPropagation();
-          }
-        }}
-        onDrop={(e) => {
-          if (e.dataTransfer.files.length > 0 && onExternalDrop) {
-            e.preventDefault();
-            e.stopPropagation();
-            const files = Array.from(e.dataTransfer.files);
-            onExternalDrop(files, '');
-          }
-        }}
+        onDragOver={handleRootDragOver}
+        onDragLeave={handleRootDragLeave}
+        onDrop={handleRootDrop}
+        onDragEnd={handleRootDragEnd}
         className={`group w-full text-left px-3 py-2.5 rounded-lg text-sm font-medium transition-all duration-200 flex items-center gap-2 ${
           isActive('')
             ? 'bg-gradient-to-r from-blue-500 to-blue-600 text-white shadow-lg shadow-blue-500/30'
+            : dragOverPath === ''
+            ? 'bg-blue-100 dark:bg-blue-900/30 border-2 border-blue-400 border-dashed text-gray-700 dark:text-gray-300'
             : 'hover:bg-gray-100 dark:hover:bg-gray-700/50 text-gray-700 dark:text-gray-300 hover:translate-x-1'
         }`}
       >
@@ -168,6 +224,11 @@ export default function FileTree({ currentPath, onNavigate, onRefresh, onExterna
           isExpanded={isExpanded}
           onToggleExpand={toggleExpand}
           onExternalDrop={onExternalDrop}
+          onMoveItem={onMoveItem}
+          draggedItem={draggedItem}
+          dragOverPath={dragOverPath}
+          setDraggedItem={setDraggedItem}
+          setDragOverPath={setDragOverPath}
         />
       ))}
       {tree.length === 0 && (
@@ -187,6 +248,11 @@ interface TreeNodeProps {
   isExpanded: (path: string) => boolean;
   onToggleExpand: (path: string) => void;
   onExternalDrop?: (files: File[], targetPath: string) => void;
+  onMoveItem?: (itemPath: string, targetPath: string) => Promise<void>;
+  draggedItem: string | null;
+  dragOverPath: string | null;
+  setDraggedItem: (path: string | null) => void;
+  setDragOverPath: (path: string | null) => void;
 }
 
 function TreeNode({
@@ -197,10 +263,130 @@ function TreeNode({
   isExpanded,
   onToggleExpand,
   onExternalDrop,
+  onMoveItem,
+  draggedItem,
+  dragOverPath,
+  setDraggedItem,
+  setDragOverPath,
 }: TreeNodeProps) {
   const hasChildren = item.children && item.children.length > 0;
   const isActive = currentPath === item.path;
   const expanded = isExpanded(item.path);
+  const isDragged = draggedItem === item.path;
+  const isDragOver = dragOverPath === item.path && item.type === 'directory';
+
+  async function handleDragStart(e: React.DragEvent) {
+    if (item.type === 'directory') {
+      setDraggedItem(item.path);
+      e.dataTransfer.effectAllowed = 'move';
+      e.dataTransfer.setData('text/plain', item.path);
+      
+      // Create a custom drag image
+      const dragImage = document.createElement('div');
+      dragImage.innerHTML = item.name;
+      dragImage.style.position = 'absolute';
+      dragImage.style.top = '-1000px';
+      dragImage.style.padding = '8px 12px';
+      dragImage.style.background = 'rgba(59, 130, 246, 0.9)';
+      dragImage.style.color = 'white';
+      dragImage.style.borderRadius = '6px';
+      dragImage.style.fontSize = '14px';
+      document.body.appendChild(dragImage);
+      e.dataTransfer.setDragImage(dragImage, 0, 0);
+      setTimeout(() => document.body.removeChild(dragImage), 0);
+    }
+  }
+
+  function handleDragOver(e: React.DragEvent) {
+    // Handle external file drops
+    if (item.type === 'directory' && e.dataTransfer.types.includes('Files')) {
+      e.preventDefault();
+      e.stopPropagation();
+      if (dragOverPath !== item.path) {
+        setDragOverPath(item.path);
+      }
+      return;
+    }
+    
+    // Handle internal item moves
+    if (item.type === 'directory' && draggedItem && draggedItem !== item.path) {
+      // Don't allow moving into itself
+      // Allow moving to parent (one level up) - check if draggedItem is a child of item
+      // Don't allow moving into its own subdirectories
+      const draggedParent = draggedItem.split('/').slice(0, -1).join('/');
+      const isParent = draggedParent === item.path;
+      const isSubdirectory = item.path.startsWith(draggedItem + '/');
+      
+      // Allow if it's the parent directory or if it's not a subdirectory
+      if (isParent || (!isSubdirectory && draggedItem !== item.path)) {
+        e.preventDefault();
+        e.stopPropagation();
+        e.dataTransfer.dropEffect = 'move';
+        if (dragOverPath !== item.path) {
+          setDragOverPath(item.path);
+        }
+      }
+    }
+  }
+
+  function handleDragLeave(e: React.DragEvent) {
+    // Only clear drag over if we're actually leaving the element
+    // This prevents flickering when moving between child elements
+    const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
+    const x = e.clientX;
+    const y = e.clientY;
+    
+    // Check if mouse is still within the element bounds
+    if (x < rect.left || x > rect.right || y < rect.top || y > rect.bottom) {
+      setDragOverPath(null);
+    }
+  }
+
+  async function handleDrop(e: React.DragEvent) {
+    e.preventDefault();
+    e.stopPropagation();
+    setDragOverPath(null);
+    
+    // Handle external file drops
+    if (item.type === 'directory' && e.dataTransfer.files.length > 0 && onExternalDrop) {
+      const files = Array.from(e.dataTransfer.files);
+      onExternalDrop(files, item.path);
+      return;
+    }
+    
+    // Handle internal item moves
+    if (item.type === 'directory' && draggedItem && onMoveItem) {
+      // Don't move item into itself
+      if (draggedItem === item.path) {
+        setDraggedItem(null);
+        return;
+      }
+      
+      // Don't move directory into its own subdirectory
+      // But allow moving to parent (one level up)
+      const draggedParent = draggedItem.split('/').slice(0, -1).join('/');
+      const isParent = draggedParent === item.path;
+      const isSubdirectory = item.path.startsWith(draggedItem + '/');
+      
+      if (isSubdirectory && !isParent) {
+        setDraggedItem(null);
+        return;
+      }
+      
+      try {
+        await onMoveItem(draggedItem, item.path);
+      } catch (error) {
+        console.error('Fehler beim Verschieben:', error);
+      } finally {
+        setDraggedItem(null);
+      }
+    }
+  }
+
+  function handleDragEnd() {
+    setDraggedItem(null);
+    setDragOverPath(null);
+  }
 
   return (
     <div className="animate-fade-in">
@@ -208,23 +394,19 @@ function TreeNode({
         className={`group flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium transition-all duration-200 ${
           isActive
             ? 'bg-gradient-to-r from-blue-500 to-blue-600 text-white shadow-lg shadow-blue-500/30'
+            : isDragOver
+            ? 'bg-blue-100 dark:bg-blue-900/30 border-2 border-blue-400 border-dashed text-gray-700 dark:text-gray-300'
+            : isDragged
+            ? 'opacity-50 text-gray-700 dark:text-gray-300'
             : 'hover:bg-gray-100 dark:hover:bg-gray-700/50 text-gray-700 dark:text-gray-300'
         }`}
         style={{ paddingLeft: `${level * 20 + 12}px` }}
-        onDragOver={(e) => {
-          if (item.type === 'directory' && e.dataTransfer.types.includes('Files')) {
-            e.preventDefault();
-            e.stopPropagation();
-          }
-        }}
-        onDrop={(e) => {
-          if (item.type === 'directory' && e.dataTransfer.files.length > 0 && onExternalDrop) {
-            e.preventDefault();
-            e.stopPropagation();
-            const files = Array.from(e.dataTransfer.files);
-            onExternalDrop(files, item.path);
-          }
-        }}
+        draggable={item.type === 'directory'}
+        onDragStart={handleDragStart}
+        onDragOver={handleDragOver}
+        onDragLeave={handleDragLeave}
+        onDrop={handleDrop}
+        onDragEnd={handleDragEnd}
       >
         <button
           onClick={(e) => {
@@ -317,6 +499,11 @@ function TreeNode({
                 isExpanded={isExpanded}
                 onToggleExpand={onToggleExpand}
                 onExternalDrop={onExternalDrop}
+                onMoveItem={onMoveItem}
+                draggedItem={draggedItem}
+                dragOverPath={dragOverPath}
+                setDraggedItem={setDraggedItem}
+                setDragOverPath={setDragOverPath}
               />
             </div>
           ))}
