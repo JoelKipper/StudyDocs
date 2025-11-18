@@ -197,7 +197,8 @@ export async function POST(request: NextRequest) {
     });
 
     if (archiveError) {
-      return NextResponse.json({ error: 'Fehler beim Erstellen der ZIP-Datei: ' + archiveError.message }, { status: 500 });
+      const errorMessage = archiveError instanceof Error ? archiveError.message : String(archiveError);
+      return NextResponse.json({ error: 'Fehler beim Erstellen der ZIP-Datei: ' + errorMessage }, { status: 500 });
     }
 
     // Combine all chunks into a single buffer
