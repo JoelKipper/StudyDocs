@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect, useRef } from 'react';
+import { useLanguage } from '@/contexts/LanguageContext';
 
 interface SearchFilters {
   fileType: 'all' | 'file' | 'directory';
@@ -25,6 +26,7 @@ export default function SearchBar({
   onFiltersChange,
   onClear,
 }: SearchBarProps) {
+  const { t } = useLanguage();
   const [isExpanded, setIsExpanded] = useState(false);
   const [showFilters, setShowFilters] = useState(false);
   const searchInputRef = useRef<HTMLInputElement>(null);
@@ -99,7 +101,7 @@ export default function SearchBar({
           value={searchQuery}
           onChange={(e) => onSearchChange(e.target.value)}
           onFocus={() => setIsExpanded(true)}
-          placeholder="Suchen... (Ctrl/Cmd + F)"
+          placeholder={t('searchPlaceholder')}
           className="block w-full pl-10 pr-10 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white placeholder-gray-500 dark:placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
         />
         {searchQuery && (
@@ -125,7 +127,7 @@ export default function SearchBar({
               ? 'text-blue-600 dark:text-blue-400'
               : 'text-gray-400 hover:text-gray-600 dark:hover:text-gray-300'
           }`}
-          title="Filter"
+          title={t('filters')}
         >
           <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path
@@ -148,7 +150,7 @@ export default function SearchBar({
             {/* File Type Filter */}
             <div>
               <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                Dateityp
+                {t('fileType')}
               </label>
               <select
                 value={filters.fileType}
@@ -160,22 +162,22 @@ export default function SearchBar({
                 }
                 className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
               >
-                <option value="all">Alle</option>
-                <option value="file">Nur Dateien</option>
-                <option value="directory">Nur Ordner</option>
+                <option value="all">{t('allTypes')}</option>
+                <option value="file">{t('filesOnly')}</option>
+                <option value="directory">{t('directoriesOnly')}</option>
               </select>
             </div>
 
             {/* Size Filter */}
             <div>
               <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                Dateigröße
+                {t('fileSize')}
               </label>
               <div className="grid grid-cols-2 gap-2">
                 <div>
                   <input
                     type="number"
-                    placeholder="Min (KB)"
+                    placeholder={t('minSize')}
                     value={filters.minSize || ''}
                     onChange={(e) =>
                       onFiltersChange({
@@ -189,7 +191,7 @@ export default function SearchBar({
                 <div>
                   <input
                     type="number"
-                    placeholder="Max (KB)"
+                    placeholder={t('maxSize')}
                     value={filters.maxSize ? filters.maxSize / 1024 : ''}
                     onChange={(e) =>
                       onFiltersChange({
@@ -206,7 +208,7 @@ export default function SearchBar({
             {/* Date Filter */}
             <div>
               <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                Änderungsdatum
+                {t('modifiedDate')}
               </label>
               <div className="grid grid-cols-2 gap-2">
                 <div>
@@ -259,7 +261,7 @@ export default function SearchBar({
               }}
               className="w-full px-4 py-2 text-sm text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors"
             >
-              Filter zurücksetzen
+              {t('resetFilters')}
             </button>
           </div>
         </div>

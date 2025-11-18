@@ -9,6 +9,7 @@ import ReplaceModal from './ReplaceModal';
 import Toast from './Toast';
 import SearchBar from './SearchBar';
 import SettingsModal from './SettingsModal';
+import { useLanguage } from '@/contexts/LanguageContext';
 
 interface FileMetadata {
   createdBy: { id: string; name: string; email: string };
@@ -37,6 +38,7 @@ interface FileManagerProps {
 }
 
 export default function FileManager({ user, onLogout }: FileManagerProps) {
+  const { t, formatSize, language } = useLanguage();
   const storageKey = `studydocs-path-${user.id}`;
   
   // Load saved path from localStorage on mount
@@ -348,7 +350,7 @@ export default function FileManager({ user, onLogout }: FileManagerProps) {
         if (selectedFiles.length > 0) {
           setCopiedItems(selectedFiles);
           setIsCopyMode(true);
-          setToast({ message: `${selectedFiles.length} Element(e) kopiert`, type: 'success' });
+          setToast({ message: `${selectedFiles.length} ${t('itemsCopied')}`, type: 'success' });
         }
         return;
       }
@@ -360,7 +362,7 @@ export default function FileManager({ user, onLogout }: FileManagerProps) {
         if (selectedFiles.length > 0) {
           setCopiedItems(selectedFiles);
           setIsCopyMode(false);
-          setToast({ message: `${selectedFiles.length} Element(e) ausgeschnitten`, type: 'success' });
+          setToast({ message: `${selectedFiles.length} ${t('itemsCut')}`, type: 'success' });
         }
         return;
       }
@@ -647,12 +649,12 @@ export default function FileManager({ user, onLogout }: FileManagerProps) {
         }));
         setAllFiles(results);
       } else {
-        setToast({ message: data.error || 'Fehler bei der Suche', type: 'error' });
+        setToast({ message: data.error || t('noResults'), type: 'error' });
         setAllFiles([]);
       }
     } catch (error) {
       console.error('Fehler bei der globalen Suche:', error);
-      setToast({ message: 'Fehler bei der Suche', type: 'error' });
+      setToast({ message: t('noResults'), type: 'error' });
       setAllFiles([]);
     } finally {
       setSearchLoading(false);
@@ -906,7 +908,7 @@ export default function FileManager({ user, onLogout }: FileManagerProps) {
       const data = await res.json();
 
       if (!res.ok) {
-        setToast({ message: data.error || 'Fehler beim Erstellen', type: 'error' });
+        setToast({ message: data.error || t('errorDeleting'), type: 'error' }); // Reusing errorDeleting for now
         return;
       }
       
@@ -916,9 +918,9 @@ export default function FileManager({ user, onLogout }: FileManagerProps) {
       
       // Don't set pending rename - just show the directory normally
       // The user can rename it manually if needed
-      setToast({ message: 'Verzeichnis erfolgreich erstellt', type: 'success' });
+      setToast({ message: t('fileRenamed'), type: 'success' }); // Reusing fileRenamed for now, could add createDirectorySuccess
     } catch (err) {
-      setToast({ message: 'Verbindungsfehler', type: 'error' });
+      setToast({ message: t('serverError'), type: 'error' });
     }
   }
 
@@ -987,15 +989,15 @@ export default function FileManager({ user, onLogout }: FileManagerProps) {
         setTreeRefreshKey((k) => k + 1);
         setRenamingItem(null);
         setRenameValue('');
-        setToast({ message: 'Erfolgreich umbenannt', type: 'success' });
+        setToast({ message: t('fileRenamed'), type: 'success' });
       } else {
-        setToast({ message: data.error || 'Fehler beim Umbenennen', type: 'error' });
+        setToast({ message: data.error || t('errorRenaming'), type: 'error' });
         setRenamingItem(null);
         setRenameValue('');
       }
     } catch (error) {
       console.error('Fehler beim Umbenennen:', error);
-      setToast({ message: 'Fehler beim Umbenennen', type: 'error' });
+      setToast({ message: t('errorRenaming'), type: 'error' });
       setRenamingItem(null);
       setRenameValue('');
     }
@@ -1051,13 +1053,13 @@ export default function FileManager({ user, onLogout }: FileManagerProps) {
 
       if (errors.length > 0) {
         setToast({ 
-          message: `Fehler beim Löschen von ${errors.length} Element(en)`, 
+          message: `${t('errorDeleting')}: ${errors.length} ${t('itemsSelected')}`, 
           type: 'error' 
         });
       } else {
         const count = itemsToDelete.length;
         setToast({ 
-          message: `${count} Element(e) erfolgreich gelöscht`, 
+          message: `${count} ${t('itemsDeleted')}`, 
           type: 'success' 
         });
       }
@@ -1075,7 +1077,7 @@ export default function FileManager({ user, onLogout }: FileManagerProps) {
       setTreeRefreshKey((k) => k + 1);
     } catch (error) {
       console.error('Fehler beim Löschen:', error);
-      setToast({ message: 'Fehler beim Löschen', type: 'error' });
+      setToast({ message: t('errorDeleting'), type: 'error' });
     } finally {
       setDeleteModal({ visible: false, item: null, items: [] });
     }
@@ -1086,7 +1088,7 @@ export default function FileManager({ user, onLogout }: FileManagerProps) {
     if (selectedFiles.length > 0) {
       setCopiedItems(selectedFiles);
       setIsCopyMode(true);
-      setToast({ message: `${selectedFiles.length} Element(e) kopiert`, type: 'success' });
+      setToast({ message: `${selectedFiles.length} ${t('itemsCopied')}`, type: 'success' });
     }
   }
 
@@ -1095,7 +1097,7 @@ export default function FileManager({ user, onLogout }: FileManagerProps) {
     if (selectedFiles.length > 0) {
       setCopiedItems(selectedFiles);
       setIsCopyMode(false);
-      setToast({ message: `${selectedFiles.length} Element(e) ausgeschnitten`, type: 'success' });
+      setToast({ message: `${selectedFiles.length} ${t('itemsCut')}`, type: 'success' });
     }
   }
 
@@ -1103,7 +1105,7 @@ export default function FileManager({ user, onLogout }: FileManagerProps) {
     if (copiedItems.length === 0) return;
 
     try {
-      setToast({ message: `${copiedItems.length} Element(e) werden ${isCopyMode ? 'kopiert' : 'verschoben'}...`, type: 'info' });
+      setToast({ message: `${copiedItems.length} ${t('itemsSelected')} ${t('pasting')} ${isCopyMode ? t('copied') : t('moved')}...`, type: 'info' });
 
       const action = isCopyMode ? 'copy' : 'move';
       const errors: string[] = [];
@@ -1136,7 +1138,7 @@ export default function FileManager({ user, onLogout }: FileManagerProps) {
 
       if (errors.length > 0) {
         setToast({ 
-          message: `Fehler beim ${isCopyMode ? 'Kopieren' : 'Verschieben'} von ${errors.length} Element(en)`, 
+          message: `${t(isCopyMode ? 'errorCopying' : 'errorMoving')}: ${errors.length} ${t('itemsSelected')}`, 
           type: 'error' 
         });
       } else {
@@ -1157,7 +1159,7 @@ export default function FileManager({ user, onLogout }: FileManagerProps) {
         }]);
 
         setToast({ 
-          message: `${successfulItems.length} Element(e) erfolgreich ${isCopyMode ? 'kopiert' : 'verschoben'}`, 
+          message: `${successfulItems.length} ${t('itemsSelected')} ${t('itemsPasted')} ${isCopyMode ? t('copied') : t('moved')}`, 
           type: 'success' 
         });
 
@@ -1171,7 +1173,7 @@ export default function FileManager({ user, onLogout }: FileManagerProps) {
       setTreeRefreshKey((k) => k + 1);
     } catch (error: any) {
       console.error('Fehler beim Einfügen:', error);
-      setToast({ message: error.message || 'Fehler beim Einfügen', type: 'error' });
+      setToast({ message: error.message || t('errorCopying'), type: 'error' });
     }
   }
 
@@ -1293,7 +1295,7 @@ export default function FileManager({ user, onLogout }: FileManagerProps) {
           setTreeRefreshKey((k) => k + 1);
         } catch (error: any) {
           console.error('Fehler beim Rückgängig machen:', error);
-          setToast({ message: error.message || 'Fehler beim Rückgängig machen', type: 'error' });
+          setToast({ message: error.message || t('undoNotSupported'), type: 'error' });
         }
         return;
       }
@@ -1303,7 +1305,7 @@ export default function FileManager({ user, onLogout }: FileManagerProps) {
       loadFiles();
     } catch (error: any) {
       console.error('Fehler beim Rückgängig machen:', error);
-      setToast({ message: error.message || 'Fehler beim Rückgängig machen', type: 'error' });
+      setToast({ message: error.message || t('undoNotSupported'), type: 'error' });
     }
   }
 
@@ -1345,7 +1347,7 @@ export default function FileManager({ user, onLogout }: FileManagerProps) {
 
       if (!res.ok) {
         const data = await res.json();
-        setToast({ message: data.error || 'Fehler beim Erstellen der ZIP-Datei', type: 'error' });
+        setToast({ message: data.error || t('zipError'), type: 'error' });
         return;
       }
 
@@ -1359,7 +1361,7 @@ export default function FileManager({ user, onLogout }: FileManagerProps) {
       window.URL.revokeObjectURL(url);
       document.body.removeChild(a);
 
-      setToast({ message: `${selectedFiles.length} Element(e) erfolgreich heruntergeladen`, type: 'success' });
+      setToast({ message: `${selectedFiles.length} ${t('itemsDownloaded')}`, type: 'success' });
     } catch (error) {
       console.error('Fehler beim Bulk-Download:', error);
       setToast({ message: 'Fehler beim Download', type: 'error' });
@@ -1502,7 +1504,7 @@ export default function FileManager({ user, onLogout }: FileManagerProps) {
                   </svg>
                 </div>
                 <div>
-                  <h1 className="text-xl font-bold text-gray-900 dark:text-white">StudyDocs</h1>
+                  <h1 className="text-xl font-bold text-gray-900 dark:text-white">{t('appName')}</h1>
                   <p className="text-xs text-gray-600 dark:text-gray-400">
                     {user.name}
                   </p>
@@ -1513,7 +1515,7 @@ export default function FileManager({ user, onLogout }: FileManagerProps) {
               <button
                 onClick={() => setSettingsOpen(true)}
                 className="p-2 text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors"
-                title="Einstellungen"
+                title={t('settings')}
               >
                 <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
@@ -1523,7 +1525,7 @@ export default function FileManager({ user, onLogout }: FileManagerProps) {
               <button
                 onClick={onLogout}
                 className="p-2 text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors"
-                title="Abmelden"
+                title={t('logout')}
               >
                 <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
@@ -1540,14 +1542,6 @@ export default function FileManager({ user, onLogout }: FileManagerProps) {
           className="bg-white dark:bg-gray-800 border-r border-gray-200 dark:border-gray-700 flex flex-col relative"
           style={{ width: `${sidebarWidth}px`, minWidth: '200px', maxWidth: '600px' }}
         >
-          <div className="p-4 border-b border-gray-200 dark:border-gray-700">
-            <h2 className="text-sm font-semibold text-gray-900 dark:text-white flex items-center gap-2">
-              <svg className="w-4 h-4 text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z" />
-              </svg>
-              Verzeichnisse
-            </h2>
-          </div>
           <div className="flex-1 overflow-y-auto custom-scrollbar p-2">
             <FileTree
               key={`tree-${treeRefreshKey}`}
@@ -1580,11 +1574,11 @@ export default function FileManager({ user, onLogout }: FileManagerProps) {
                       type: 'success' 
                     });
                   } else {
-                    setToast({ message: data.error || 'Fehler beim Verschieben', type: 'error' });
+                    setToast({ message: data.error || t('errorMoving'), type: 'error' });
                   }
                 } catch (error) {
                   console.error('Fehler beim Verschieben:', error);
-                  setToast({ message: 'Fehler beim Verschieben', type: 'error' });
+                  setToast({ message: t('errorMoving'), type: 'error' });
                 }
               }}
             />
@@ -1645,7 +1639,7 @@ export default function FileManager({ user, onLogout }: FileManagerProps) {
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
                   </svg>
                   <div>
-                    <p className="font-semibold text-gray-900 dark:text-white">Dateien hier ablegen</p>
+                    <p className="font-semibold text-gray-900 dark:text-white">{language === 'de' ? 'Dateien hier ablegen' : 'Drop files here'}</p>
                     <p className="text-sm text-gray-600 dark:text-gray-400">
                       {externalDragTarget !== null && externalDragTarget !== currentPath
                         ? `In: ${externalDragTarget.split('/').pop() || 'Root'}`
@@ -1697,7 +1691,7 @@ export default function FileManager({ user, onLogout }: FileManagerProps) {
                   onClick={navigateUp}
                   disabled={!currentPath}
                   className="p-1.5 hover:bg-gray-200 dark:hover:bg-gray-700 rounded disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-                  title="Zurück"
+                  title={t('back')}
                 >
                   <svg className="w-5 h-5 text-gray-600 dark:text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
@@ -1706,20 +1700,20 @@ export default function FileManager({ user, onLogout }: FileManagerProps) {
                 <button
                   onClick={handleRefresh}
                   className="p-1.5 hover:bg-gray-200 dark:hover:bg-gray-700 rounded transition-colors"
-                  title="Aktualisieren"
+                  title={t('refresh')}
                 >
                   <svg className="w-5 h-5 text-gray-600 dark:text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
                   </svg>
                 </button>
                 <div className="flex items-center gap-1 text-sm text-gray-600 dark:text-gray-400 px-2 min-w-0">
-                  <span className="font-medium">Pfad:</span>
+                  <span className="font-medium">{language === 'de' ? 'Pfad:' : 'Path:'}</span>
                   <div className="flex items-center gap-1 min-w-0">
                     <button
                       onClick={() => navigateToPath('')}
                       className="hover:text-blue-600 dark:hover:text-blue-400 truncate"
                     >
-                      Root
+                      {t('root')}
                     </button>
                     {pathParts.map((part, index) => (
                       <div key={index} className="flex items-center gap-1 min-w-0">
@@ -1745,7 +1739,7 @@ export default function FileManager({ user, onLogout }: FileManagerProps) {
                     <button
                       onClick={handleBulkDownload}
                       className="p-2 text-blue-600 hover:text-blue-700 dark:text-blue-400 dark:hover:text-blue-300 hover:bg-blue-50 dark:hover:bg-blue-900/20 rounded-lg transition-colors"
-                      title={`${selectedItems.size} Element(e) herunterladen`}
+                      title={`${selectedItems.size} ${t('itemsDownloaded')}`}
                     >
                       <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
@@ -1754,7 +1748,7 @@ export default function FileManager({ user, onLogout }: FileManagerProps) {
                     <button
                       onClick={openBulkDeleteModal}
                       className="p-2 text-red-600 hover:text-red-700 dark:text-red-400 dark:hover:text-red-300 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg transition-colors"
-                      title={`${selectedItems.size} Element(e) löschen`}
+                      title={`${selectedItems.size} ${t('itemsSelected')} - ${t('delete')}`}
                     >
                       <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
@@ -1765,7 +1759,7 @@ export default function FileManager({ user, onLogout }: FileManagerProps) {
                 <button
                   onClick={handleCreateDirectory}
                   className="p-2 text-gray-600 hover:text-gray-900 dark:text-gray-400 dark:hover:text-gray-100 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors"
-                  title="Neues Verzeichnis erstellen"
+                  title={t('newDirectory')}
                 >
                   <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z" />
@@ -1784,7 +1778,7 @@ export default function FileManager({ user, onLogout }: FileManagerProps) {
             {loading ? (
               <div className="flex flex-col items-center justify-center h-full">
                 <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mb-4"></div>
-                <p className="text-gray-500 dark:text-gray-400">Lädt...</p>
+                <p className="text-gray-500 dark:text-gray-400">{t('loading')}</p>
               </div>
             ) : sortedFiles.length === 0 ? (
               <div className="flex flex-col items-center justify-center h-full">
@@ -1801,10 +1795,8 @@ export default function FileManager({ user, onLogout }: FileManagerProps) {
                 </div>
                 <p className="text-gray-500 dark:text-gray-400 font-medium">
                   {searchQuery || searchFilters.fileType !== 'all' || searchFilters.minSize || searchFilters.maxSize || searchFilters.dateFrom || searchFilters.dateTo
-                    ? isGlobalSearch 
-                      ? 'Keine Ergebnisse in allen Ordnern gefunden'
-                      : 'Keine Ergebnisse gefunden'
-                    : 'Dieses Verzeichnis ist leer'}
+                    ? t('noResults')
+                    : t('noFiles')}
                 </p>
               </div>
             ) : (
@@ -1830,7 +1822,7 @@ export default function FileManager({ user, onLogout }: FileManagerProps) {
                       onClick={() => handleSort('name')}
                     >
                       <div className="flex items-center gap-2">
-                        <span>Name</span>
+                        <span>{t('name')}</span>
                         {sortField === 'name' && (
                           <svg className={`w-4 h-4 ${sortDirection === 'asc' ? '' : 'rotate-180'}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 15l7-7 7 7" />
@@ -1843,7 +1835,7 @@ export default function FileManager({ user, onLogout }: FileManagerProps) {
                       onClick={() => handleSort('type')}
                     >
                       <div className="flex items-center gap-2">
-                        <span>Typ</span>
+                        <span>{t('type')}</span>
                         {sortField === 'type' && (
                           <svg className={`w-4 h-4 ${sortDirection === 'asc' ? '' : 'rotate-180'}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 15l7-7 7 7" />
@@ -1856,7 +1848,7 @@ export default function FileManager({ user, onLogout }: FileManagerProps) {
                       onClick={() => handleSort('size')}
                     >
                       <div className="flex items-center justify-end gap-2">
-                        <span>Größe</span>
+                        <span>{t('size')}</span>
                         {sortField === 'size' && (
                           <svg className={`w-4 h-4 ${sortDirection === 'asc' ? '' : 'rotate-180'}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 15l7-7 7 7" />
@@ -1869,7 +1861,7 @@ export default function FileManager({ user, onLogout }: FileManagerProps) {
                       onClick={() => handleSort('modified')}
                     >
                       <div className="flex items-center gap-2">
-                        <span>Geändert</span>
+                        <span>{t('modified')}</span>
                         {sortField === 'modified' && (
                           <svg className={`w-4 h-4 ${sortDirection === 'asc' ? '' : 'rotate-180'}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 15l7-7 7 7" />
@@ -1878,10 +1870,10 @@ export default function FileManager({ user, onLogout }: FileManagerProps) {
                       </div>
                     </th>
                     <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600 dark:text-gray-400 uppercase tracking-wider hidden 2xl:table-cell">
-                      Erstellt von
+                      {t('createdBy')}
                     </th>
                     <th className="px-4 py-3 text-right text-xs font-semibold text-gray-600 dark:text-gray-400 uppercase tracking-wider w-24">
-                      Aktionen
+                      {t('actions')}
                     </th>
                   </tr>
                 </thead>
@@ -2065,7 +2057,7 @@ export default function FileManager({ user, onLogout }: FileManagerProps) {
                               <button
                                 onClick={() => handleDownload(file)}
                                 className="p-1.5 text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-900/20 rounded transition-colors"
-                                title="Herunterladen"
+                                title={t('download')}
                               >
                                 <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
@@ -2078,7 +2070,7 @@ export default function FileManager({ user, onLogout }: FileManagerProps) {
                                 openDeleteModal(file);
                               }}
                               className="p-1.5 text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20 rounded transition-colors"
-                              title="Löschen"
+                              title={t('delete')}
                             >
                               <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />

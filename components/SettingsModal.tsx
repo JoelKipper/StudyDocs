@@ -1,6 +1,8 @@
 'use client';
 
 import { useState, useEffect, useRef } from 'react';
+import { useLanguage } from '@/contexts/LanguageContext';
+import { translations, type Language as LangType } from '@/lib/translations';
 
 interface SettingsModalProps {
   isOpen: boolean;
@@ -8,19 +10,17 @@ interface SettingsModalProps {
 }
 
 type Theme = 'light' | 'dark' | 'system';
-type Language = 'de' | 'en';
 
 export default function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
+  const { language, setLanguage, t } = useLanguage();
   const [activeTab, setActiveTab] = useState<'hotkeys' | 'language' | 'theme'>('hotkeys');
   const [theme, setTheme] = useState<Theme | null>(null);
-  const [language, setLanguage] = useState<Language>('de');
   const modalRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     // Load saved settings - NEVER set default, only load what user has explicitly chosen
     if (typeof window !== 'undefined') {
       const savedTheme = localStorage.getItem('studydocs-theme') as Theme | null;
-      const savedLanguage = localStorage.getItem('studydocs-language') as Language | null;
       
       // Only load if user has explicitly set a theme
       if (savedTheme) {
@@ -28,7 +28,7 @@ export default function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
       }
       // If no theme is saved, don't set anything - let user choose
       
-      if (savedLanguage) setLanguage(savedLanguage);
+      // Language is handled by LanguageProvider
     }
   }, []);
 
@@ -83,64 +83,27 @@ export default function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
     }
   }, [theme]);
 
-  useEffect(() => {
-    // Apply language
-    if (typeof window !== 'undefined') {
-      localStorage.setItem('studydocs-language', language);
-      // You could dispatch a language change event here if needed
-    }
-  }, [language]);
+  // Language is handled by LanguageProvider, no need for separate effect
 
   if (!isOpen) return null;
 
   const hotkeys = [
-    { key: 'Ctrl/Cmd + A', description: 'Alle auswählen / Abwählen' },
-    { key: 'Ctrl/Cmd + C', description: 'Kopieren' },
-    { key: 'Ctrl/Cmd + X', description: 'Ausschneiden' },
-    { key: 'Ctrl/Cmd + V', description: 'Einfügen' },
-    { key: 'Ctrl/Cmd + N', description: 'Neuer Ordner' },
-    { key: 'Ctrl/Cmd + U', description: 'Datei hochladen' },
-    { key: 'Ctrl/Cmd + Z', description: 'Rückgängig' },
-    { key: 'Delete / Backspace', description: 'Ausgewählte Elemente löschen' },
-    { key: 'F2', description: 'Umbenennen' },
-    { key: 'Enter', description: 'Öffnen / In Ordner navigieren' },
-    { key: '↑ ↓', description: 'Durch Dateien navigieren' },
-    { key: '→', description: 'In Ordner öffnen' },
-    { key: '←', description: 'Ein Ordner-Level nach oben' },
-    { key: 'Ctrl/Cmd + F', description: 'Suche fokussieren' },
-    { key: 'Escape', description: 'Abbrechen / Schließen' },
+    { key: 'Ctrl/Cmd + A', description: t('shortcutSelectAll') },
+    { key: 'Ctrl/Cmd + C', description: t('shortcutCopy') },
+    { key: 'Ctrl/Cmd + X', description: t('shortcutCut') },
+    { key: 'Ctrl/Cmd + V', description: t('shortcutPaste') },
+    { key: 'Ctrl/Cmd + N', description: t('shortcutNewFolder') },
+    { key: 'Ctrl/Cmd + U', description: t('shortcutUpload') },
+    { key: 'Ctrl/Cmd + Z', description: t('shortcutUndo') },
+    { key: 'Delete / Backspace', description: t('shortcutDelete') },
+    { key: 'F2', description: t('shortcutRename') },
+    { key: 'Enter', description: t('shortcutOpen') },
+    { key: '↑ ↓', description: t('shortcutNavigate') },
+    { key: '→', description: t('shortcutEnterFolder') },
+    { key: '←', description: t('shortcutGoUp') },
+    { key: 'Ctrl/Cmd + F', description: t('shortcutSearch') },
+    { key: 'Escape', description: t('shortcutEscape') },
   ];
-
-  const translations = {
-    de: {
-      title: 'Einstellungen',
-      hotkeys: 'Tastenkürzel',
-      language: 'Sprache',
-      theme: 'Erscheinungsbild',
-      light: 'Hell',
-      dark: 'Dunkel',
-      system: 'System',
-      german: 'Deutsch',
-      english: 'Englisch',
-      close: 'Schließen',
-      hotkeysDescription: 'Verfügbare Tastenkürzel:',
-    },
-    en: {
-      title: 'Settings',
-      hotkeys: 'Keyboard Shortcuts',
-      language: 'Language',
-      theme: 'Appearance',
-      light: 'Light',
-      dark: 'Dark',
-      system: 'System',
-      german: 'German',
-      english: 'English',
-      close: 'Close',
-      hotkeysDescription: 'Available keyboard shortcuts:',
-    },
-  };
-
-  const t = translations[language];
 
   return (
     <div
@@ -154,10 +117,11 @@ export default function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
       >
         {/* Header */}
         <div className="flex items-center justify-between p-6 border-b border-gray-200 dark:border-gray-700">
-          <h2 className="text-2xl font-bold text-gray-900 dark:text-white">{t.title}</h2>
+          <h2 className="text-2xl font-bold text-gray-900 dark:text-white">{t('settingsTitle')}</h2>
           <button
             onClick={onClose}
             className="p-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors"
+            title={t('close')}
           >
             <svg className="w-6 h-6 text-gray-600 dark:text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
@@ -175,7 +139,7 @@ export default function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
                 : 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white hover:bg-gray-50 dark:hover:bg-gray-700'
             }`}
           >
-            {t.hotkeys}
+            {t('keyboardShortcuts')}
           </button>
           <button
             onClick={() => setActiveTab('language')}
@@ -185,7 +149,7 @@ export default function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
                 : 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white hover:bg-gray-50 dark:hover:bg-gray-700'
             }`}
           >
-            {t.language}
+            {t('language')}
           </button>
           <button
             onClick={() => setActiveTab('theme')}
@@ -195,7 +159,7 @@ export default function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
                 : 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white hover:bg-gray-50 dark:hover:bg-gray-700'
             }`}
           >
-            {t.theme}
+            {t('appearance')}
           </button>
         </div>
 
@@ -203,7 +167,7 @@ export default function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
         <div className="flex-1 overflow-y-auto p-6">
           {activeTab === 'hotkeys' && (
             <div className="space-y-4">
-              <p className="text-sm text-gray-600 dark:text-gray-400 mb-4">{t.hotkeysDescription}</p>
+              <p className="text-sm text-gray-600 dark:text-gray-400 mb-4">{t('availableShortcuts')}</p>
               <div className="space-y-2">
                 {hotkeys.map((hotkey, index) => (
                   <div
@@ -223,7 +187,7 @@ export default function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
           {activeTab === 'language' && (
             <div className="space-y-4">
               <p className="text-sm text-gray-600 dark:text-gray-400 mb-4">
-                Wählen Sie Ihre bevorzugte Sprache aus.
+                {t('selectLanguage')}
               </p>
               <div className="space-y-3">
                 <label className="flex items-center p-4 bg-gray-50 dark:bg-gray-700/50 rounded-lg cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors">
@@ -232,10 +196,10 @@ export default function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
                     name="language"
                     value="de"
                     checked={language === 'de'}
-                    onChange={(e) => setLanguage(e.target.value as Language)}
+                    onChange={(e) => setLanguage(e.target.value as LangType)}
                     className="w-4 h-4 text-blue-600 focus:ring-blue-500 focus:ring-2"
                   />
-                  <span className="ml-3 text-sm font-medium text-gray-700 dark:text-gray-300">{t.german}</span>
+                  <span className="ml-3 text-sm font-medium text-gray-700 dark:text-gray-300">{t('german')}</span>
                 </label>
                 <label className="flex items-center p-4 bg-gray-50 dark:bg-gray-700/50 rounded-lg cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors">
                   <input
@@ -243,10 +207,10 @@ export default function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
                     name="language"
                     value="en"
                     checked={language === 'en'}
-                    onChange={(e) => setLanguage(e.target.value as Language)}
+                    onChange={(e) => setLanguage(e.target.value as LangType)}
                     className="w-4 h-4 text-blue-600 focus:ring-blue-500 focus:ring-2"
                   />
-                  <span className="ml-3 text-sm font-medium text-gray-700 dark:text-gray-300">{t.english}</span>
+                  <span className="ml-3 text-sm font-medium text-gray-700 dark:text-gray-300">{t('english')}</span>
                 </label>
               </div>
             </div>
@@ -255,7 +219,7 @@ export default function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
           {activeTab === 'theme' && (
             <div className="space-y-4">
               <p className="text-sm text-gray-600 dark:text-gray-400 mb-4">
-                Wählen Sie Ihr bevorzugtes Erscheinungsbild aus.
+                {t('selectAppearance')}
               </p>
               <div className="space-y-3">
                 <label className="flex items-center p-4 bg-gray-50 dark:bg-gray-700/50 rounded-lg cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors">
@@ -268,8 +232,8 @@ export default function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
                     className="w-4 h-4 text-blue-600 focus:ring-blue-500 focus:ring-2"
                   />
                   <div className="ml-3 flex-1">
-                    <span className="text-sm font-medium text-gray-700 dark:text-gray-300 block">{t.light}</span>
-                    <span className="text-xs text-gray-500 dark:text-gray-400">Helles Erscheinungsbild</span>
+                    <span className="text-sm font-medium text-gray-700 dark:text-gray-300 block">{t('light')}</span>
+                    <span className="text-xs text-gray-500 dark:text-gray-400">{language === 'de' ? 'Helles Erscheinungsbild' : 'Light appearance'}</span>
                   </div>
                 </label>
                 <label className="flex items-center p-4 bg-gray-50 dark:bg-gray-700/50 rounded-lg cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors">
@@ -282,8 +246,8 @@ export default function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
                     className="w-4 h-4 text-blue-600 focus:ring-blue-500 focus:ring-2"
                   />
                   <div className="ml-3 flex-1">
-                    <span className="text-sm font-medium text-gray-700 dark:text-gray-300 block">{t.dark}</span>
-                    <span className="text-xs text-gray-500 dark:text-gray-400">Dunkles Erscheinungsbild</span>
+                    <span className="text-sm font-medium text-gray-700 dark:text-gray-300 block">{t('dark')}</span>
+                    <span className="text-xs text-gray-500 dark:text-gray-400">{language === 'de' ? 'Dunkles Erscheinungsbild' : 'Dark appearance'}</span>
                   </div>
                 </label>
                 <label className="flex items-center p-4 bg-gray-50 dark:bg-gray-700/50 rounded-lg cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors">
@@ -296,13 +260,13 @@ export default function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
                     className="w-4 h-4 text-blue-600 focus:ring-blue-500 focus:ring-2"
                   />
                   <div className="ml-3 flex-1">
-                    <span className="text-sm font-medium text-gray-700 dark:text-gray-300 block">{t.system}</span>
-                    <span className="text-xs text-gray-500 dark:text-gray-400">Systemeinstellung verwenden</span>
+                    <span className="text-sm font-medium text-gray-700 dark:text-gray-300 block">{t('system')}</span>
+                    <span className="text-xs text-gray-500 dark:text-gray-400">{language === 'de' ? 'Systemeinstellung verwenden' : 'Use system setting'}</span>
                   </div>
                 </label>
                 {theme === null && (
                   <p className="text-xs text-gray-500 dark:text-gray-400 mt-2 text-center">
-                    Kein Theme ausgewählt - Browser/System-Einstellung wird verwendet
+                    {t('noThemeSelected')}
                   </p>
                 )}
               </div>

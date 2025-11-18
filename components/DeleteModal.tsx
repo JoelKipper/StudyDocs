@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect } from 'react';
+import { useLanguage } from '@/contexts/LanguageContext';
 
 interface DeleteModalProps {
   isOpen: boolean;
@@ -19,6 +20,7 @@ export default function DeleteModal({
   itemType,
   items,
 }: DeleteModalProps) {
+  const { t, language } = useLanguage();
   const isBulkDelete = items && items.length > 0;
   const hasDirectories = items?.some(item => item.type === 'directory') || itemType === 'directory';
   useEffect(() => {
@@ -60,14 +62,14 @@ export default function DeleteModal({
             <div className="flex-1">
               <h3 className="text-lg font-semibold text-gray-900 dark:text-white">
                 {isBulkDelete 
-                  ? `${items.length} Element(e) löschen?`
-                  : (itemType === 'directory' ? 'Verzeichnis löschen?' : 'Datei löschen?')
+                  ? `${items.length} ${t('itemsSelected')} ${t('delete')}?`
+                  : (itemType === 'directory' ? `${t('directory')} ${t('delete')}?` : `${t('file')} ${t('delete')}?`)
                 }
               </h3>
               {isBulkDelete ? (
                 <div className="mt-2">
                   <p className="text-sm text-gray-600 dark:text-gray-400 mb-2">
-                    Möchten Sie die folgenden Elemente wirklich löschen?
+                    {t('deleteConfirmMultiple')}
                   </p>
                   <div className="max-h-40 overflow-y-auto bg-gray-50 dark:bg-gray-700/50 rounded-lg p-2 space-y-1">
                     {items.map((item, index) => (
@@ -88,25 +90,25 @@ export default function DeleteModal({
                 </div>
               ) : (
                 <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">
-                  Möchten Sie <span className="font-medium text-gray-900 dark:text-white">"{itemName}"</span> wirklich löschen?
+                  {t('deleteConfirm').replace('dieses Element', `"${itemName}"`).replace('this item', `"${itemName}"`)}
                 </p>
               )}
             </div>
           </div>
           {hasDirectories && (
             <p className="text-sm text-orange-600 dark:text-orange-400 mb-4 px-2 py-2 bg-orange-50 dark:bg-orange-900/20 rounded-lg border border-orange-200 dark:border-orange-800">
-              ⚠️ <strong>Warnung:</strong> Der gesamte Inhalt der Verzeichnisse wird ebenfalls gelöscht.
+              ⚠️ <strong>{language === 'de' ? 'Warnung:' : 'Warning:'}</strong> {isBulkDelete ? t('deleteWarningMultiple') : t('deleteWarning')}
             </p>
           )}
           <p className="text-sm text-gray-500 dark:text-gray-400 mb-6">
-            Diese Aktion kann nicht rückgängig gemacht werden.
+            {language === 'de' ? 'Diese Aktion kann nicht rückgängig gemacht werden.' : 'This action cannot be undone.'}
           </p>
           <div className="flex gap-3 justify-end">
             <button
               onClick={onClose}
               className="px-4 py-2 bg-gray-100 hover:bg-gray-200 dark:bg-gray-700 dark:hover:bg-gray-600 text-gray-700 dark:text-gray-300 rounded-lg text-sm font-medium transition-colors"
             >
-              Abbrechen
+              {t('cancel')}
             </button>
             <button
               onClick={() => {
@@ -118,7 +120,7 @@ export default function DeleteModal({
               <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
               </svg>
-              Löschen
+              {t('delete')}
             </button>
           </div>
         </div>
