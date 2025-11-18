@@ -14,6 +14,7 @@ interface FileTreeProps {
   onRefresh: () => void;
   onExternalDrop?: (files: File[], targetPath: string) => void;
   onMoveItem?: (itemPath: string, targetPath: string) => Promise<void>;
+  userId: string;
 }
 
 interface TreeNodeData extends FileItem {
@@ -21,13 +22,47 @@ interface TreeNodeData extends FileItem {
   loaded?: boolean;
 }
 
-export default function FileTree({ currentPath, onNavigate, onRefresh, onExternalDrop, onMoveItem }: FileTreeProps) {
+export default function FileTree({ currentPath, onNavigate, onRefresh, onExternalDrop, onMoveItem, userId }: FileTreeProps) {
+  const storageKey = `studydocs-tree-expanded-${userId}`;
+  
+  // Load expanded state from localStorage
   const [tree, setTree] = useState<TreeNodeData[]>([]);
-  const [expanded, setExpanded] = useState<Set<string>>(new Set([''])); // Root expanded by default
+  const [expanded, setExpanded] = useState<Set<string>>(() => {
+    if (typeof window !== 'undefined') {
+      const saved = localStorage.getItem(storageKey);
+      if (saved) {
+        try {
+          const paths = JSON.parse(saved);
+          return new Set(paths);
+        } catch (e) {
+          // Fallback to default
+        }
+      }
+    }
+    // Always include root and current path
+    const defaultExpanded = new Set(['']);
+    if (currentPath) {
+      const parts = currentPath.split('/').filter(Boolean);
+      let current = '';
+      parts.forEach((part) => {
+        current = current ? `${current}/${part}` : part;
+        defaultExpanded.add(current);
+      });
+    }
+    return defaultExpanded;
+  });
   const [loading, setLoading] = useState(true);
   const [draggedItem, setDraggedItem] = useState<string | null>(null);
   const [draggedItemType, setDraggedItemType] = useState<'file' | 'directory' | null>(null);
   const [dragOverPath, setDragOverPath] = useState<string | null>(null);
+
+  // Save expanded state to localStorage whenever it changes
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const paths = Array.from(expanded);
+      localStorage.setItem(storageKey, JSON.stringify(paths));
+    }
+  }, [expanded, storageKey]);
 
   useEffect(() => {
     loadFullTree();
@@ -44,7 +79,12 @@ export default function FileTree({ currentPath, onNavigate, onRefresh, onExterna
         current = current ? `${current}/${part}` : part;
         pathsToExpand.push(current);
       });
-      setExpanded(new Set(pathsToExpand));
+      // Merge with existing expanded paths
+      setExpanded(prev => {
+        const newExpanded = new Set(prev);
+        pathsToExpand.forEach(path => newExpanded.add(path));
+        return newExpanded;
+      });
     }
   }, [currentPath]);
 
@@ -69,7 +109,7 @@ export default function FileTree({ currentPath, onNavigate, onRefresh, onExterna
         const dirs = allItems.filter((item: FileItem) => item.type === 'directory');
         const files = allItems.filter((item: FileItem) => item.type === 'file');
         
-        // Load children for directories
+        // Load children for directories recursively
         const dirNodes: TreeNodeData[] = await Promise.all(
           dirs.map(async (dir: FileItem) => {
             const children = await loadTreeRecursive(dir.path);

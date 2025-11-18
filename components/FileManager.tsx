@@ -155,6 +155,8 @@ export default function FileManager({ user, onLogout, initialPath }: FileManager
     return 50;
   });
   const [isResizingPreview, setIsResizingPreview] = useState(false);
+  const [visibleRange, setVisibleRange] = useState({ start: 0, end: 50 }); // Virtualisierung: nur sichtbare Zeilen rendern
+  const fileListContainerRef = useRef<HTMLDivElement>(null);
 
   // Save path to localStorage whenever it changes
   useEffect(() => {
@@ -249,7 +251,69 @@ export default function FileManager({ user, onLogout, initialPath }: FileManager
 
   useEffect(() => {
     loadFiles();
+    // Reset visible range when path changes - will be updated when files load
+    setVisibleRange({ start: 0, end: 100 });
   }, [currentPath]);
+
+  // Update visible range when files change
+  useEffect(() => {
+    if (loading) return;
+    
+    const sorted = getSortedFiles();
+    
+    // If less than 100 files, show all
+    if (sorted.length <= 100) {
+      setVisibleRange({ start: 0, end: sorted.length });
+      return;
+    }
+    
+    // For more than 100 files, ensure at least first 100 are visible
+    setVisibleRange((prev) => {
+      if (prev.end === 0 || prev.end < 50) {
+        return { start: 0, end: 100 };
+      }
+      return prev;
+    });
+  }, [files, sortField, sortDirection, loading]);
+
+  // Virtualisierung: Intersection Observer für Lazy Loading beim Scrollen
+  useEffect(() => {
+    if (!fileListContainerRef.current || loading) return;
+
+    const sorted = getSortedFiles();
+    if (sorted.length === 0) return;
+
+    const container = fileListContainerRef.current;
+    const rows = container.querySelectorAll('tbody tr[data-index]');
+    if (rows.length === 0) return;
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        entries.forEach((entry) => {
+          if (entry.isIntersecting) {
+            const index = parseInt(entry.target.getAttribute('data-index') || '0', 10);
+            // Erweitere sichtbaren Bereich mit Buffer
+            setVisibleRange((prev: { start: number; end: number }) => ({
+              start: Math.max(0, Math.min(prev.start, index - 10)),
+              end: Math.min(sorted.length, Math.max(prev.end, index + 10)),
+            }));
+          }
+        });
+      },
+      {
+        root: container,
+        rootMargin: '200px', // Buffer für frühes Laden
+        threshold: 0.1,
+      }
+    );
+
+    rows.forEach((row: Element) => observer.observe(row));
+
+    return () => {
+      rows.forEach((row: Element) => observer.unobserve(row));
+      observer.disconnect();
+    };
+  }, [files, sortField, sortDirection, loading, visibleRange]);
 
   // When files are loaded and we have a pending rename directory, set it to rename mode
   useEffect(() => {
@@ -1643,6 +1707,7 @@ export default function FileManager({ user, onLogout, initialPath }: FileManager
               onNavigate={navigateToPath}
               onRefresh={handleRefresh}
               onExternalDrop={handleExternalFilesDrop}
+              userId={user.id}
               onMoveItem={async (itemPath: string, targetPath: string) => {
                 try {
                   const res = await fetch('/api/files', {
@@ -1748,37 +1813,6 @@ export default function FileManager({ user, onLogout, initialPath }: FileManager
           {/* Toolbar */}
           <div className="border-b border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800/50 flex-shrink-0">
             <div className="px-4 py-2 flex items-center justify-between gap-4">
-              {/* Search Bar */}
-              <div className="flex-1 max-w-md">
-                <SearchBar
-                  searchQuery={searchQuery}
-                  onSearchChange={setSearchQuery}
-                  filters={searchFilters}
-                  onFiltersChange={setSearchFilters}
-                  onClear={() => {
-                    setSearchQuery('');
-                    setSearchFilters({ fileType: 'all' });
-                    setIsGlobalSearch(false);
-                    setAllFiles([]);
-                  }}
-                />
-                {(searchQuery || searchFilters.fileType !== 'all' || searchFilters.minSize || searchFilters.maxSize || searchFilters.dateFrom || searchFilters.dateTo) && (
-                  <div className="mt-1 text-xs text-gray-500 dark:text-gray-400 flex items-center gap-2">
-                    {searchLoading ? (
-                      <>
-                        <div className="animate-spin rounded-full h-3 w-3 border-b-2 border-gray-400"></div>
-                        <span>Suche...</span>
-                      </>
-                    ) : (
-                      <>
-                        {sortedFiles.length} {sortedFiles.length === 1 ? 'Ergebnis' : 'Ergebnisse'} gefunden
-                        {isGlobalSearch ? ' (in allen Ordnern)' : files.length !== sortedFiles.length && ` (von ${files.length} ${files.length === 1 ? 'Element' : 'Elementen'})`}
-                      </>
-                    )}
-                  </div>
-                )}
-              </div>
-              
               {/* Navigation */}
               <div className="flex items-center gap-2 flex-1 min-w-0">
                 <button
@@ -1826,6 +1860,37 @@ export default function FileManager({ user, onLogout, initialPath }: FileManager
                 </div>
               </div>
 
+              {/* Search Bar */}
+              <div className="flex-1 max-w-md">
+                <SearchBar
+                  searchQuery={searchQuery}
+                  onSearchChange={setSearchQuery}
+                  filters={searchFilters}
+                  onFiltersChange={setSearchFilters}
+                  onClear={() => {
+                    setSearchQuery('');
+                    setSearchFilters({ fileType: 'all' });
+                    setIsGlobalSearch(false);
+                    setAllFiles([]);
+                  }}
+                />
+                {(searchQuery || searchFilters.fileType !== 'all' || searchFilters.minSize || searchFilters.maxSize || searchFilters.dateFrom || searchFilters.dateTo) && (
+                  <div className="mt-1 text-xs text-gray-500 dark:text-gray-400 flex items-center gap-2">
+                    {searchLoading ? (
+                      <>
+                        <div className="animate-spin rounded-full h-3 w-3 border-b-2 border-gray-400"></div>
+                        <span>Suche...</span>
+                      </>
+                    ) : (
+                      <>
+                        {sortedFiles.length} {sortedFiles.length === 1 ? 'Ergebnis' : 'Ergebnisse'} gefunden
+                        {isGlobalSearch ? ' (in allen Ordnern)' : files.length !== sortedFiles.length && ` (von ${files.length} ${files.length === 1 ? 'Element' : 'Elementen'})`}
+                      </>
+                    )}
+                  </div>
+                )}
+              </div>
+
               {/* Actions */}
               <div className="flex items-center gap-1.5">
                 {selectedItems.size > 0 && (
@@ -1871,6 +1936,7 @@ export default function FileManager({ user, onLogout, initialPath }: FileManager
           <div className="flex-1 flex overflow-hidden">
             {/* File List - Table View */}
             <div 
+              ref={fileListContainerRef}
               className={`flex flex-col overflow-auto relative ${previewFile ? 'border-r border-gray-200 dark:border-gray-700' : 'flex-1'}`}
               style={previewFile ? { width: `${Math.max(0, Math.min(100, 100 - previewWidth))}%`, minWidth: 0, flexShrink: 1 } : {}}
               onContextMenu={handleEmptyContextMenu}
@@ -2026,12 +2092,14 @@ export default function FileManager({ user, onLogout, initialPath }: FileManager
                       </td>
                     </tr>
                   )}
-                  {sortedFiles.map((file) => {
+                  {sortedFiles.slice(visibleRange.start, visibleRange.end).map((file, index) => {
+                    const actualIndex = visibleRange.start + index;
                     const isSelected = selectedItems.has(file.path);
                     return (
                       <tr
                         key={file.path}
                         data-file-path={file.path}
+                        data-index={actualIndex}
                         onClick={(e) => handleRowClick(file, e)}
                         onDoubleClick={(e) => {
                           e.preventDefault();
@@ -2205,6 +2273,10 @@ export default function FileManager({ user, onLogout, initialPath }: FileManager
                 </tbody>
               </table>
             )}
+            {/* Virtualisierung: Spacer für nicht gerenderte Zeilen */}
+            {sortedFiles.length > visibleRange.end && (
+              <div style={{ height: `${(sortedFiles.length - visibleRange.end) * 48}px` }} />
+            )}
             </div>
 
             {/* File Preview - Inline (only shown when file is double-clicked) */}
@@ -2322,3 +2394,4 @@ export default function FileManager({ user, onLogout, initialPath }: FileManager
     </div>
   );
 }
+
