@@ -105,25 +105,19 @@ export default function FileUpload({ currentPath, onUploaded }: FileUploadProps)
         />
         <label
           htmlFor="file-upload"
-          className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded text-sm font-medium transition-colors cursor-pointer ${
+          className={`inline-flex items-center justify-center p-2 rounded-lg transition-colors cursor-pointer ${
             uploading
-              ? 'bg-gray-400 text-gray-200 cursor-not-allowed'
-              : 'bg-green-600 hover:bg-green-700 text-white'
+              ? 'text-gray-400 cursor-not-allowed'
+              : 'text-gray-600 hover:text-gray-900 dark:text-gray-400 dark:hover:text-gray-100 hover:bg-gray-100 dark:hover:bg-gray-700'
           }`}
           title="Datei hochladen"
         >
           {uploading ? (
-            <>
-              <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
-              <span className="hidden sm:inline">{progress}%</span>
-            </>
+            <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-gray-400"></div>
           ) : (
-            <>
-              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
-              </svg>
-              <span className="hidden sm:inline">Hochladen</span>
-            </>
+            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
+            </svg>
           )}
         </label>
         {uploading && progress > 0 && (

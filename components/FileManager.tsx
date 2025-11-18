@@ -3,7 +3,6 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import FileTree from './FileTree';
 import FileUpload from './FileUpload';
-import CreateDirectory from './CreateDirectory';
 import ContextMenu from './ContextMenu';
 import DeleteModal from './DeleteModal';
 import ReplaceModal from './ReplaceModal';
@@ -59,11 +58,13 @@ export default function FileManager({ user, onLogout }: FileManagerProps) {
     x: number;
     y: number;
     item: FileItem | null;
+    isEmpty: boolean;
   }>({
     visible: false,
     x: 0,
     y: 0,
     item: null,
+    isEmpty: false,
   });
   const [deleteModal, setDeleteModal] = useState<{
     visible: boolean;
@@ -75,6 +76,10 @@ export default function FileManager({ user, onLogout }: FileManagerProps) {
   const [renamingItem, setRenamingItem] = useState<FileItem | null>(null);
   const [renameValue, setRenameValue] = useState('');
   const renameInputRef = useRef<HTMLInputElement>(null);
+  const [creatingNewDirectory, setCreatingNewDirectory] = useState<FileItem | null>(null);
+  const [newDirectoryName, setNewDirectoryName] = useState('');
+  const newDirectoryInputRef = useRef<HTMLInputElement>(null);
+  const [pendingRenameDirectory, setPendingRenameDirectory] = useState<string | null>(null);
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' | 'info' } | null>(null);
   const [sidebarWidth, setSidebarWidth] = useState(() => {
     if (typeof window !== 'undefined') {
@@ -144,6 +149,27 @@ export default function FileManager({ user, onLogout }: FileManagerProps) {
   useEffect(() => {
     loadFiles();
   }, [currentPath]);
+
+  // When files are loaded and we have a pending rename directory, set it to rename mode
+  useEffect(() => {
+    if (pendingRenameDirectory && files.length > 0 && !renamingItem && !creatingNewDirectory) {
+      const directory = files.find(f => f.path === pendingRenameDirectory);
+      if (directory) {
+        setRenamingItem(directory);
+        setRenameValue(directory.name);
+        setPendingRenameDirectory(null);
+        // Focus input after state update, but don't select the text
+        setTimeout(() => {
+          renameInputRef.current?.focus();
+          // Move cursor to end instead of selecting
+          if (renameInputRef.current) {
+            const length = renameInputRef.current.value.length;
+            renameInputRef.current.setSelectionRange(length, length);
+          }
+        }, 50);
+      }
+    }
+  }, [files, pendingRenameDirectory, renamingItem, creatingNewDirectory]);
 
   useEffect(() => {
     setSelectedItems(new Set());
@@ -434,7 +460,108 @@ export default function FileManager({ user, onLogout }: FileManagerProps) {
       x: e.clientX,
       y: e.clientY,
       item: file,
+      isEmpty: false,
     });
+  }
+
+  function handleEmptyContextMenu(e: React.MouseEvent) {
+    // Don't show empty context menu if clicking on a table row
+    const target = e.target as HTMLElement;
+    if (target.closest('tr') || target.closest('thead')) {
+      return;
+    }
+    
+    e.preventDefault();
+    e.stopPropagation();
+    
+    setContextMenu({
+      visible: true,
+      x: e.clientX,
+      y: e.clientY,
+      item: null,
+      isEmpty: true,
+    });
+  }
+
+  function handleCreateDirectoryFromContext() {
+    // Create a temporary directory item for the new directory
+    const tempDirectory: FileItem = {
+      name: '',
+      path: 'NEW_DIRECTORY_TEMP',
+      type: 'directory',
+    };
+    setCreatingNewDirectory(tempDirectory);
+    setNewDirectoryName('');
+    // Focus input after state update
+    setTimeout(() => {
+      newDirectoryInputRef.current?.focus();
+    }, 0);
+  }
+
+  function handleCreateDirectory() {
+    handleCreateDirectoryFromContext();
+  }
+
+  async function confirmCreateDirectory() {
+    if (!newDirectoryName.trim()) {
+      setCreatingNewDirectory(null);
+      setNewDirectoryName('');
+      return;
+    }
+
+    const directoryName = newDirectoryName.trim();
+    const directoryPath = currentPath ? `${currentPath}/${directoryName}` : directoryName;
+
+    // Clear the input immediately for better UX - this makes the input field disappear
+    const nameToCreate = directoryName;
+    setCreatingNewDirectory(null);
+    setNewDirectoryName('');
+
+    try {
+      const res = await fetch('/api/files', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'create-directory',
+          path: currentPath,
+          name: nameToCreate,
+        }),
+      });
+
+      const data = await res.json();
+
+      if (!res.ok) {
+        setToast({ message: data.error || 'Fehler beim Erstellen', type: 'error' });
+        return;
+      }
+      
+      // Reload files first
+      await loadFiles();
+      setTreeRefreshKey((k) => k + 1);
+      
+      // Don't set pending rename - just show the directory normally
+      // The user can rename it manually if needed
+      setToast({ message: 'Verzeichnis erfolgreich erstellt', type: 'success' });
+    } catch (err) {
+      setToast({ message: 'Verbindungsfehler', type: 'error' });
+    }
+  }
+
+  function cancelCreateDirectory() {
+    setCreatingNewDirectory(null);
+    setNewDirectoryName('');
+  }
+
+  function handleNewDirectoryKeyDown(e: React.KeyboardEvent<HTMLInputElement>) {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      e.stopPropagation();
+      confirmCreateDirectory();
+    } else if (e.key === 'Escape') {
+      e.preventDefault();
+      e.stopPropagation();
+      cancelCreateDirectory();
+    }
   }
 
   function handleRename(item: FileItem) {
@@ -687,9 +814,12 @@ export default function FileManager({ user, onLogout }: FileManagerProps) {
             </div>
             <button
               onClick={onLogout}
-              className="px-4 py-2 bg-red-500 hover:bg-red-600 text-white rounded-lg text-sm font-medium transition-colors"
+              className="p-2 text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors"
+              title="Abmelden"
             >
-              Abmelden
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
+              </svg>
             </button>
           </div>
         </div>
@@ -837,11 +967,16 @@ export default function FileManager({ user, onLogout }: FileManagerProps) {
               </div>
 
               {/* Actions */}
-              <div className="flex items-center gap-2">
-                <CreateDirectory
-                  currentPath={currentPath}
-                  onCreated={handleRefresh}
-                />
+              <div className="flex items-center gap-1.5">
+                <button
+                  onClick={handleCreateDirectory}
+                  className="p-2 text-gray-600 hover:text-gray-900 dark:text-gray-400 dark:hover:text-gray-100 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors"
+                  title="Neues Verzeichnis erstellen"
+                >
+                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z" />
+                  </svg>
+                </button>
                 <FileUpload
                   currentPath={currentPath}
                   onUploaded={handleRefresh}
@@ -851,7 +986,7 @@ export default function FileManager({ user, onLogout }: FileManagerProps) {
           </div>
 
           {/* File List - Table View */}
-          <div className="flex-1 overflow-auto">
+          <div className="flex-1 overflow-auto relative" onContextMenu={handleEmptyContextMenu}>
             {loading ? (
               <div className="flex flex-col items-center justify-center h-full">
                 <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mb-4"></div>
@@ -945,6 +1080,54 @@ export default function FileManager({ user, onLogout }: FileManagerProps) {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-200 dark:divide-gray-700">
+                  {creatingNewDirectory && (
+                    <tr
+                      key="NEW_DIRECTORY_TEMP"
+                      className="group cursor-pointer transition-colors bg-blue-50 dark:bg-blue-900/20 hover:bg-blue-100 dark:hover:bg-blue-900/30"
+                    >
+                      <td className="px-4 py-3" onClick={(e) => e.stopPropagation()}>
+                        <input
+                          type="checkbox"
+                          disabled
+                          className="rounded border-gray-300 text-blue-600 focus:ring-blue-500 opacity-50"
+                        />
+                      </td>
+                      <td className="px-4 py-3">
+                        <div className="flex items-center gap-3">
+                          <div className="w-8 h-8 bg-blue-100 dark:bg-blue-900/30 rounded flex items-center justify-center flex-shrink-0">
+                            <svg className="w-5 h-5 text-blue-600 dark:text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z" />
+                            </svg>
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <input
+                              ref={newDirectoryInputRef}
+                              type="text"
+                              value={newDirectoryName}
+                              onChange={(e) => setNewDirectoryName(e.target.value)}
+                              onKeyDown={handleNewDirectoryKeyDown}
+                              onClick={(e) => e.stopPropagation()}
+                              placeholder="Verzeichnisname"
+                              className="w-full px-2 py-1 border border-blue-500 rounded text-sm font-medium text-gray-900 dark:text-white bg-white dark:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                              autoFocus
+                            />
+                          </div>
+                        </div>
+                      </td>
+                      <td className="px-4 py-3 text-sm text-gray-600 dark:text-gray-400 hidden md:table-cell">
+                        Ordner
+                      </td>
+                      <td className="px-4 py-3 text-sm text-gray-600 dark:text-gray-400 text-right hidden lg:table-cell font-mono">
+                        -
+                      </td>
+                      <td className="px-4 py-3 text-sm text-gray-600 dark:text-gray-400 hidden xl:table-cell">
+                        -
+                      </td>
+                      <td className="px-4 py-3 text-sm text-gray-600 dark:text-gray-400 hidden 2xl:table-cell">
+                        -
+                      </td>
+                    </tr>
+                  )}
                   {sortedFiles.map((file) => {
                     const isSelected = selectedItems.has(file.path);
                     return (
@@ -1120,16 +1303,17 @@ export default function FileManager({ user, onLogout }: FileManagerProps) {
       `}</style>
 
       {/* Context Menu */}
-      {contextMenu.visible && contextMenu.item && (
+      {contextMenu.visible && (
         <ContextMenu
           x={contextMenu.x}
           y={contextMenu.y}
-          onClose={() => setContextMenu({ visible: false, x: 0, y: 0, item: null })}
-          onOpen={contextMenu.item.type === 'directory' ? () => navigateToPath(contextMenu.item!.path) : undefined}
-          onDownload={contextMenu.item.type === 'file' ? () => handleDownload(contextMenu.item!) : undefined}
-          onDelete={() => openDeleteModal(contextMenu.item!)}
-          onRename={() => handleRename(contextMenu.item!)}
-          itemType={contextMenu.item.type}
+          onClose={() => setContextMenu({ visible: false, x: 0, y: 0, item: null, isEmpty: false })}
+          onOpen={contextMenu.item && contextMenu.item.type === 'directory' ? () => navigateToPath(contextMenu.item!.path) : undefined}
+          onDownload={contextMenu.item && contextMenu.item.type === 'file' ? () => handleDownload(contextMenu.item!) : undefined}
+          onDelete={contextMenu.item ? () => openDeleteModal(contextMenu.item!) : undefined}
+          onRename={contextMenu.item ? () => handleRename(contextMenu.item!) : undefined}
+          onCreateDirectory={contextMenu.isEmpty ? handleCreateDirectoryFromContext : undefined}
+          itemType={contextMenu.isEmpty ? 'empty' : (contextMenu.item?.type || 'file')}
         />
       )}
 
