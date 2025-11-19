@@ -132,7 +132,7 @@ export default function ContextMenu({
         </button>
       )}
 
-      {itemType === 'empty' && onCreateDirectory && (
+      {(itemType === 'empty' || itemType === 'directory') && onCreateDirectory && (
         <button
           onClick={() => {
             onCreateDirectory();

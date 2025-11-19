@@ -2358,6 +2358,10 @@ export default function FileManager({ user, onLogout, initialPath, initialFile: 
                     }, 150);
                   }
                 }}
+                onCreateDirectory={(parentPath: string) => {
+                  // This is now handled directly in FileTree, so we don't need to do anything here
+                  // The FileTree component will show the input field directly
+                }}
                 onMoveItem={async (itemPath: string, targetPath: string) => {
                   try {
                     const res = await fetch('/api/files', {
@@ -2564,6 +2568,10 @@ export default function FileManager({ user, onLogout, initialPath, initialFile: 
                         setTimeout(() => setRefreshFolderPath(null), 100);
                       }, 150);
                     }
+                  }}
+                  onCreateDirectory={(parentPath: string) => {
+                    // This is now handled directly in FileTree, so we don't need to do anything here
+                    // The FileTree component will show the input field directly
                   }}
                   onFileDoubleClick={async (filePath: string, fileName: string) => {
                     const fileItem: FileItem = {

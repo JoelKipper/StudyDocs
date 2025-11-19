@@ -3,6 +3,7 @@
 import { useState, useEffect, useRef } from 'react';
 import FileIcon from './FileIcon';
 import ContextMenu from './ContextMenu';
+import { useLanguage } from '@/contexts/LanguageContext';
 
 interface FileItem {
   name: string;
@@ -27,6 +28,7 @@ interface FileTreeProps {
   onShare?: (item: FileItem) => void;
   onToggleFavorite?: (item: FileItem) => void;
   isFavorite?: (itemPath: string) => boolean;
+  onCreateDirectory?: (parentPath: string) => void;
   // Callback when item is deleted - receives the item path
   onItemDeleted?: (itemPath: string) => void;
   // Callback when item is renamed - receives old path, new name, and new path
@@ -40,7 +42,8 @@ interface TreeNodeData extends FileItem {
   loaded?: boolean;
 }
 
-export default function FileTree({ currentPath, onNavigate, onRefresh, onExternalDrop, onMoveItem, onFileDoubleClick, userId, refreshFolderPath, setRefreshFolderPath, onRename, onDelete, onDownload, onShare, onToggleFavorite, isFavorite, onItemDeleted, onItemRenamed, onItemMoved }: FileTreeProps) {
+export default function FileTree({ currentPath, onNavigate, onRefresh, onExternalDrop, onMoveItem, onFileDoubleClick, userId, refreshFolderPath, setRefreshFolderPath, onRename, onDelete, onDownload, onShare, onToggleFavorite, isFavorite, onItemDeleted, onItemRenamed, onItemMoved, onCreateDirectory }: FileTreeProps) {
+  const { language } = useLanguage();
   const storageKey = `studydocs-tree-expanded-${userId}`;
   
   // Load expanded state from localStorage
@@ -72,15 +75,22 @@ export default function FileTree({ currentPath, onNavigate, onRefresh, onExterna
     x: number;
     y: number;
     item: FileItem | null;
+    isEmpty: boolean;
+    parentPath?: string;
   }>({
     visible: false,
     x: 0,
     y: 0,
     item: null,
+    isEmpty: false,
+    parentPath: undefined,
   });
   const [renamingItem, setRenamingItem] = useState<FileItem | null>(null);
   const [renameValue, setRenameValue] = useState('');
   const renameInputRef = useRef<HTMLInputElement>(null);
+  const [creatingNewDirectory, setCreatingNewDirectory] = useState<string | null>(null);
+  const [newDirectoryName, setNewDirectoryName] = useState('');
+  const newDirectoryInputRef = useRef<HTMLInputElement>(null);
 
   // Save expanded state to localStorage whenever it changes
   useEffect(() => {
@@ -221,6 +231,68 @@ export default function FileTree({ currentPath, onNavigate, onRefresh, onExterna
       
       return removeNode(currentTree);
     });
+  }
+
+  async function confirmCreateDirectory() {
+    if (!newDirectoryName.trim() || !creatingNewDirectory) {
+      setCreatingNewDirectory(null);
+      setNewDirectoryName('');
+      return;
+    }
+
+    const directoryName = newDirectoryName.trim();
+    const parentPath = creatingNewDirectory;
+
+    // Clear the input immediately
+    setCreatingNewDirectory(null);
+    setNewDirectoryName('');
+
+    try {
+      const res = await fetch('/api/files', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'create-directory',
+          path: parentPath,
+          name: directoryName,
+        }),
+      });
+
+      const data = await res.json();
+
+      if (!res.ok) {
+        console.error('Error creating directory:', data.error);
+        return;
+      }
+      
+      // Refresh the parent folder in tree
+      if (setRefreshFolderPath) {
+        setRefreshFolderPath(parentPath);
+        setTimeout(() => setRefreshFolderPath(null), 100);
+      }
+      
+      // Also refresh the full tree to show the new directory
+      loadFullTree();
+    } catch (err) {
+      console.error('Fehler beim Erstellen des Ordners:', err);
+    }
+  }
+
+  function cancelCreateDirectory() {
+    setCreatingNewDirectory(null);
+    setNewDirectoryName('');
+  }
+
+  function handleCreateDirectoryKeyDown(e: React.KeyboardEvent<HTMLInputElement>) {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      e.stopPropagation();
+      confirmCreateDirectory();
+    } else if (e.key === 'Escape') {
+      e.preventDefault();
+      e.stopPropagation();
+      cancelCreateDirectory();
+    }
   }
 
   function renameItemInTree(oldPath: string, newName: string) {
@@ -494,14 +566,32 @@ export default function FileTree({ currentPath, onNavigate, onRefresh, onExterna
   }
 
   return (
-    <div className="space-y-1 animate-fade-in">
+    <div 
+      className="space-y-1 animate-fade-in"
+      onContextMenu={(e) => {
+        // Check if right-click is on empty space (not on a button or item)
+        const target = e.target as HTMLElement;
+        if (!target.closest('button') && !target.closest('.tree-item')) {
+          e.preventDefault();
+          e.stopPropagation();
+          setContextMenu({
+            visible: true,
+            x: e.clientX,
+            y: e.clientY,
+            item: null,
+            isEmpty: true,
+            parentPath: '', // Root folder
+          });
+        }
+      }}
+    >
       <button
         onClick={() => onNavigate('')}
         onDragOver={handleRootDragOver}
         onDragLeave={handleRootDragLeave}
         onDrop={handleRootDrop}
         onDragEnd={handleRootDragEnd}
-        className={`group w-full text-left px-3 py-2.5 rounded-lg text-sm font-medium transition-all duration-200 flex items-center gap-2 ${
+        className={`group w-full text-left px-3 py-2.5 rounded-lg text-sm font-medium transition-all duration-200 flex items-center gap-2 tree-item ${
           isActive('')
             ? 'bg-gradient-to-r from-blue-500 to-blue-600 text-white shadow-lg shadow-blue-500/30'
             : dragOverPath === ''
@@ -556,6 +646,8 @@ export default function FileTree({ currentPath, onNavigate, onRefresh, onExterna
                 x: e.clientX,
                 y: e.clientY,
                 item: item,
+                isEmpty: false,
+                parentPath: undefined,
               });
             }}
             renamingItem={renamingItem}
@@ -570,21 +662,52 @@ export default function FileTree({ currentPath, onNavigate, onRefresh, onExterna
           />
         </div>
       ))}
-      {tree.length === 0 && (
+      {tree.length === 0 && !creatingNewDirectory && (
         <div className="text-center py-4 text-sm text-gray-400 dark:text-gray-500">
           Leer
         </div>
       )}
 
+      {/* New Directory Input */}
+      {creatingNewDirectory !== null && (
+        <div className="px-3 py-2 animate-fade-in">
+          <div className="flex items-center gap-2 px-2 py-1.5 bg-blue-50 dark:bg-blue-900/20 rounded-lg border border-blue-200 dark:border-blue-800">
+            <svg className="w-4 h-4 text-blue-600 dark:text-blue-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z" />
+            </svg>
+            <input
+              ref={newDirectoryInputRef}
+              type="text"
+              value={newDirectoryName}
+              onChange={(e) => setNewDirectoryName(e.target.value)}
+              onKeyDown={handleCreateDirectoryKeyDown}
+              onBlur={() => {
+                // Auto-confirm on blur if name is provided, cancel if empty
+                if (newDirectoryName.trim()) {
+                  setTimeout(() => {
+                    confirmCreateDirectory();
+                  }, 200);
+                } else {
+                  cancelCreateDirectory();
+                }
+              }}
+              placeholder={language === 'de' ? 'Ordnername...' : 'Folder name...'}
+              className="flex-1 bg-transparent border-none outline-none text-sm text-gray-700 dark:text-gray-300 placeholder-gray-400 dark:placeholder-gray-500"
+              autoFocus
+            />
+          </div>
+        </div>
+      )}
+
       {/* Context Menu */}
-      {contextMenu.visible && contextMenu.item && (
+      {contextMenu.visible && (
         <ContextMenu
           x={contextMenu.x}
           y={contextMenu.y}
-          onClose={() => setContextMenu({ visible: false, x: 0, y: 0, item: null })}
-          onOpen={contextMenu.item.type === 'directory' ? () => onNavigate(contextMenu.item!.path) : undefined}
-          onDownload={contextMenu.item.type === 'file' && onDownload ? () => onDownload(contextMenu.item!) : undefined}
-          onDelete={onDelete ? () => {
+          onClose={() => setContextMenu({ visible: false, x: 0, y: 0, item: null, isEmpty: false, parentPath: undefined })}
+          onOpen={contextMenu.item && contextMenu.item.type === 'directory' ? () => onNavigate(contextMenu.item!.path) : undefined}
+          onDownload={contextMenu.item && contextMenu.item.type === 'file' && onDownload ? () => onDownload(contextMenu.item!) : undefined}
+          onDelete={contextMenu.item && onDelete ? () => {
             const item = contextMenu.item!;
             onDelete(item);
             // After delete is confirmed, remove from tree
@@ -592,10 +715,23 @@ export default function FileTree({ currentPath, onNavigate, onRefresh, onExterna
             // We'll use onItemDeleted callback to remove from tree
           } : undefined}
           onRename={contextMenu.item ? () => handleRename(contextMenu.item!) : undefined}
-          onShare={onShare ? () => onShare(contextMenu.item!) : undefined}
-          onToggleFavorite={onToggleFavorite ? () => onToggleFavorite(contextMenu.item!) : undefined}
-          isFavorite={isFavorite && contextMenu.item ? isFavorite(contextMenu.item.path) : false}
-          itemType={contextMenu.item.type}
+          onShare={contextMenu.item && onShare ? () => onShare(contextMenu.item!) : undefined}
+          onToggleFavorite={contextMenu.item && onToggleFavorite ? () => onToggleFavorite(contextMenu.item!) : undefined}
+          isFavorite={contextMenu.item && isFavorite ? isFavorite(contextMenu.item.path) : false}
+          onCreateDirectory={onCreateDirectory ? () => {
+            // If clicking on a directory, create in that directory; otherwise use parentPath (empty = root)
+            const targetPath = contextMenu.item && contextMenu.item.type === 'directory' 
+              ? contextMenu.item.path 
+              : (contextMenu.parentPath || '');
+            // Set creating state and focus input
+            setCreatingNewDirectory(targetPath);
+            setNewDirectoryName('');
+            // Focus input after state update
+            setTimeout(() => {
+              newDirectoryInputRef.current?.focus();
+            }, 0);
+          } : undefined}
+          itemType={contextMenu.isEmpty ? 'empty' : (contextMenu.item?.type || 'file')}
         />
       )}
     </div>
