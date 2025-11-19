@@ -135,6 +135,7 @@ export default function FileManager({ user, onLogout, initialPath, initialFile: 
   });
   const [isResizing, setIsResizing] = useState(false);
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
+  const [mobileSearchOpen, setMobileSearchOpen] = useState(false);
   const [isMobile, setIsMobile] = useState(false);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(() => {
     if (typeof window !== 'undefined') {
@@ -2424,7 +2425,7 @@ export default function FileManager({ user, onLogout, initialPath, initialFile: 
                 </div>
               </div>
 
-              {/* Search Bar */}
+              {/* Search Bar - Hidden on mobile (shown in overlay) */}
               <div className="flex-1 max-w-md min-w-0 hidden md:block">
                 <SearchBar
                   searchQuery={searchQuery}
@@ -3250,10 +3251,7 @@ export default function FileManager({ user, onLogout, initialPath, initialFile: 
               </div>
             </FileUpload>
             <button
-              onClick={() => {
-                const searchInput = document.querySelector('input[type="search"]') as HTMLInputElement;
-                searchInput?.focus();
-              }}
+              onClick={() => setMobileSearchOpen(true)}
               className="flex flex-col items-center gap-1 p-2 text-gray-600 dark:text-gray-400 hover:text-blue-600 dark:hover:text-blue-400 transition-colors"
             >
               <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -3283,6 +3281,108 @@ export default function FileManager({ user, onLogout, initialPath, initialFile: 
                 </button>
               </>
             )}
+          </div>
+        </div>
+      )}
+
+      {/* Mobile Search Overlay */}
+      {isMobile && mobileSearchOpen && (
+        <div className="fixed inset-0 bg-black/50 z-50 md:hidden" onClick={() => setMobileSearchOpen(false)}>
+          <div 
+            className="absolute inset-0 bg-white dark:bg-gray-800 flex flex-col"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Header */}
+            <div className="flex items-center justify-between p-4 border-b border-gray-200 dark:border-gray-700">
+              <h2 className="text-lg font-semibold text-gray-900 dark:text-white">{t('search')}</h2>
+              <button
+                onClick={() => setMobileSearchOpen(false)}
+                className="p-2 text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors"
+              >
+                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+
+            {/* Search Bar */}
+            <div className="p-4 border-b border-gray-200 dark:border-gray-700">
+              <SearchBar
+                searchQuery={searchQuery}
+                onSearchChange={setSearchQuery}
+                filters={searchFilters}
+                onFiltersChange={setSearchFilters}
+                onClear={() => {
+                  setSearchQuery('');
+                  setSearchFilters({ fileType: 'all' });
+                  setIsGlobalSearch(false);
+                  setAllFiles([]);
+                }}
+              />
+            </div>
+
+            {/* Search Results Info */}
+            {(searchQuery || searchFilters.fileType !== 'all' || searchFilters.minSize || searchFilters.maxSize || searchFilters.dateFrom || searchFilters.dateTo) && (
+              <div className="px-4 py-2 text-xs text-gray-500 dark:text-gray-400 flex items-center gap-2 border-b border-gray-200 dark:border-gray-700">
+                {searchLoading ? (
+                  <>
+                    <div className="animate-spin rounded-full h-3 w-3 border-b-2 border-gray-400"></div>
+                    <span>{language === 'de' ? 'Suche...' : 'Searching...'}</span>
+                  </>
+                ) : (
+                  <>
+                    {sortedFiles.length} {sortedFiles.length === 1 ? (language === 'de' ? 'Ergebnis' : 'result') : (language === 'de' ? 'Ergebnisse' : 'results')} {language === 'de' ? 'gefunden' : 'found'}
+                    {isGlobalSearch ? (language === 'de' ? ' (in allen Ordnern)' : ' (in all folders)') : files.length !== sortedFiles.length && ` (${language === 'de' ? 'von' : 'of'} ${files.length} ${files.length === 1 ? (language === 'de' ? 'Element' : 'item') : (language === 'de' ? 'Elementen' : 'items')})`}
+                  </>
+                )}
+              </div>
+            )}
+
+            {/* Search Results List */}
+            <div className="flex-1 overflow-y-auto p-4">
+              {searchQuery || searchFilters.fileType !== 'all' || searchFilters.minSize || searchFilters.maxSize || searchFilters.dateFrom || searchFilters.dateTo ? (
+                sortedFiles.length > 0 ? (
+                  <div className="space-y-2">
+                    {sortedFiles.map((file) => (
+                      <div
+                        key={file.path}
+                        onClick={() => {
+                          if (file.type === 'directory') {
+                            navigateToPath(file.path);
+                            setMobileSearchOpen(false);
+                          } else {
+                            setPreviewFile(file);
+                            setMobileSearchOpen(false);
+                          }
+                        }}
+                        className="p-3 bg-gray-50 dark:bg-gray-700 rounded-lg border border-gray-200 dark:border-gray-600 hover:bg-gray-100 dark:hover:bg-gray-600 cursor-pointer transition-colors"
+                      >
+                        <div className="flex items-center gap-3">
+                          <FileIcon fileName={file.name} isDirectory={file.type === 'directory'} />
+                          <div className="flex-1 min-w-0">
+                            <div className="font-medium text-gray-900 dark:text-white truncate">{file.name}</div>
+                            <div className="text-xs text-gray-500 dark:text-gray-400 truncate">{file.path}</div>
+                          </div>
+                          {file.type === 'file' && (
+                            <div className="text-xs text-gray-500 dark:text-gray-400">
+                              {formatFileSize(file.size)}
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                ) : !searchLoading ? (
+                  <div className="text-center py-8 text-gray-500 dark:text-gray-400">
+                    {language === 'de' ? 'Keine Ergebnisse gefunden' : 'No results found'}
+                  </div>
+                ) : null
+              ) : (
+                <div className="text-center py-8 text-gray-500 dark:text-gray-400">
+                  {language === 'de' ? 'Geben Sie einen Suchbegriff ein' : 'Enter a search term'}
+                </div>
+              )}
+            </div>
           </div>
         </div>
       )}
