@@ -2510,7 +2510,7 @@ export default function FileManager({ user, onLogout, initialPath, initialFile: 
                             checked={selectedItems.has(file.path)}
                             onChange={(e) => {
                               e.stopPropagation();
-                              toggleSelection(file.path, index);
+                              toggleSelection(file.path);
                             }}
                             onClick={(e) => e.stopPropagation()}
                             className="w-5 h-5 rounded border-2 border-gray-300 dark:border-gray-600 text-blue-600 dark:text-blue-500 bg-white dark:bg-gray-700 focus:ring-2 focus:ring-blue-500 dark:focus:ring-blue-400 cursor-pointer transition-all duration-200 hover:border-blue-400 dark:hover:border-blue-500 checked:bg-blue-600 dark:checked:bg-blue-500 checked:border-blue-600 dark:checked:border-blue-500"
