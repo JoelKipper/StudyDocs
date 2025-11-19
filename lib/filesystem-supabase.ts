@@ -197,6 +197,15 @@ export async function getDirectoryContents(dirPath: string = ''): Promise<FileIt
     
     if (error) {
       console.error('Error loading directory contents:', error);
+      // Provide more helpful error messages
+      if (error.message?.includes('Invalid API key') || error.message?.includes('Invalid key')) {
+        console.error('⚠️ SUPABASE_SERVICE_ROLE_KEY ist ungültig oder fehlt!');
+        console.error('Bitte prüfe:');
+        console.error('1. Ist SUPABASE_SERVICE_ROLE_KEY in .env.local gesetzt?');
+        console.error('2. Ist es der service_role Key (nicht der anon Key)?');
+        console.error('3. Wurde der Server nach dem Hinzufügen neu gestartet?');
+        console.error('4. Gibt es Leerzeichen oder Zeilenumbrüche im Key?');
+      }
       return [];
     }
     

@@ -102,7 +102,14 @@ export default function FileManager({ user, onLogout, initialPath, initialFile: 
   const [newDirectoryName, setNewDirectoryName] = useState('');
   const newDirectoryInputRef = useRef<HTMLInputElement>(null);
   const [pendingRenameDirectory, setPendingRenameDirectory] = useState<string | null>(null);
-  const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' | 'info' } | null>(null);
+  const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' | 'info'; id: number } | null>(null);
+  const toastIdCounter = useRef(0);
+  
+  // Helper function to show toast with auto-incrementing ID
+  const showToast = useCallback((message: string, type: 'success' | 'error' | 'info' = 'info') => {
+    setToast({ message, type });
+  }, []);
+  
   const [searchQuery, setSearchQuery] = useState('');
   const [searchFilters, setSearchFilters] = useState<{
     fileType: 'all' | 'file' | 'directory';
@@ -206,6 +213,7 @@ export default function FileManager({ user, onLogout, initialPath, initialFile: 
       localStorage.setItem(`studydocs-sidebar-collapsed-${user.id}`, sidebarCollapsed.toString());
     }
   }, [sidebarCollapsed, user.id]);
+
 
   // Save preview width to localStorage
   useEffect(() => {
@@ -533,11 +541,11 @@ export default function FileManager({ user, onLogout, initialPath, initialFile: 
     const filesToUpload = files.slice(0, maxFiles);
     
     if (files.length > maxFiles) {
-      setToast({ message: `${files.length} Dateien ausgewählt, nur die ersten ${maxFiles} werden hochgeladen.`, type: 'info' });
+      showToast(`${files.length} Dateien ausgewählt, nur die ersten ${maxFiles} werden hochgeladen.`, 'info');
     }
     
     setUploadQueue((prevQueue) => [...prevQueue, ...filesToUpload.map(file => ({ file, targetPath }))]);
-  }, [setToast]);
+  }, [showToast]);
 
   async function handleReplaceConfirm() {
     if (replaceModal.file && replaceModal.targetPath) {
@@ -569,22 +577,16 @@ export default function FileManager({ user, onLogout, initialPath, initialFile: 
           // Multiple files
           const successCount = uploadProgress.total - uploadErrors.length;
           if (uploadErrors.length === 0) {
-            setToast({ 
-              message: `${uploadProgress.total} Dateien erfolgreich hochgeladen`, 
-              type: 'success' 
-            });
+            showToast(`${uploadProgress.total} ${t('filesUploadedSuccess')}`, 'success');
           } else {
-            setToast({ 
-              message: `${successCount} von ${uploadProgress.total} Dateien hochgeladen. ${uploadErrors.length} Fehler.`, 
-              type: 'error' 
-            });
+            showToast(`${successCount} ${t('filesUploadedPartial')} ${uploadProgress.total} ${language === 'de' ? 'Dateien hochgeladen. ' : 'files uploaded. '}${uploadErrors.length} ${language === 'de' ? 'Fehler' : 'errors'}.`, 'error');
           }
         } else {
           // Single file
           if (uploadErrors.length === 0) {
-            setToast({ message: t('fileUploaded'), type: 'success' });
+            showToast(t('fileUploaded'), 'success');
           } else {
-            setToast({ message: t('errorUploadingFile'), type: 'error' });
+            showToast(t('errorUploadingFile'), 'error');
           }
         }
         setUploadProgress(null);
@@ -641,7 +643,7 @@ export default function FileManager({ user, onLogout, initialPath, initialFile: 
         if (selectedFiles.length > 0) {
           setCopiedItems(selectedFiles);
           setIsCopyMode(true);
-          setToast({ message: `${selectedFiles.length} ${t('itemsCopied')}`, type: 'success' });
+          showToast(`${selectedFiles.length} ${t('itemsCopied')}`, 'success');
         }
         return;
       }
@@ -653,7 +655,7 @@ export default function FileManager({ user, onLogout, initialPath, initialFile: 
         if (selectedFiles.length > 0) {
           setCopiedItems(selectedFiles);
           setIsCopyMode(false);
-          setToast({ message: `${selectedFiles.length} ${t('itemsCut')}`, type: 'success' });
+          showToast(`${selectedFiles.length} ${t('itemsCut')}`, 'success');
         }
         return;
       }
@@ -949,12 +951,12 @@ export default function FileManager({ user, onLogout, initialPath, initialFile: 
         }));
         setAllFiles(results);
       } else {
-        setToast({ message: data.error || t('noResults'), type: 'error' });
+        showToast(data.error || t('noResults'), 'error');
         setAllFiles([]);
       }
     } catch (error) {
       console.error('Fehler bei der globalen Suche:', error);
-      setToast({ message: t('noResults'), type: 'error' });
+      showToast(t('noResults'), 'error');
       setAllFiles([]);
     } finally {
       setSearchLoading(false);
@@ -1219,12 +1221,10 @@ export default function FileManager({ user, onLogout, initialPath, initialFile: 
             newSet.delete(item.path);
             return newSet;
           });
-          setToast({ 
-            message: language === 'de' 
+          showToast(language === 'de' 
               ? `"${item.name}" aus Favoriten entfernt`
-              : `"${item.name}" removed from favorites`,
-            type: 'success' 
-          });
+              : `"${item.name}" removed from favorites`, 'success' 
+          );
           // Refresh favorites list if we're on the favorites tab
           if (sidebarTab === 'favorites') {
             setTreeRefreshKey((k) => k + 1);
@@ -1243,12 +1243,10 @@ export default function FileManager({ user, onLogout, initialPath, initialFile: 
         });
         if (res.ok) {
           setFavorites(prev => new Set(prev).add(item.path));
-          setToast({ 
-            message: language === 'de'
+          showToast(language === 'de'
               ? `"${item.name}" zu Favoriten hinzugefügt`
-              : `"${item.name}" added to favorites`,
-            type: 'success' 
-          });
+              : `"${item.name}" added to favorites`, 'success' 
+          );
           // Refresh favorites list if we're on the favorites tab
           if (sidebarTab === 'favorites') {
             setTreeRefreshKey((k) => k + 1);
@@ -1257,12 +1255,10 @@ export default function FileManager({ user, onLogout, initialPath, initialFile: 
       }
     } catch (error) {
       console.error('Error toggling favorite:', error);
-      setToast({ 
-        message: language === 'de'
+      showToast(language === 'de'
           ? 'Fehler beim Aktualisieren der Favoriten'
-          : 'Error updating favorites',
-        type: 'error' 
-      });
+          : 'Error updating favorites', 'error' 
+      );
     }
   }
 
@@ -1346,7 +1342,7 @@ export default function FileManager({ user, onLogout, initialPath, initialFile: 
       const data = await res.json();
 
       if (!res.ok) {
-        setToast({ message: data.error || t('errorDeleting'), type: 'error' }); // Reusing errorDeleting for now
+        showToast(data.error || t('errorDeleting'), 'error'); // Reusing errorDeleting for now
         return;
       }
       
@@ -1356,9 +1352,9 @@ export default function FileManager({ user, onLogout, initialPath, initialFile: 
       
       // Don't set pending rename - just show the directory normally
       // The user can rename it manually if needed
-      setToast({ message: t('fileRenamed'), type: 'success' }); // Reusing fileRenamed for now, could add createDirectorySuccess
+      showToast(t('fileRenamed'), 'success'); // Reusing fileRenamed for now, could add createDirectorySuccess
     } catch (err) {
-      setToast({ message: t('serverError'), type: 'error' });
+      showToast(t('serverError'), 'error');
     }
   }
 
@@ -1453,15 +1449,15 @@ export default function FileManager({ user, onLogout, initialPath, initialFile: 
         setTreeRefreshKey((k) => k + 1);
         setRenamingItem(null);
         setRenameValue('');
-        setToast({ message: t('fileRenamed'), type: 'success' });
+        showToast(t('fileRenamed'), 'success');
       } else {
-        setToast({ message: data.error || t('errorRenaming'), type: 'error' });
+        showToast(data.error || t('errorRenaming'), 'error');
         setRenamingItem(null);
         setRenameValue('');
       }
     } catch (error) {
       console.error('Fehler beim Umbenennen:', error);
-      setToast({ message: t('errorRenaming'), type: 'error' });
+      showToast(t('errorRenaming'), 'error');
       setRenamingItem(null);
       setRenameValue('');
     }
@@ -1516,16 +1512,12 @@ export default function FileManager({ user, onLogout, initialPath, initialFile: 
       }
 
       if (errors.length > 0) {
-        setToast({ 
-          message: `${t('errorDeleting')}: ${errors.length} ${t('itemsSelected')}`, 
-          type: 'error' 
-        });
+        showToast(`${t('errorDeleting')}: ${errors.length} ${t('itemsSelected')}`, 'error' 
+        );
       } else {
         const count = itemsToDelete.length;
-        setToast({ 
-          message: `${count} ${t('itemsDeleted')}`, 
-          type: 'success' 
-        });
+        showToast(`${count} ${t('itemsDeleted')}`, 'success' 
+        );
       }
 
       // Save to history for undo - store items with their full data for potential restoration
@@ -1541,7 +1533,7 @@ export default function FileManager({ user, onLogout, initialPath, initialFile: 
       setTreeRefreshKey((k) => k + 1);
     } catch (error) {
       console.error('Fehler beim Löschen:', error);
-      setToast({ message: t('errorDeleting'), type: 'error' });
+      showToast(t('errorDeleting'), 'error');
     } finally {
       setDeleteModal({ visible: false, item: null, items: [] });
     }
@@ -1552,7 +1544,7 @@ export default function FileManager({ user, onLogout, initialPath, initialFile: 
     if (selectedFiles.length > 0) {
       setCopiedItems(selectedFiles);
       setIsCopyMode(true);
-      setToast({ message: `${selectedFiles.length} ${t('itemsCopied')}`, type: 'success' });
+      showToast(`${selectedFiles.length} ${t('itemsCopied')}`, 'success');
     }
   }
 
@@ -1561,7 +1553,7 @@ export default function FileManager({ user, onLogout, initialPath, initialFile: 
     if (selectedFiles.length > 0) {
       setCopiedItems(selectedFiles);
       setIsCopyMode(false);
-      setToast({ message: `${selectedFiles.length} ${t('itemsCut')}`, type: 'success' });
+      showToast(`${selectedFiles.length} ${t('itemsCut')}`, 'success');
     }
   }
 
@@ -1569,7 +1561,7 @@ export default function FileManager({ user, onLogout, initialPath, initialFile: 
     if (copiedItems.length === 0) return;
 
     try {
-      setToast({ message: `${copiedItems.length} ${t('itemsSelected')} ${t('pasting')} ${isCopyMode ? t('copied') : t('moved')}...`, type: 'info' });
+      showToast(`${copiedItems.length} ${t('itemsSelected')} ${t('pasting')} ${isCopyMode ? t('copied') : t('moved')}...`, 'info');
 
       const action = isCopyMode ? 'copy' : 'move';
       const errors: string[] = [];
@@ -1601,10 +1593,8 @@ export default function FileManager({ user, onLogout, initialPath, initialFile: 
       }
 
       if (errors.length > 0) {
-        setToast({ 
-          message: `${t(isCopyMode ? 'errorCopying' : 'errorMoving')}: ${errors.length} ${t('itemsSelected')}`, 
-          type: 'error' 
-        });
+        showToast(`${t(isCopyMode ? 'errorCopying' : 'errorMoving')}: ${errors.length} ${t('itemsSelected')}`, 'error' 
+        );
       } else {
         // Save to history for undo - store the new paths after move/copy
         const newItems = successfulItems.map(item => {
@@ -1622,10 +1612,8 @@ export default function FileManager({ user, onLogout, initialPath, initialFile: 
           }
         }]);
 
-        setToast({ 
-          message: `${successfulItems.length} ${t('itemsSelected')} ${t('itemsPasted')} ${isCopyMode ? t('copied') : t('moved')}`, 
-          type: 'success' 
-        });
+        showToast(`${successfulItems.length} ${t('itemsSelected')} ${t('itemsPasted')} ${isCopyMode ? t('copied') : t('moved')}`, 'success' 
+        );
 
         // Clear copied items if cut mode (keep them for copy mode so user can paste multiple times)
         if (!isCopyMode) {
@@ -1637,7 +1625,7 @@ export default function FileManager({ user, onLogout, initialPath, initialFile: 
       setTreeRefreshKey((k) => k + 1);
     } catch (error: any) {
       console.error('Fehler beim Einfügen:', error);
-      setToast({ message: error.message || t('errorCopying'), type: 'error' });
+      showToast(error.message || t('errorCopying'), 'error');
     }
   }
 
@@ -1647,15 +1635,13 @@ export default function FileManager({ user, onLogout, initialPath, initialFile: 
     const lastAction = actionHistory[actionHistory.length - 1];
     
     try {
-      setToast({ message: 'Rückgängig wird gemacht...', type: 'info' });
+      showToast(t('undoing'), 'info');
 
       if (lastAction.type === 'delete') {
         // Undo delete: Recreate items (this is complex - we'd need to restore file contents)
         // For now, just show a message that undo for delete is not fully supported
-        setToast({ 
-          message: 'Rückgängig für Löschungen wird noch nicht vollständig unterstützt', 
-          type: 'info' 
-        });
+        showToast('Rückgängig für Löschungen wird noch nicht vollständig unterstützt', 'info' 
+        );
         setActionHistory(prev => prev.slice(0, -1));
         loadFiles();
         setTreeRefreshKey((k) => k + 1);
@@ -1687,7 +1673,7 @@ export default function FileManager({ user, onLogout, initialPath, initialFile: 
           }
         }
 
-        setToast({ message: 'Verschoben rückgängig gemacht', type: 'success' });
+        showToast(t('undoMoveSuccess'), 'success');
         setActionHistory(prev => prev.slice(0, -1));
         
         // Navigate to original location if we're currently in the target location
@@ -1724,7 +1710,7 @@ export default function FileManager({ user, onLogout, initialPath, initialFile: 
           }
         }
 
-        setToast({ message: 'Kopieren rückgängig gemacht', type: 'success' });
+        showToast(t('undoCopySuccess'), 'success');
         setActionHistory(prev => prev.slice(0, -1));
         loadFiles();
         setTreeRefreshKey((k) => k + 1);
@@ -1753,13 +1739,13 @@ export default function FileManager({ user, onLogout, initialPath, initialFile: 
             throw new Error(data.error || 'Fehler beim Rückgängig machen');
           }
 
-          setToast({ message: 'Umbenennen rückgängig gemacht', type: 'success' });
+          showToast(t('undoRenameSuccess'), 'success');
           setActionHistory(prev => prev.slice(0, -1));
           loadFiles();
           setTreeRefreshKey((k) => k + 1);
         } catch (error: any) {
           console.error('Fehler beim Rückgängig machen:', error);
-          setToast({ message: error.message || t('undoNotSupported'), type: 'error' });
+          showToast(error.message || t('undoNotSupported'), 'error');
         }
         return;
       }
@@ -1769,7 +1755,7 @@ export default function FileManager({ user, onLogout, initialPath, initialFile: 
       loadFiles();
     } catch (error: any) {
       console.error('Fehler beim Rückgängig machen:', error);
-      setToast({ message: error.message || t('undoNotSupported'), type: 'error' });
+      showToast(error.message || t('undoNotSupported'), 'error');
     }
   }
 
@@ -1789,7 +1775,7 @@ export default function FileManager({ user, onLogout, initialPath, initialFile: 
       }
     } catch (error) {
       console.error('Fehler beim Download:', error);
-      setToast({ message: 'Fehler beim Download', type: 'error' });
+      showToast(t('downloadError'), 'error');
     }
   }
 
@@ -1800,7 +1786,7 @@ export default function FileManager({ user, onLogout, initialPath, initialFile: 
     if (selectedFiles.length === 0) return;
 
     try {
-      setToast({ message: 'ZIP-Datei wird erstellt...', type: 'info' });
+      showToast(t('creatingZip'), 'info');
 
       const paths = selectedFiles.map(f => f.path);
       const res = await fetch('/api/files/download-zip', {
@@ -1811,7 +1797,7 @@ export default function FileManager({ user, onLogout, initialPath, initialFile: 
 
       if (!res.ok) {
         const data = await res.json();
-        setToast({ message: data.error || t('zipError'), type: 'error' });
+        showToast(data.error || t('zipError'), 'error');
         return;
       }
 
@@ -1825,10 +1811,10 @@ export default function FileManager({ user, onLogout, initialPath, initialFile: 
       window.URL.revokeObjectURL(url);
       document.body.removeChild(a);
 
-      setToast({ message: `${selectedFiles.length} ${t('itemsDownloaded')}`, type: 'success' });
+      showToast(`${selectedFiles.length} ${t('itemsDownloaded')}`, 'success');
     } catch (error) {
       console.error('Fehler beim Bulk-Download:', error);
-      setToast({ message: 'Fehler beim Download', type: 'error' });
+      showToast(t('downloadError'), 'error');
     }
   }
 
@@ -1882,7 +1868,7 @@ export default function FileManager({ user, onLogout, initialPath, initialFile: 
     
     // Don't move directory into its own subdirectory
     if (draggedItem.type === 'directory' && targetDir.path.startsWith(draggedItem.path + '/')) {
-      setToast({ message: 'Ein Verzeichnis kann nicht in sich selbst verschoben werden', type: 'error' });
+      showToast(t('cannotMoveIntoSelf'), 'error');
       setDraggedItem(null);
       return;
     }
@@ -1903,13 +1889,13 @@ export default function FileManager({ user, onLogout, initialPath, initialFile: 
       if (res.ok) {
         loadFiles();
         setTreeRefreshKey((k) => k + 1);
-        setToast({ message: `"${draggedItem.name}" wurde nach "${targetDir.name}" verschoben`, type: 'success' });
+        showToast(`"${draggedItem.name}" ${t('itemMovedTo')} "${targetDir.name}" ${t('moved')}`, 'success');
       } else {
-        setToast({ message: data.error || 'Fehler beim Verschieben', type: 'error' });
+        showToast(data.error || t('movingError'), 'error');
       }
     } catch (error) {
       console.error('Fehler beim Verschieben:', error);
-      setToast({ message: 'Fehler beim Verschieben', type: 'error' });
+      showToast(t('movingError'), 'error');
     } finally {
       setDraggedItem(null);
     }
@@ -2106,16 +2092,14 @@ export default function FileManager({ user, onLogout, initialPath, initialFile: 
                       // Find item name for toast message
                       const item = files.find(f => f.path === itemPath);
                       const target = files.find(f => f.path === targetPath);
-                      setToast({ 
-                        message: `"${item?.name || 'Element'}" wurde nach "${target?.name || 'Root'}" verschoben`, 
-                        type: 'success' 
-                      });
+                      showToast(`"${item?.name || t('file')}" ${t('itemMovedTo')} "${target?.name || t('root')}" ${t('moved')}`, 'success' 
+                      );
                     } else {
-                      setToast({ message: data.error || t('errorMoving'), type: 'error' });
+                      showToast(data.error || t('errorMoving'), 'error');
                     }
                   } catch (error) {
                     console.error('Fehler beim Verschieben:', error);
-                    setToast({ message: t('errorMoving'), type: 'error' });
+                    showToast(t('errorMoving'), 'error');
                   }
                 }}
               />
@@ -2533,7 +2517,7 @@ export default function FileManager({ user, onLogout, initialPath, initialFile: 
                           />
                         )}
                         <div className="flex-shrink-0">
-                          <FileIcon file={file} />
+                          <FileIcon fileName={file.name} isDirectory={file.type === 'directory'} />
                         </div>
                         <div className="flex-1 min-w-0">
                           <div className="flex items-center gap-2">
@@ -2623,7 +2607,7 @@ export default function FileManager({ user, onLogout, initialPath, initialFile: 
                             value={newDirectoryName}
                             onChange={(e) => setNewDirectoryName(e.target.value)}
                             onBlur={confirmCreateDirectory}
-                            onKeyDown={handleCreateDirectoryKeyDown}
+                            onKeyDown={handleNewDirectoryKeyDown}
                             placeholder={t('newDirectory')}
                             className="w-full px-2 py-1 text-sm border border-blue-500 rounded focus:outline-none focus:ring-2 focus:ring-blue-500 dark:bg-gray-700 dark:text-white"
                             autoFocus
@@ -2974,12 +2958,13 @@ export default function FileManager({ user, onLogout, initialPath, initialFile: 
                   })}
                 </tbody>
               </table>
-            )}
             {/* Virtualisierung: Spacer für nicht gerenderte Zeilen */}
             {sortedFiles.length > visibleRange.end && (
               <div style={{ height: `${(sortedFiles.length - visibleRange.end) * 48}px` }} />
             )}
-            </div>
+              </>
+            )}
+          </div>
             )}
 
             {/* File Preview - Fullscreen (only shown when file is double-clicked) */}
@@ -3175,9 +3160,12 @@ export default function FileManager({ user, onLogout, initialPath, initialFile: 
       {/* Toast */}
       {toast && (
         <Toast
+          key={`toast-${toast.id}`}
+          id={toast.id}
           message={toast.message}
           type={toast.type}
           onClose={() => setToast(null)}
+          duration={2000}
         />
       )}
     </div>

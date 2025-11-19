@@ -156,6 +156,14 @@ export const translations = {
     cannotMoveIntoSelf: 'Ein Verzeichnis kann nicht in sich selbst verschoben werden',
     movedTo: 'wurde nach',
     moved: 'verschoben',
+    itemMovedTo: 'wurde nach',
+    filesUploadedSuccess: 'Dateien erfolgreich hochgeladen',
+    filesUploadedPartial: 'von',
+    downloadError: 'Fehler beim Download',
+    movingError: 'Fehler beim Verschieben',
+    undoMoveSuccess: 'Verschoben rückgängig gemacht',
+    undoCopySuccess: 'Kopieren rückgängig gemacht',
+    undoRenameSuccess: 'Umbenennen rückgängig gemacht',
     
     // Errors
     notAuthenticated: 'Nicht authentifiziert',
@@ -325,6 +333,14 @@ export const translations = {
     cannotMoveIntoSelf: 'A directory cannot be moved into itself',
     movedTo: 'was moved to',
     moved: 'moved',
+    itemMovedTo: 'was moved to',
+    filesUploadedSuccess: 'files uploaded successfully',
+    filesUploadedPartial: 'of',
+    downloadError: 'Download error',
+    movingError: 'Error moving',
+    undoMoveSuccess: 'Move undone',
+    undoCopySuccess: 'Copy undone',
+    undoRenameSuccess: 'Rename undone',
     
     // Errors
     notAuthenticated: 'Not authenticated',
