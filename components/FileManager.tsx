@@ -2142,10 +2142,10 @@ export default function FileManager({ user, onLogout, initialPath, initialFile: 
           {/* Tabs and Collapse Button */}
           {!sidebarCollapsed && (
             <>
-              <div className="flex border-b border-gray-200 dark:border-gray-700 flex-shrink-0">
+              <div className="flex border-b border-gray-200 dark:border-gray-700 flex-shrink-0 bg-gray-50 dark:bg-gray-800/50">
                 <button
                   onClick={() => setSidebarTab('tree')}
-                  className={`flex-1 px-4 py-2 text-sm font-medium transition-colors ${
+                  className={`flex-1 px-2 md:px-4 py-2 text-sm font-medium transition-colors ${
                     sidebarTab === 'tree'
                       ? 'bg-gray-100 dark:bg-gray-700 text-blue-600 dark:text-blue-400 border-b-2 border-blue-600 dark:border-blue-400'
                       : 'text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-800/50'
@@ -2155,7 +2155,7 @@ export default function FileManager({ user, onLogout, initialPath, initialFile: 
                 </button>
                 <button
                   onClick={() => setSidebarTab('favorites')}
-                  className={`flex-1 px-4 py-2 text-sm font-medium transition-colors relative ${
+                  className={`flex-1 px-2 md:px-4 py-2 text-sm font-medium transition-colors relative ${
                     sidebarTab === 'favorites'
                       ? 'bg-gray-100 dark:bg-gray-700 text-blue-600 dark:text-blue-400 border-b-2 border-blue-600 dark:border-blue-400'
                       : 'text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-800/50'
@@ -2171,7 +2171,7 @@ export default function FileManager({ user, onLogout, initialPath, initialFile: 
                 {/* Collapse Button - Desktop only */}
                 <button
                   onClick={() => setSidebarCollapsed(!sidebarCollapsed)}
-                  className="px-3 py-2 text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors flex-shrink-0"
+                  className="px-2 md:px-3 py-2 text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors flex-shrink-0"
                   title={language === 'de' ? 'Sidebar ausblenden' : 'Hide sidebar'}
                 >
                   <svg 
