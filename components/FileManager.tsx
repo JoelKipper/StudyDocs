@@ -2055,6 +2055,7 @@ export default function FileManager({ user, onLogout, initialPath, initialFile: 
   function handleDragEnd() {
     setDraggedItem(null);
     setDragOverItem(null);
+    setInternalDragOver(false);
   }
 
   function handleExternalDragOver(file: FileItem, e: React.DragEvent) {
@@ -2460,6 +2461,14 @@ export default function FileManager({ user, onLogout, initialPath, initialFile: 
             
             // Only handle if we have draggedItem (from table) or if it's a tree drag
             if ((draggedPath && draggedType) || hasTreeDrag) {
+              // Get the parent directory of the dragged item
+              const draggedParent = draggedPath ? draggedPath.split('/').slice(0, -1).join('/') : null;
+              
+              // Don't allow dropping if the item is already in the current directory
+              if (draggedParent === currentPath) {
+                return; // Don't show animation if already in the same folder
+              }
+              
               // For now, allow dropping on current path if it's not the same as dragged path
               // We'll do full validation in onDrop
               if (!draggedPath || draggedPath !== currentPath) {
@@ -2500,12 +2509,24 @@ export default function FileManager({ user, onLogout, initialPath, initialFile: 
             const draggedType = draggedItem?.type || (hasTreeDrag ? (e.dataTransfer.getData('application/x-item-type') as 'file' | 'directory' | null) : null);
             
             if (draggedPath && draggedType && draggedPath !== currentPath) {
+              // Get the parent directory of the dragged item
+              const draggedParent = draggedPath.split('/').slice(0, -1).join('/');
+              
+              // Don't allow dropping if the item is already in the current directory
+              if (draggedParent === currentPath) {
+                setInternalDragOver(false);
+                setDragOverItem(null);
+                setDraggedItem(null);
+                return;
+              }
+              
               e.preventDefault();
               e.stopPropagation();
               setDragOverItem(null);
               
               // Don't move directory into its own subdirectory
               if (draggedType === 'directory' && currentPath.startsWith(draggedPath + '/')) {
+                setInternalDragOver(false);
                 showToast(t('cannotMoveIntoSelf'), 'error');
                 setDraggedItem(null);
                 return;
