@@ -2135,7 +2135,7 @@ export default function FileManager({ user, onLogout, initialPath, initialFile: 
         {!isMobile && (
           <div
             className={`bg-white dark:bg-gray-800 border-r border-gray-200 dark:border-gray-700 flex flex-col relative transition-all duration-300 ${
-              sidebarCollapsed ? 'w-0 overflow-hidden border-r-0' : 'flex-shrink-0'
+              sidebarCollapsed ? 'w-0 overflow-visible border-r-0' : 'flex-shrink-0'
             }`}
             style={!sidebarCollapsed ? { width: `${sidebarWidth}px`, minWidth: '200px', maxWidth: '600px' } : { width: '0px', minWidth: '0px', maxWidth: '0px' }}
           >
@@ -2271,23 +2271,6 @@ export default function FileManager({ user, onLogout, initialPath, initialFile: 
             </>
           )}
           
-          {/* Collapse Button when collapsed */}
-          {sidebarCollapsed && (
-            <button
-              onClick={() => setSidebarCollapsed(false)}
-              className="absolute top-4 -right-10 p-2 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-r-lg shadow-md hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors z-20"
-              title={language === 'de' ? 'Sidebar einblenden' : 'Show sidebar'}
-            >
-              <svg 
-                className="w-5 h-5 text-gray-600 dark:text-gray-400 rotate-180"
-                fill="none" 
-                stroke="currentColor" 
-                viewBox="0 0 24 24"
-              >
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-              </svg>
-            </button>
-          )}
           
           {/* Resize Handle - Only on Desktop */}
           {!sidebarCollapsed && (
@@ -2479,6 +2462,23 @@ export default function FileManager({ user, onLogout, initialPath, initialFile: 
             <div className="px-2 md:px-4 py-2 flex items-center gap-2 md:gap-4 flex-wrap">
               {/* Navigation */}
               <div className="flex items-center gap-1 md:gap-2 flex-shrink-0">
+                {/* Sidebar Expand Button when collapsed - Desktop only */}
+                {!isMobile && sidebarCollapsed && (
+                  <button
+                    onClick={() => setSidebarCollapsed(false)}
+                    className="p-1.5 hover:bg-gray-200 dark:hover:bg-gray-700 rounded transition-colors border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800"
+                    title={language === 'de' ? 'Sidebar einblenden' : 'Show sidebar'}
+                  >
+                    <svg 
+                      className="w-5 h-5 text-blue-600 dark:text-blue-400"
+                      fill="none" 
+                      stroke="currentColor" 
+                      viewBox="0 0 24 24"
+                    >
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
+                    </svg>
+                  </button>
+                )}
                 <button
                   onClick={navigateUp}
                   disabled={!currentPath}
