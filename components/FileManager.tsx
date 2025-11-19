@@ -70,6 +70,7 @@ export default function FileManager({ user, onLogout, initialPath, initialFile: 
   const [isGlobalSearch, setIsGlobalSearch] = useState(false);
   const [selectedFile, setSelectedFile] = useState<FileItem | null>(null);
   const [treeRefreshKey, setTreeRefreshKey] = useState(0);
+  const [refreshFolderPath, setRefreshFolderPath] = useState<string | null>(null);
   const [sortField, setSortField] = useState<SortField>('name');
   const [sortDirection, setSortDirection] = useState<SortDirection>('asc');
   const [selectedItems, setSelectedItems] = useState<Set<string>>(new Set());
@@ -651,9 +652,10 @@ export default function FileManager({ user, onLogout, initialPath, initialFile: 
   // Track upload results
   useEffect(() => {
     if (uploadQueue.length === 0 && replaceModal.isOpen === false && !isProcessingUpload) {
-      // All files processed, refresh
+      // All files processed, refresh only current directory (not the entire tree)
       loadFiles();
-      setTreeRefreshKey((k) => k + 1);
+      // Don't refresh tree on upload - only refresh if file was uploaded to a different directory
+      // setTreeRefreshKey((k) => k + 1);
       
       // Show summary toast
       if (uploadProgress) {
@@ -2038,8 +2040,20 @@ export default function FileManager({ user, onLogout, initialPath, initialFile: 
       const data = await res.json();
 
       if (res.ok) {
-        loadFiles();
-        setTreeRefreshKey((k) => k + 1);
+        // Only refresh if the move affects the current directory
+        const draggedParent = draggedPath.split('/').slice(0, -1).join('/');
+        if (draggedParent === currentPath || targetDir.path === currentPath) {
+          loadFiles();
+        }
+        // Refresh affected folders in tree
+        if (draggedParent) {
+          setRefreshFolderPath(draggedParent);
+          setTimeout(() => setRefreshFolderPath(null), 100);
+        }
+        if (targetDir.path) {
+          setRefreshFolderPath(targetDir.path);
+          setTimeout(() => setRefreshFolderPath(null), 100);
+        }
         showToast(`"${draggedName || draggedPath}" ${t('itemMovedTo')} "${targetDir.name}" ${t('moved')}`, 'success');
       } else {
         showToast(data.error || t('movingError'), 'error');
@@ -2227,6 +2241,7 @@ export default function FileManager({ user, onLogout, initialPath, initialFile: 
                 onRefresh={handleRefresh}
                 onExternalDrop={handleExternalFilesDrop}
                 userId={user.id}
+                refreshFolderPath={refreshFolderPath}
                 onFileDoubleClick={async (filePath: string, fileName: string) => {
                   // Create a FileItem from the file and open it in preview
                   const fileItem: FileItem = {
@@ -2251,12 +2266,24 @@ export default function FileManager({ user, onLogout, initialPath, initialFile: 
                     const data = await res.json();
 
                     if (res.ok) {
-                      loadFiles();
-                      setTreeRefreshKey((k) => k + 1);
+                      // Only refresh if the move affects the current directory
+                      const draggedParent = itemPath.split('/').slice(0, -1).join('/');
+                      if (draggedParent === currentPath || targetPath === currentPath) {
+                        loadFiles();
+                      }
+                      // Refresh affected folders in tree
+                      if (draggedParent) {
+                        setRefreshFolderPath(draggedParent);
+                        setTimeout(() => setRefreshFolderPath(null), 100);
+                      }
+                      if (targetPath) {
+                        setRefreshFolderPath(targetPath);
+                        setTimeout(() => setRefreshFolderPath(null), 100);
+                      }
                       // Find item name for toast message
                       const item = files.find(f => f.path === itemPath);
                       const target = files.find(f => f.path === targetPath);
-                      showToast(`"${item?.name || t('file')}" ${t('itemMovedTo')} "${target?.name || t('root')}" ${t('moved')}`, 'success' 
+                      showToast(`"${item?.name || t('file')}" ${t('itemMovedTo')} "${target?.name || t('root')}" ${t('moved')}`, 'success'
                       );
                     } else {
                       showToast(data.error || t('errorMoving'), 'error');
@@ -2370,6 +2397,7 @@ export default function FileManager({ user, onLogout, initialPath, initialFile: 
                   onRefresh={handleRefresh}
                   onExternalDrop={handleExternalFilesDrop}
                   userId={user.id}
+                  refreshFolderPath={refreshFolderPath}
                   onFileDoubleClick={async (filePath: string, fileName: string) => {
                     const fileItem: FileItem = {
                       name: fileName,
@@ -2393,8 +2421,20 @@ export default function FileManager({ user, onLogout, initialPath, initialFile: 
                       const data = await res.json();
 
                       if (res.ok) {
-                        loadFiles();
-                        setTreeRefreshKey((k) => k + 1);
+                        // Only refresh if the move affects the current directory
+                        const draggedParent = itemPath.split('/').slice(0, -1).join('/');
+                        if (draggedParent === currentPath || targetPath === currentPath) {
+                          loadFiles();
+                        }
+                        // Refresh affected folders in tree
+                        if (draggedParent) {
+                          setRefreshFolderPath(draggedParent);
+                          setTimeout(() => setRefreshFolderPath(null), 100);
+                        }
+                        if (targetPath) {
+                          setRefreshFolderPath(targetPath);
+                          setTimeout(() => setRefreshFolderPath(null), 100);
+                        }
                         const item = files.find(f => f.path === itemPath);
                         const target = files.find(f => f.path === targetPath);
                         showToast(`"${item?.name || t('file')}" ${t('itemMovedTo')} "${target?.name || t('root')}" ${t('moved')}`, 'success');
@@ -2549,8 +2589,19 @@ export default function FileManager({ user, onLogout, initialPath, initialFile: 
                   const data = await res.json();
 
                   if (res.ok) {
+                    // Only refresh current directory (item was moved here)
                     loadFiles();
-                    setTreeRefreshKey((k) => k + 1);
+                    // Refresh the current folder in tree
+                    if (currentPath) {
+                      setRefreshFolderPath(currentPath);
+                      setTimeout(() => setRefreshFolderPath(null), 100);
+                    }
+                    // Also refresh the source folder if different
+                    const draggedParent = draggedPath.split('/').slice(0, -1).join('/');
+                    if (draggedParent && draggedParent !== currentPath) {
+                      setRefreshFolderPath(draggedParent);
+                      setTimeout(() => setRefreshFolderPath(null), 100);
+                    }
                     showToast(`"${draggedName || draggedPath}" ${t('itemMovedTo')} "${currentPath.split('/').pop() || 'Root'}" ${t('moved')}`, 'success');
                   } else {
                     showToast(data.error || t('movingError'), 'error');

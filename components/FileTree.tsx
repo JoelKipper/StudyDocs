@@ -17,6 +17,7 @@ interface FileTreeProps {
   onMoveItem?: (itemPath: string, targetPath: string) => Promise<void>;
   onFileDoubleClick?: (filePath: string, fileName: string) => void;
   userId: string;
+  refreshFolderPath?: string | null;
 }
 
 interface TreeNodeData extends FileItem {
@@ -24,7 +25,7 @@ interface TreeNodeData extends FileItem {
   loaded?: boolean;
 }
 
-export default function FileTree({ currentPath, onNavigate, onRefresh, onExternalDrop, onMoveItem, onFileDoubleClick, userId }: FileTreeProps) {
+export default function FileTree({ currentPath, onNavigate, onRefresh, onExternalDrop, onMoveItem, onFileDoubleClick, userId, refreshFolderPath }: FileTreeProps) {
   const storageKey = `studydocs-tree-expanded-${userId}`;
   
   // Load expanded state from localStorage
@@ -67,6 +68,14 @@ export default function FileTree({ currentPath, onNavigate, onRefresh, onExterna
     loadFullTree();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // Refresh specific folder when refreshFolderPath changes
+  useEffect(() => {
+    if (refreshFolderPath !== null && refreshFolderPath !== undefined && refreshFolderPath !== '') {
+      refreshFolderInTree(refreshFolderPath);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [refreshFolderPath]);
 
   // Don't auto-expand paths - only expand what user manually opens
   // The currentPath will be expanded when user navigates to it via onClick
@@ -125,6 +134,35 @@ export default function FileTree({ currentPath, onNavigate, onRefresh, onExterna
       console.error('Fehler beim Laden:', error);
     }
     return [];
+  }
+
+  async function refreshFolderInTree(folderPath: string) {
+    // Load the contents of the folder
+    const refreshedContents = await loadTreeRecursive(folderPath);
+    
+    // Update the tree by finding and updating the specific folder node
+    setTree((currentTree) => {
+      const updateNode = (nodes: TreeNodeData[]): TreeNodeData[] => {
+        return nodes.map((node) => {
+          if (node.path === folderPath && node.type === 'directory') {
+            // This is the folder we want to refresh - update its children
+            return {
+              ...node,
+              children: refreshedContents,
+            };
+          } else if (node.children && node.children.length > 0) {
+            // Recursively check children
+            return {
+              ...node,
+              children: updateNode(node.children),
+            };
+          }
+          return node;
+        });
+      };
+      
+      return updateNode(currentTree);
+    });
   }
 
   function toggleExpand(path: string) {
