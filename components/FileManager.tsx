@@ -3304,7 +3304,15 @@ export default function FileManager({ user, onLogout, initialPath, initialFile: 
       />
 
       {/* Settings Modal */}
-      <SettingsModal isOpen={settingsOpen} onClose={() => setSettingsOpen(false)} />
+      <SettingsModal 
+        isOpen={settingsOpen} 
+        onClose={() => setSettingsOpen(false)}
+        user={user}
+        onUserUpdate={() => {
+          // Reload user data if needed
+          window.location.reload();
+        }}
+      />
 
       {/* Share Modal */}
       <ShareModal

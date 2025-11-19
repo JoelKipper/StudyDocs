@@ -2,6 +2,7 @@ import { cookies } from 'next/headers';
 import jwt from 'jsonwebtoken';
 import bcrypt from 'bcryptjs';
 import { supabase } from './supabase';
+import { supabaseServer } from './supabase-server';
 
 const JWT_SECRET = process.env.JWT_SECRET || 'your-secret-key-change-in-production';
 
@@ -119,4 +120,95 @@ export async function loginUser(email: string, password: string): Promise<User |
   }
   
   return { id: user.id, email: user.email, name: user.name };
+}
+
+export async function updateUserProfile(
+  userId: string,
+  updates: {
+    name?: string;
+    email?: string;
+    currentPassword?: string;
+    newPassword?: string;
+  }
+): Promise<User> {
+  // Get current user data
+  const { data: currentUser, error: fetchError } = await supabaseServer
+    .from('users')
+    .select('id, email, name, password')
+    .eq('id', userId)
+    .single();
+
+  if (fetchError || !currentUser) {
+    throw new Error('Benutzer nicht gefunden');
+  }
+
+  const updateData: { name?: string; email?: string; password?: string } = {};
+
+  // Update name if provided and different
+  if (updates.name !== undefined && updates.name.trim() !== currentUser.name.trim()) {
+    if (!updates.name.trim()) {
+      throw new Error('Name darf nicht leer sein');
+    }
+    updateData.name = updates.name.trim();
+  }
+
+  // Update email if provided and different
+  if (updates.email !== undefined && updates.email.trim().toLowerCase() !== currentUser.email.toLowerCase()) {
+    if (!updates.email.trim()) {
+      throw new Error('E-Mail darf nicht leer sein');
+    }
+    // Check if new email already exists
+    const { data: existingUser } = await supabaseServer
+      .from('users')
+      .select('id')
+      .eq('email', updates.email.trim().toLowerCase())
+      .neq('id', userId)
+      .maybeSingle();
+
+    if (existingUser) {
+      throw new Error('Ein Benutzer mit dieser E-Mail existiert bereits');
+    }
+
+    updateData.email = updates.email.trim().toLowerCase();
+  }
+
+  // Update password if provided
+  if (updates.newPassword) {
+    if (!updates.currentPassword) {
+      throw new Error('Aktuelles Passwort ist erforderlich');
+    }
+
+    // Verify current password
+    const isValid = await verifyPassword(updates.currentPassword, currentUser.password);
+    if (!isValid) {
+      throw new Error('Aktuelles Passwort ist falsch');
+    }
+
+    // Hash new password
+    updateData.password = await hashPassword(updates.newPassword);
+  }
+
+  // If no updates, throw error
+  if (Object.keys(updateData).length === 0) {
+    throw new Error('Keine Änderungen vorgenommen');
+  }
+
+  // Update user in Supabase
+  const { data, error } = await supabaseServer
+    .from('users')
+    .update(updateData)
+    .eq('id', userId)
+    .select('id, email, name')
+    .single();
+
+  if (error) {
+    console.error('Error updating user:', error);
+    throw new Error('Fehler beim Aktualisieren des Profils');
+  }
+
+  if (!data) {
+    throw new Error('Profil konnte nicht aktualisiert werden');
+  }
+
+  return { id: data.id, email: data.email, name: data.name };
 }
