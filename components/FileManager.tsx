@@ -3538,11 +3538,27 @@ export default function FileManager({ user, onLogout, initialPath, initialFile: 
                                 ? 'bg-blue-100 dark:bg-blue-900/30'
                                 : 'bg-gray-100 dark:bg-gray-700'
                             }`}>
-                              <FileIcon 
-                                fileName={file.name} 
-                                isDirectory={file.type === 'directory'}
-                                className="w-5 h-5"
-                              />
+                              {file.type === 'directory' ? (
+                                <svg
+                                  className="w-5 h-5 text-blue-500 dark:text-blue-400"
+                                  fill="none"
+                                  stroke="currentColor"
+                                  viewBox="0 0 24 24"
+                                >
+                                  <path
+                                    strokeLinecap="round"
+                                    strokeLinejoin="round"
+                                    strokeWidth={2}
+                                    d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z"
+                                  />
+                                </svg>
+                              ) : (
+                                <FileIcon 
+                                  fileName={file.name} 
+                                  isDirectory={false}
+                                  className="w-5 h-5 text-blue-500 dark:text-blue-400"
+                                />
+                              )}
                             </div>
                             <div className="flex-1 min-w-0">
                               {renamingItem?.path === file.path ? (
