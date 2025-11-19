@@ -965,6 +965,7 @@ export default function FileManager({ user, onLogout, initialPath, initialFile: 
   function navigateToPath(path: string) {
     setCurrentPath(path);
     setSelectedFile(null);
+    setPreviewFile(null); // Close preview when navigating to a different folder
   }
 
   function navigateUp() {
@@ -972,6 +973,7 @@ export default function FileManager({ user, onLogout, initialPath, initialFile: 
     parts.pop();
     setCurrentPath(parts.join('/'));
     setSelectedFile(null);
+    setPreviewFile(null); // Close preview when navigating up
   }
 
   function navigateToBreadcrumb(index: number) {
@@ -979,6 +981,7 @@ export default function FileManager({ user, onLogout, initialPath, initialFile: 
     const newPath = parts.slice(0, index + 1).join('/');
     setCurrentPath(newPath);
     setSelectedFile(null);
+    setPreviewFile(null); // Close preview when navigating via breadcrumb
   }
 
   function handleSort(field: SortField) {
