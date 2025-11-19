@@ -91,6 +91,61 @@ export default function FileTree({ currentPath, onNavigate, onRefresh, onExterna
   const [creatingNewDirectory, setCreatingNewDirectory] = useState<string | null>(null);
   const [newDirectoryName, setNewDirectoryName] = useState('');
   const newDirectoryInputRef = useRef<HTMLInputElement>(null);
+  const newDirectoryContainerRef = useRef<HTMLDivElement>(null);
+
+  // Close create directory input when navigating to a different folder
+  useEffect(() => {
+    if (creatingNewDirectory !== null) {
+      setCreatingNewDirectory(null);
+      setNewDirectoryName('');
+    }
+  }, [currentPath]);
+
+  // Close create directory input when clicking anywhere else (like Escape)
+  useEffect(() => {
+    if (creatingNewDirectory === null) return;
+
+    const closeOnClickOutside = (e: MouseEvent) => {
+      const target = e.target as HTMLElement;
+      
+      // Don't close if clicking inside the input container
+      if (
+        newDirectoryContainerRef.current &&
+        newDirectoryContainerRef.current.contains(target)
+      ) {
+        return;
+      }
+      
+      // Don't close if clicking on context menu
+      if (target.closest('[role="menu"]') || target.closest('.context-menu')) {
+        return;
+      }
+      
+      // Close on any click outside (cancel creation, like Escape)
+      setCreatingNewDirectory(null);
+      setNewDirectoryName('');
+    };
+
+    // Use a small delay to ensure the event is processed correctly
+    const timeoutId = setTimeout(() => {
+      // Listen to mousedown events (fires before click)
+      document.addEventListener('mousedown', closeOnClickOutside, true);
+    }, 0);
+
+    return () => {
+      clearTimeout(timeoutId);
+      document.removeEventListener('mousedown', closeOnClickOutside, true);
+    };
+  }, [creatingNewDirectory]);
+
+  // Wrapper for onNavigate that also closes create directory input
+  const handleNavigate = (path: string) => {
+    if (creatingNewDirectory !== null) {
+      setCreatingNewDirectory(null);
+      setNewDirectoryName('');
+    }
+    onNavigate(path);
+  };
 
   // Save expanded state to localStorage whenever it changes
   useEffect(() => {
@@ -586,7 +641,7 @@ export default function FileTree({ currentPath, onNavigate, onRefresh, onExterna
       }}
     >
       <button
-        onClick={() => onNavigate('')}
+        onClick={() => handleNavigate('')}
         onDragOver={handleRootDragOver}
         onDragLeave={handleRootDragLeave}
         onDrop={handleRootDrop}
@@ -626,7 +681,7 @@ export default function FileTree({ currentPath, onNavigate, onRefresh, onExterna
             item={item}
             level={0}
             currentPath={currentPath}
-            onNavigate={onNavigate}
+            onNavigate={handleNavigate}
             isExpanded={isExpanded}
             onToggleExpand={toggleExpand}
             onExternalDrop={onExternalDrop}
@@ -670,7 +725,7 @@ export default function FileTree({ currentPath, onNavigate, onRefresh, onExterna
 
       {/* New Directory Input */}
       {creatingNewDirectory !== null && (
-        <div className="px-3 py-2 animate-fade-in">
+        <div ref={newDirectoryContainerRef} className="px-3 py-2 animate-fade-in">
           <div className="flex items-center gap-2 px-2 py-1.5 bg-blue-50 dark:bg-blue-900/20 rounded-lg border border-blue-200 dark:border-blue-800">
             <svg className="w-4 h-4 text-blue-600 dark:text-blue-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z" />
@@ -682,14 +737,8 @@ export default function FileTree({ currentPath, onNavigate, onRefresh, onExterna
               onChange={(e) => setNewDirectoryName(e.target.value)}
               onKeyDown={handleCreateDirectoryKeyDown}
               onBlur={() => {
-                // Auto-confirm on blur if name is provided, cancel if empty
-                if (newDirectoryName.trim()) {
-                  setTimeout(() => {
-                    confirmCreateDirectory();
-                  }, 200);
-                } else {
-                  cancelCreateDirectory();
-                }
+                // onBlur is handled by the mousedown listener
+                // We don't need to do anything here to avoid conflicts
               }}
               placeholder={language === 'de' ? 'Ordnername...' : 'Folder name...'}
               className="flex-1 bg-transparent border-none outline-none text-sm text-gray-700 dark:text-gray-300 placeholder-gray-400 dark:placeholder-gray-500"
@@ -705,7 +754,7 @@ export default function FileTree({ currentPath, onNavigate, onRefresh, onExterna
           x={contextMenu.x}
           y={contextMenu.y}
           onClose={() => setContextMenu({ visible: false, x: 0, y: 0, item: null, isEmpty: false, parentPath: undefined })}
-          onOpen={contextMenu.item && contextMenu.item.type === 'directory' ? () => onNavigate(contextMenu.item!.path) : undefined}
+          onOpen={contextMenu.item && contextMenu.item.type === 'directory' ? () => handleNavigate(contextMenu.item!.path) : undefined}
           onDownload={contextMenu.item && contextMenu.item.type === 'file' && onDownload ? () => onDownload(contextMenu.item!) : undefined}
           onDelete={contextMenu.item && onDelete ? () => {
             const item = contextMenu.item!;
