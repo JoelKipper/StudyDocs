@@ -1567,8 +1567,32 @@ export default function FileManager({ user, onLogout, initialPath, initialFile: 
           }
         }]);
 
+        // Update files state immediately with the new name
+        const parentPath = renamingItem.path.split('/').slice(0, -1).join('/');
+        const normalizedParentPath = parentPath || '';
+        const normalizedCurrentPath = currentPath || '';
+        const newPath = parentPath ? `${parentPath}/${newName}` : newName;
+        
+        // If the renamed item is in the current directory, update the file list immediately
+        if (normalizedParentPath === normalizedCurrentPath) {
+          setFiles(prevFiles => 
+            prevFiles.map(file => 
+              file.path === renamingItem.path 
+                ? { ...file, name: newName, path: newPath }
+                : file
+            )
+          );
+        }
+        
+        // Also refresh from server to ensure consistency
         loadFiles();
-        setTreeRefreshKey((k) => k + 1);
+        
+        // Refresh the parent folder in tree
+        if (normalizedParentPath || normalizedParentPath === '') {
+          setRefreshFolderPath(normalizedParentPath);
+          setTimeout(() => setRefreshFolderPath(null), 100);
+        }
+        
         setRenamingItem(null);
         setRenameValue('');
         showToast(t('fileRenamed'), 'success');
@@ -1651,8 +1675,25 @@ export default function FileManager({ user, onLogout, initialPath, initialFile: 
       // Clear selection
       setSelectedItems(new Set());
       
+      // Remove deleted items from tree (only refresh affected folders, not entire tree)
+      // Collect unique parent paths to avoid duplicate refreshes
+      const parentPaths = new Set<string>();
+      itemsToDelete.forEach(item => {
+        const parentPath = item.path.split('/').slice(0, -1).join('/');
+        if (parentPath || parentPath === '') {
+          parentPaths.add(parentPath);
+        }
+      });
+      
+      // Refresh each affected parent folder (this will update the folder contents)
+      parentPaths.forEach(parentPath => {
+        setRefreshFolderPath(parentPath);
+        setTimeout(() => setRefreshFolderPath(null), 100);
+      });
+      
       loadFiles();
-      setTreeRefreshKey((k) => k + 1);
+      // Don't refresh entire tree - only affected folders are refreshed
+      // setTreeRefreshKey((k) => k + 1);
     } catch (error) {
       console.error('Fehler beim Löschen:', error);
       showToast(t('errorDeleting'), 'error');
@@ -2040,20 +2081,44 @@ export default function FileManager({ user, onLogout, initialPath, initialFile: 
       const data = await res.json();
 
       if (res.ok) {
-        // Only refresh if the move affects the current directory
+        // Refresh if the move affects the current directory (source or target)
         const draggedParent = draggedPath.split('/').slice(0, -1).join('/');
-        if (draggedParent === currentPath || targetDir.path === currentPath) {
+        const normalizedDraggedParent = draggedParent || '';
+        const normalizedCurrentPath = currentPath || '';
+        const normalizedTargetPath = targetDir.path || '';
+        
+        // Update files state immediately if source is the current directory (remove item)
+        if (normalizedDraggedParent === normalizedCurrentPath) {
+          setFiles(prevFiles => prevFiles.filter(file => file.path !== draggedPath));
+        }
+        
+        // Update files state immediately if target is the current directory (add item)
+        // We'll need to construct the new path and add it to the list
+        if (normalizedTargetPath === normalizedCurrentPath) {
+          // The item will be added when we reload, but we can add it optimistically
+          // For now, just reload to get the updated list
+          loadFiles();
+        } else if (normalizedDraggedParent === normalizedCurrentPath) {
+          // Only source is current, just reload to ensure consistency
           loadFiles();
         }
-        // Refresh affected folders in tree
-        if (draggedParent) {
-          setRefreshFolderPath(draggedParent);
-          setTimeout(() => setRefreshFolderPath(null), 100);
+        
+        // Refresh affected folders in tree (both source and target)
+        // Use Set to avoid duplicate refreshes
+        const foldersToRefresh = new Set<string>();
+        if (normalizedDraggedParent || normalizedDraggedParent === '') {
+          foldersToRefresh.add(normalizedDraggedParent);
         }
-        if (targetDir.path) {
-          setRefreshFolderPath(targetDir.path);
-          setTimeout(() => setRefreshFolderPath(null), 100);
+        if (normalizedTargetPath || normalizedTargetPath === '') {
+          foldersToRefresh.add(normalizedTargetPath);
         }
+        
+        // Refresh each folder in tree
+        foldersToRefresh.forEach(folderPath => {
+          setRefreshFolderPath(folderPath);
+          setTimeout(() => setRefreshFolderPath(null), 100);
+        });
+        
         showToast(`"${draggedName || draggedPath}" ${t('itemMovedTo')} "${targetDir.name}" ${t('moved')}`, 'success');
       } else {
         showToast(data.error || t('movingError'), 'error');
@@ -2100,7 +2165,8 @@ export default function FileManager({ user, onLogout, initialPath, initialFile: 
 
   function handleRefresh() {
     loadFiles();
-    setTreeRefreshKey((k) => k + 1);
+    // Don't refresh entire tree - only refresh affected folders via refreshFolderPath
+    // setTreeRefreshKey((k) => k + 1);
   }
 
   const pathParts = currentPath ? currentPath.split('/').filter(Boolean) : [];
@@ -2242,6 +2308,13 @@ export default function FileManager({ user, onLogout, initialPath, initialFile: 
                 onExternalDrop={handleExternalFilesDrop}
                 userId={user.id}
                 refreshFolderPath={refreshFolderPath}
+                setRefreshFolderPath={setRefreshFolderPath}
+                onRename={handleRename}
+                onDelete={openDeleteModal}
+                onDownload={handleDownload}
+                onShare={handleShare}
+                onToggleFavorite={handleToggleFavorite}
+                isFavorite={(path) => favorites.has(path)}
                 onFileDoubleClick={async (filePath: string, fileName: string) => {
                   // Create a FileItem from the file and open it in preview
                   const fileItem: FileItem = {
@@ -2250,6 +2323,40 @@ export default function FileManager({ user, onLogout, initialPath, initialFile: 
                     type: 'file',
                   };
                   setPreviewFile(fileItem);
+                }}
+                onItemDeleted={(itemPath) => {
+                  // This callback is called from FileTree when an item is deleted
+                  // The item will be removed from the tree via removeItemFromTree
+                  // We also refresh the parent folder to update its contents
+                  const parentPath = itemPath.split('/').slice(0, -1).join('/');
+                  if (parentPath || parentPath === '') {
+                    setRefreshFolderPath(parentPath);
+                    setTimeout(() => setRefreshFolderPath(null), 100);
+                  }
+                }}
+                onItemRenamed={(oldPath, newName, newPath) => {
+                  // This callback is called from FileTree when an item is renamed
+                  // The file list will be refreshed by onRefresh in FileTree
+                  // No need to do anything here - onRefresh will reload the folder
+                }}
+                onItemMoved={(oldPath, newPath) => {
+                  // This callback is called from FileTree when an item is moved
+                  // The item has already been removed from the tree by removeItemFromTree
+                  // We just need to refresh the affected folders
+                  const oldParent = oldPath.split('/').slice(0, -1).join('/');
+                  const newParent = newPath.split('/').slice(0, -1).join('/');
+                  
+                  // Refresh both source and target folders
+                  if (oldParent || oldParent === '') {
+                    setRefreshFolderPath(oldParent);
+                    setTimeout(() => setRefreshFolderPath(null), 100);
+                  }
+                  if (newParent || newParent === '') {
+                    setTimeout(() => {
+                      setRefreshFolderPath(newParent);
+                      setTimeout(() => setRefreshFolderPath(null), 100);
+                    }, 150);
+                  }
                 }}
                 onMoveItem={async (itemPath: string, targetPath: string) => {
                   try {
@@ -2266,20 +2373,39 @@ export default function FileManager({ user, onLogout, initialPath, initialFile: 
                     const data = await res.json();
 
                     if (res.ok) {
-                      // Only refresh if the move affects the current directory
+                      // Refresh if the move affects the current directory (source or target)
                       const draggedParent = itemPath.split('/').slice(0, -1).join('/');
-                      if (draggedParent === currentPath || targetPath === currentPath) {
-                        loadFiles();
+                      const normalizedDraggedParent = draggedParent || '';
+                      const normalizedCurrentPath = currentPath || '';
+                      const normalizedTargetPath = targetPath || '';
+                      
+                      // Update files state immediately if source is the current directory (remove item)
+                      if (normalizedDraggedParent === normalizedCurrentPath) {
+                        setFiles(prevFiles => prevFiles.filter(file => file.path !== itemPath));
                       }
-                      // Refresh affected folders in tree
-                      if (draggedParent) {
-                        setRefreshFolderPath(draggedParent);
+                      
+                      // Reload after a short delay to ensure API has processed the move
+                      if (normalizedTargetPath === normalizedCurrentPath || normalizedDraggedParent === normalizedCurrentPath) {
+                        setTimeout(() => {
+                          loadFiles();
+                        }, 100);
+                      }
+                      
+                      // Refresh affected folders in tree (both source and target)
+                      // Use Set to avoid duplicate refreshes
+                      const foldersToRefresh = new Set<string>();
+                      if (normalizedDraggedParent || normalizedDraggedParent === '') {
+                        foldersToRefresh.add(normalizedDraggedParent);
+                      }
+                      if (normalizedTargetPath || normalizedTargetPath === '') {
+                        foldersToRefresh.add(normalizedTargetPath);
+                      }
+                      
+                      // Refresh each folder in tree
+                      foldersToRefresh.forEach(folderPath => {
+                        setRefreshFolderPath(folderPath);
                         setTimeout(() => setRefreshFolderPath(null), 100);
-                      }
-                      if (targetPath) {
-                        setRefreshFolderPath(targetPath);
-                        setTimeout(() => setRefreshFolderPath(null), 100);
-                      }
+                      });
                       // Find item name for toast message
                       const item = files.find(f => f.path === itemPath);
                       const target = files.find(f => f.path === targetPath);
@@ -2398,6 +2524,47 @@ export default function FileManager({ user, onLogout, initialPath, initialFile: 
                   onExternalDrop={handleExternalFilesDrop}
                   userId={user.id}
                   refreshFolderPath={refreshFolderPath}
+                  setRefreshFolderPath={setRefreshFolderPath}
+                  onRename={handleRename}
+                  onDelete={openDeleteModal}
+                  onDownload={handleDownload}
+                  onShare={handleShare}
+                  onToggleFavorite={handleToggleFavorite}
+                  isFavorite={(path) => favorites.has(path)}
+                  onItemDeleted={(itemPath) => {
+                    // This callback is called from FileTree when an item is deleted
+                    // The item will be removed from the tree via removeItemFromTree
+                    // We also refresh the parent folder to update its contents
+                    const parentPath = itemPath.split('/').slice(0, -1).join('/');
+                    if (parentPath || parentPath === '') {
+                      setRefreshFolderPath(parentPath);
+                      setTimeout(() => setRefreshFolderPath(null), 100);
+                    }
+                  }}
+                  onItemRenamed={(oldPath, newName, newPath) => {
+                    // This callback is called from FileTree when an item is renamed
+                    // The file list will be refreshed by onRefresh in FileTree
+                    // No need to do anything here - onRefresh will reload the folder
+                  }}
+                  onItemMoved={(oldPath, newPath) => {
+                    // This callback is called from FileTree when an item is moved
+                    // The item has already been removed from the tree by removeItemFromTree
+                    // We just need to refresh the affected folders
+                    const oldParent = oldPath.split('/').slice(0, -1).join('/');
+                    const newParent = newPath.split('/').slice(0, -1).join('/');
+                    
+                    // Refresh both source and target folders
+                    if (oldParent || oldParent === '') {
+                      setRefreshFolderPath(oldParent);
+                      setTimeout(() => setRefreshFolderPath(null), 100);
+                    }
+                    if (newParent || newParent === '') {
+                      setTimeout(() => {
+                        setRefreshFolderPath(newParent);
+                        setTimeout(() => setRefreshFolderPath(null), 100);
+                      }, 150);
+                    }
+                  }}
                   onFileDoubleClick={async (filePath: string, fileName: string) => {
                     const fileItem: FileItem = {
                       name: fileName,
@@ -2421,11 +2588,24 @@ export default function FileManager({ user, onLogout, initialPath, initialFile: 
                       const data = await res.json();
 
                       if (res.ok) {
-                        // Only refresh if the move affects the current directory
+                        // Refresh if the move affects the current directory (source or target)
                         const draggedParent = itemPath.split('/').slice(0, -1).join('/');
-                        if (draggedParent === currentPath || targetPath === currentPath) {
-                          loadFiles();
+                        const normalizedDraggedParent = draggedParent || '';
+                        const normalizedCurrentPath = currentPath || '';
+                        const normalizedTargetPath = targetPath || '';
+                        
+                        // Update files state immediately if source is the current directory (remove item)
+                        if (normalizedDraggedParent === normalizedCurrentPath) {
+                          setFiles(prevFiles => prevFiles.filter(file => file.path !== itemPath));
                         }
+                        
+                        // Reload after a short delay to ensure API has processed the move
+                        if (normalizedTargetPath === normalizedCurrentPath || normalizedDraggedParent === normalizedCurrentPath) {
+                          setTimeout(() => {
+                            loadFiles();
+                          }, 100);
+                        }
+                        
                         // Refresh affected folders in tree
                         if (draggedParent) {
                           setRefreshFolderPath(draggedParent);
@@ -2435,6 +2615,7 @@ export default function FileManager({ user, onLogout, initialPath, initialFile: 
                           setRefreshFolderPath(targetPath);
                           setTimeout(() => setRefreshFolderPath(null), 100);
                         }
+                        
                         const item = files.find(f => f.path === itemPath);
                         const target = files.find(f => f.path === targetPath);
                         showToast(`"${item?.name || t('file')}" ${t('itemMovedTo')} "${target?.name || t('root')}" ${t('moved')}`, 'success');
@@ -2589,19 +2770,34 @@ export default function FileManager({ user, onLogout, initialPath, initialFile: 
                   const data = await res.json();
 
                   if (res.ok) {
-                    // Only refresh current directory (item was moved here)
-                    loadFiles();
-                    // Refresh the current folder in tree
-                    if (currentPath) {
-                      setRefreshFolderPath(currentPath);
-                      setTimeout(() => setRefreshFolderPath(null), 100);
-                    }
-                    // Also refresh the source folder if different
+                    // Refresh both source and target folders in tree
                     const draggedParent = draggedPath.split('/').slice(0, -1).join('/');
-                    if (draggedParent && draggedParent !== currentPath) {
-                      setRefreshFolderPath(draggedParent);
-                      setTimeout(() => setRefreshFolderPath(null), 100);
+                    const normalizedDraggedParent = draggedParent || '';
+                    const normalizedCurrentPath = currentPath || '';
+                    
+                    // Update files state immediately if source is the current directory (remove item)
+                    // Note: This shouldn't happen when dropping into current path, but handle it anyway
+                    if (normalizedDraggedParent === normalizedCurrentPath) {
+                      setFiles(prevFiles => prevFiles.filter(file => file.path !== draggedPath));
                     }
+                    
+                    // Refresh current directory immediately (item was moved here)
+                    loadFiles();
+                    
+                    // Use Set to avoid duplicate refreshes
+                    const foldersToRefresh = new Set<string>();
+                    if (normalizedDraggedParent || normalizedDraggedParent === '') {
+                      foldersToRefresh.add(normalizedDraggedParent);
+                    }
+                    if (normalizedCurrentPath || normalizedCurrentPath === '') {
+                      foldersToRefresh.add(normalizedCurrentPath);
+                    }
+                    
+                    // Refresh each folder in tree
+                    foldersToRefresh.forEach(folderPath => {
+                      setRefreshFolderPath(folderPath);
+                      setTimeout(() => setRefreshFolderPath(null), 100);
+                    });
                     showToast(`"${draggedName || draggedPath}" ${t('itemMovedTo')} "${currentPath.split('/').pop() || 'Root'}" ${t('moved')}`, 'success');
                   } else {
                     showToast(data.error || t('movingError'), 'error');

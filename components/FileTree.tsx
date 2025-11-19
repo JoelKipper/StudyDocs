@@ -1,7 +1,8 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import FileIcon from './FileIcon';
+import ContextMenu from './ContextMenu';
 
 interface FileItem {
   name: string;
@@ -18,6 +19,20 @@ interface FileTreeProps {
   onFileDoubleClick?: (filePath: string, fileName: string) => void;
   userId: string;
   refreshFolderPath?: string | null;
+  setRefreshFolderPath?: (path: string | null) => void;
+  // Context menu handlers
+  onRename?: (item: FileItem) => void;
+  onDelete?: (item: FileItem) => void;
+  onDownload?: (item: FileItem) => void;
+  onShare?: (item: FileItem) => void;
+  onToggleFavorite?: (item: FileItem) => void;
+  isFavorite?: (itemPath: string) => boolean;
+  // Callback when item is deleted - receives the item path
+  onItemDeleted?: (itemPath: string) => void;
+  // Callback when item is renamed - receives old path, new name, and new path
+  onItemRenamed?: (oldPath: string, newName: string, newPath: string) => void;
+  // Callback when item is moved - receives old path and new path
+  onItemMoved?: (oldPath: string, newPath: string) => void;
 }
 
 interface TreeNodeData extends FileItem {
@@ -25,7 +40,7 @@ interface TreeNodeData extends FileItem {
   loaded?: boolean;
 }
 
-export default function FileTree({ currentPath, onNavigate, onRefresh, onExternalDrop, onMoveItem, onFileDoubleClick, userId, refreshFolderPath }: FileTreeProps) {
+export default function FileTree({ currentPath, onNavigate, onRefresh, onExternalDrop, onMoveItem, onFileDoubleClick, userId, refreshFolderPath, setRefreshFolderPath, onRename, onDelete, onDownload, onShare, onToggleFavorite, isFavorite, onItemDeleted, onItemRenamed, onItemMoved }: FileTreeProps) {
   const storageKey = `studydocs-tree-expanded-${userId}`;
   
   // Load expanded state from localStorage
@@ -52,6 +67,20 @@ export default function FileTree({ currentPath, onNavigate, onRefresh, onExterna
   const [draggedItem, setDraggedItem] = useState<string | null>(null);
   const [draggedItemType, setDraggedItemType] = useState<'file' | 'directory' | null>(null);
   const [dragOverPath, setDragOverPath] = useState<string | null>(null);
+  const [contextMenu, setContextMenu] = useState<{
+    visible: boolean;
+    x: number;
+    y: number;
+    item: FileItem | null;
+  }>({
+    visible: false,
+    x: 0,
+    y: 0,
+    item: null,
+  });
+  const [renamingItem, setRenamingItem] = useState<FileItem | null>(null);
+  const [renameValue, setRenameValue] = useState('');
+  const renameInputRef = useRef<HTMLInputElement>(null);
 
   // Save expanded state to localStorage whenever it changes
   useEffect(() => {
@@ -71,11 +100,18 @@ export default function FileTree({ currentPath, onNavigate, onRefresh, onExterna
 
   // Refresh specific folder when refreshFolderPath changes
   useEffect(() => {
-    if (refreshFolderPath !== null && refreshFolderPath !== undefined && refreshFolderPath !== '') {
+    // Allow empty string for root folder, but not null or undefined
+    if (refreshFolderPath !== null && refreshFolderPath !== undefined) {
       refreshFolderInTree(refreshFolderPath);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [refreshFolderPath]);
+
+  // Store onItemDeleted callback in a ref so we can call removeItemFromTree when needed
+  const onItemDeletedRef = useRef(onItemDeleted);
+  useEffect(() => {
+    onItemDeletedRef.current = onItemDeleted;
+  }, [onItemDeleted]);
 
   // Don't auto-expand paths - only expand what user manually opens
   // The currentPath will be expanded when user navigates to it via onClick
@@ -165,6 +201,80 @@ export default function FileTree({ currentPath, onNavigate, onRefresh, onExterna
     });
   }
 
+  function removeItemFromTree(itemPath: string) {
+    // Remove the item from the tree by finding and removing it from its parent's children
+    setTree((currentTree) => {
+      const removeNode = (nodes: TreeNodeData[]): TreeNodeData[] => {
+        return nodes
+          .filter((node) => node.path !== itemPath) // Remove the item itself
+          .map((node) => {
+            // Recursively check children
+            if (node.children && node.children.length > 0) {
+              return {
+                ...node,
+                children: removeNode(node.children),
+              };
+            }
+            return node;
+          });
+      };
+      
+      return removeNode(currentTree);
+    });
+  }
+
+  function renameItemInTree(oldPath: string, newName: string) {
+    // Calculate the new path
+    const parentPath = oldPath.split('/').slice(0, -1).join('/');
+    const newPath = parentPath ? `${parentPath}/${newName}` : newName;
+    
+    // Update the tree by finding and renaming the item
+    setTree((currentTree) => {
+      const renameNode = (nodes: TreeNodeData[]): TreeNodeData[] => {
+        return nodes.map((node) => {
+          if (node.path === oldPath) {
+            // This is the item we want to rename
+            const renamedNode: TreeNodeData = {
+              ...node,
+              name: newName,
+              path: newPath,
+            };
+            
+            // If it's a directory, we also need to update all children paths
+            if (node.type === 'directory' && node.children) {
+              const updateChildrenPaths = (children: TreeNodeData[]): TreeNodeData[] => {
+                return children.map((child) => {
+                  const oldChildPath = child.path;
+                  const relativePath = oldChildPath.replace(oldPath + '/', '');
+                  const newChildPath = newPath ? `${newPath}/${relativePath}` : relativePath;
+                  
+                  return {
+                    ...child,
+                    path: newChildPath,
+                    children: child.children ? updateChildrenPaths(child.children) : undefined,
+                  };
+                });
+              };
+              
+              renamedNode.children = updateChildrenPaths(node.children);
+            }
+            
+            return renamedNode;
+          } else if (node.children && node.children.length > 0) {
+            // Recursively check children
+            return {
+              ...node,
+              children: renameNode(node.children),
+            };
+          }
+          return node;
+        });
+      };
+      
+      return renameNode(currentTree);
+    });
+  }
+
   function toggleExpand(path: string) {
     const newExpanded = new Set(expanded);
     if (newExpanded.has(path)) {
@@ -181,6 +291,121 @@ export default function FileTree({ currentPath, onNavigate, onRefresh, onExterna
 
   function isActive(path: string): boolean {
     return currentPath === path;
+  }
+
+  function handleRename(item: FileItem) {
+    setRenamingItem(item);
+    setRenameValue(item.name);
+    
+    // Focus input after state update and select only the name without extension
+    setTimeout(() => {
+      if (renameInputRef.current) {
+        renameInputRef.current.focus();
+        
+        // For files, select only the name without extension
+        if (item.type === 'file') {
+          const lastDotIndex = item.name.lastIndexOf('.');
+          if (lastDotIndex > 0) {
+            // Select from start to the dot (name without extension)
+            renameInputRef.current.setSelectionRange(0, lastDotIndex);
+          } else {
+            // No extension found, select all
+            renameInputRef.current.select();
+          }
+        } else {
+          // For directories, select all
+          renameInputRef.current.select();
+        }
+      }
+    }, 0);
+  }
+
+  async function confirmRename() {
+    if (!renamingItem || !renameValue.trim()) {
+      setRenamingItem(null);
+      setRenameValue('');
+      return;
+    }
+
+    const oldName = renamingItem.name;
+    const newName = renameValue.trim();
+    
+    // Check if name actually changed
+    if (newName === oldName) {
+      setRenamingItem(null);
+      setRenameValue('');
+      return;
+    }
+
+    try {
+      const res = await fetch('/api/files', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'rename',
+          path: renamingItem.path,
+          newName: newName,
+        }),
+      });
+
+      const data = await res.json();
+
+      if (res.ok) {
+        // Update only the renamed item in the tree, not the entire tree
+        renameItemInTree(renamingItem.path, newName);
+        // Also refresh the parent folder to update its contents
+        const parentPath = renamingItem.path.split('/').slice(0, -1).join('/');
+        // Refresh parent folder (even if it's root, which is empty string)
+        if (setRefreshFolderPath) {
+          setRefreshFolderPath(parentPath || '');
+          setTimeout(() => setRefreshFolderPath(null), 100);
+        }
+        
+        // Calculate new path for the renamed item
+        const newPath = parentPath ? `${parentPath}/${newName}` : newName;
+        
+        // Call onItemRenamed callback to update the file list
+        const normalizedParentPath = parentPath || '';
+        const normalizedCurrentPath = currentPath || '';
+        
+        // If the renamed item is in the current directory, refresh the file list
+        if (normalizedParentPath === normalizedCurrentPath && onRefresh) {
+          // Use a small delay to ensure the API has processed the rename
+          setTimeout(() => {
+            onRefresh();
+          }, 100);
+        }
+        
+        setRenamingItem(null);
+        setRenameValue('');
+      } else {
+        setRenamingItem(null);
+        setRenameValue('');
+        // Show error - you might want to add a toast system here
+        console.error('Error renaming:', data.error);
+      }
+    } catch (error) {
+      console.error('Fehler beim Umbenennen:', error);
+      setRenamingItem(null);
+      setRenameValue('');
+    }
+  }
+
+  function cancelRename() {
+    setRenamingItem(null);
+    setRenameValue('');
+  }
+
+  function handleRenameKeyDown(e: React.KeyboardEvent<HTMLInputElement>) {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      e.stopPropagation();
+      confirmRename();
+    } else if (e.key === 'Escape') {
+      e.preventDefault();
+      e.stopPropagation();
+      cancelRename();
+    }
   }
 
   if (loading) {
@@ -247,6 +472,13 @@ export default function FileTree({ currentPath, onNavigate, onRefresh, onExterna
       
       try {
         await onMoveItem(draggedPath, '');
+        // Remove item from tree after successful move
+        removeItemFromTree(draggedPath);
+        // Notify parent component about the move
+        if (onItemMoved) {
+          const itemName = draggedPath.split('/').pop() || '';
+          onItemMoved(draggedPath, itemName);
+        }
       } catch (error) {
         console.error('Fehler beim Verschieben:', error);
       } finally {
@@ -316,6 +548,25 @@ export default function FileTree({ currentPath, onNavigate, onRefresh, onExterna
             setDraggedItem={setDraggedItem}
             setDraggedItemType={setDraggedItemType}
             setDragOverPath={setDragOverPath}
+            onContextMenu={(item, e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              setContextMenu({
+                visible: true,
+                x: e.clientX,
+                y: e.clientY,
+                item: item,
+              });
+            }}
+            renamingItem={renamingItem}
+            renameValue={renameValue}
+            setRenameValue={setRenameValue}
+            renameInputRef={renameInputRef}
+            onRenameKeyDown={handleRenameKeyDown}
+            onConfirmRename={confirmRename}
+            onCancelRename={cancelRename}
+            onItemMoved={onItemMoved}
+            removeItemFromTree={removeItemFromTree}
           />
         </div>
       ))}
@@ -323,6 +574,29 @@ export default function FileTree({ currentPath, onNavigate, onRefresh, onExterna
         <div className="text-center py-4 text-sm text-gray-400 dark:text-gray-500">
           Leer
         </div>
+      )}
+
+      {/* Context Menu */}
+      {contextMenu.visible && contextMenu.item && (
+        <ContextMenu
+          x={contextMenu.x}
+          y={contextMenu.y}
+          onClose={() => setContextMenu({ visible: false, x: 0, y: 0, item: null })}
+          onOpen={contextMenu.item.type === 'directory' ? () => onNavigate(contextMenu.item!.path) : undefined}
+          onDownload={contextMenu.item.type === 'file' && onDownload ? () => onDownload(contextMenu.item!) : undefined}
+          onDelete={onDelete ? () => {
+            const item = contextMenu.item!;
+            onDelete(item);
+            // After delete is confirmed, remove from tree
+            // The actual deletion will be handled by FileManager's confirmDelete
+            // We'll use onItemDeleted callback to remove from tree
+          } : undefined}
+          onRename={contextMenu.item ? () => handleRename(contextMenu.item!) : undefined}
+          onShare={onShare ? () => onShare(contextMenu.item!) : undefined}
+          onToggleFavorite={onToggleFavorite ? () => onToggleFavorite(contextMenu.item!) : undefined}
+          isFavorite={isFavorite && contextMenu.item ? isFavorite(contextMenu.item.path) : false}
+          itemType={contextMenu.item.type}
+        />
       )}
     </div>
   );
@@ -344,6 +618,16 @@ interface TreeNodeProps {
   setDraggedItem: (path: string | null) => void;
   setDraggedItemType: (type: 'file' | 'directory' | null) => void;
   setDragOverPath: (path: string | null) => void;
+  onContextMenu: (item: FileItem, e: React.MouseEvent) => void;
+  renamingItem: FileItem | null;
+  renameValue: string;
+  setRenameValue: (value: string) => void;
+  renameInputRef: React.RefObject<HTMLInputElement>;
+  onRenameKeyDown: (e: React.KeyboardEvent<HTMLInputElement>) => void;
+  onConfirmRename: () => void;
+  onCancelRename: () => void;
+  onItemMoved?: (oldPath: string, newPath: string) => void;
+  removeItemFromTree: (itemPath: string) => void;
 }
 
 function TreeNode({
@@ -362,6 +646,16 @@ function TreeNode({
   setDraggedItem,
   setDraggedItemType,
   setDragOverPath,
+  onContextMenu,
+  renamingItem,
+  renameValue,
+  setRenameValue,
+  renameInputRef,
+  onRenameKeyDown,
+  onConfirmRename,
+  onCancelRename,
+  onItemMoved,
+  removeItemFromTree,
 }: TreeNodeProps) {
   const hasChildren = item.children && item.children.length > 0;
   const isActive = currentPath === item.path;
@@ -500,6 +794,14 @@ function TreeNode({
       
       try {
         await onMoveItem(draggedPath, item.path);
+        // Remove item from tree after successful move
+        removeItemFromTree(draggedPath);
+        // Notify parent component about the move
+        if (onItemMoved) {
+          const itemName = draggedPath.split('/').pop() || '';
+          const newPath = item.path ? `${item.path}/${itemName}` : itemName;
+          onItemMoved(draggedPath, newPath);
+        }
       } catch (error) {
         console.error('Fehler beim Verschieben:', error);
       } finally {
@@ -578,34 +880,64 @@ function TreeNode({
               onFileDoubleClick(item.path, item.name);
             }
           }}
+          onContextMenu={(e) => {
+            onContextMenu(item, e);
+          }}
           className="flex-1 text-left flex items-center gap-2 min-w-0"
         >
-          {item.type === 'directory' ? (
-            <svg
-              className={`w-5 h-5 flex-shrink-0 transition-transform duration-200 ${
-                isActive ? 'text-white' : 'text-blue-500 group-hover:scale-110'
-              }`}
-              fill="none"
-              stroke="currentColor"
-              viewBox="0 0 24 24"
-            >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth={2}
-                d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z"
-              />
-            </svg>
-          ) : (
-            <FileIcon
-              fileName={item.name}
-              isDirectory={false}
-              className={`w-5 h-5 flex-shrink-0 transition-transform duration-200 ${
-                isActive ? 'text-white' : 'text-gray-400 group-hover:scale-110'
-              }`}
+          {renamingItem?.path === item.path ? (
+            <input
+              ref={renameInputRef}
+              type="text"
+              value={renameValue}
+              onChange={(e) => setRenameValue(e.target.value)}
+              onKeyDown={onRenameKeyDown}
+              onBlur={() => {
+                // Auto-confirm on blur if changed, cancel if empty or unchanged
+                if (renameValue.trim() && renameValue.trim() !== item.name) {
+                  // Use setTimeout to allow the blur event to complete before confirming
+                  setTimeout(() => {
+                    onConfirmRename();
+                  }, 0);
+                } else {
+                  // Cancel
+                  onCancelRename();
+                }
+              }}
+              onClick={(e) => e.stopPropagation()}
+              className="flex-1 px-2 py-1 text-sm bg-white dark:bg-gray-700 border border-blue-500 rounded focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-900 dark:text-gray-100"
+              style={{ minWidth: '100px' }}
             />
+          ) : (
+            <>
+              {item.type === 'directory' ? (
+                <svg
+                  className={`w-5 h-5 flex-shrink-0 transition-transform duration-200 ${
+                    isActive ? 'text-white' : 'text-blue-500 group-hover:scale-110'
+                  }`}
+                  fill="none"
+                  stroke="currentColor"
+                  viewBox="0 0 24 24"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z"
+                  />
+                </svg>
+              ) : (
+                <FileIcon
+                  fileName={item.name}
+                  isDirectory={false}
+                  className={`w-5 h-5 flex-shrink-0 transition-transform duration-200 ${
+                    isActive ? 'text-white' : 'text-gray-400 group-hover:scale-110'
+                  }`}
+                />
+              )}
+              <span className="truncate">{item.name}</span>
+            </>
           )}
-          <span className="truncate">{item.name}</span>
         </button>
       </div>
       {expanded && hasChildren && (
@@ -634,6 +966,16 @@ function TreeNode({
                 setDraggedItem={setDraggedItem}
                 setDraggedItemType={setDraggedItemType}
                 setDragOverPath={setDragOverPath}
+                onContextMenu={onContextMenu}
+                renamingItem={renamingItem}
+                renameValue={renameValue}
+                setRenameValue={setRenameValue}
+                renameInputRef={renameInputRef}
+                onRenameKeyDown={onRenameKeyDown}
+                onConfirmRename={onConfirmRename}
+                onCancelRename={onCancelRename}
+                onItemMoved={onItemMoved}
+                removeItemFromTree={removeItemFromTree}
               />
             </div>
           ))}
