@@ -150,6 +150,7 @@ export default function FileManager({ user, onLogout, initialPath, initialFile: 
   const [dragOverItem, setDragOverItem] = useState<string | null>(null);
   const [externalDragOver, setExternalDragOver] = useState(false);
   const [externalDragTarget, setExternalDragTarget] = useState<string | null>(null);
+  const [internalDragOver, setInternalDragOver] = useState(false);
   const [replaceModal, setReplaceModal] = useState<{
     isOpen: boolean;
     file: File | null;
@@ -1941,6 +1942,11 @@ export default function FileManager({ user, onLogout, initialPath, initialFile: 
     setDraggedItem(file);
     e.dataTransfer.effectAllowed = 'move';
     e.dataTransfer.setData('text/plain', file.path);
+    e.dataTransfer.setData('application/x-item-type', file.type);
+    e.dataTransfer.setData('application/x-item-path', file.path);
+    e.dataTransfer.setData('application/x-item-name', file.name);
+    // Mark that this is from the table, not from the tree
+    e.dataTransfer.setData('application/x-drag-source', 'table');
     
     // Create a custom drag image
     const dragImage = document.createElement('div');
@@ -1958,10 +1964,30 @@ export default function FileManager({ user, onLogout, initialPath, initialFile: 
   }
 
   function handleDragOver(file: FileItem, e: React.DragEvent) {
-    if (file.type === 'directory' && draggedItem && draggedItem.path !== file.path) {
-      e.preventDefault();
-      e.dataTransfer.dropEffect = 'move';
-      setDragOverItem(file.path);
+    // Check if drag is from tree (external to table)
+    const dragSource = e.dataTransfer.getData('application/x-drag-source');
+    const draggedPath = draggedItem?.path || e.dataTransfer.getData('application/x-item-path');
+    const draggedType = draggedItem?.type || (e.dataTransfer.getData('application/x-item-type') as 'file' | 'directory' | null);
+    
+    if (file.type === 'directory' && draggedPath && draggedPath !== file.path && draggedType) {
+      // For directories: check if target is a subdirectory
+      if (draggedType === 'directory') {
+        const draggedParent = draggedPath.split('/').slice(0, -1).join('/');
+        const isParent = draggedParent === file.path;
+        const isSubdirectory = file.path.startsWith(draggedPath + '/');
+        
+        // Allow if it's the parent directory or if it's not a subdirectory
+        if (isParent || (!isSubdirectory && draggedPath !== file.path)) {
+          e.preventDefault();
+          e.dataTransfer.dropEffect = 'move';
+          setDragOverItem(file.path);
+        }
+      } else {
+        // For files: allow dropping on any directory
+        e.preventDefault();
+        e.dataTransfer.dropEffect = 'move';
+        setDragOverItem(file.path);
+      }
     }
   }
 
@@ -1974,19 +2000,25 @@ export default function FileManager({ user, onLogout, initialPath, initialFile: 
     e.stopPropagation();
     setDragOverItem(null);
     
-    if (!draggedItem || targetDir.type !== 'directory') {
+    // Check if drag is from tree (external to table)
+    const dragSource = e.dataTransfer.getData('application/x-drag-source');
+    const draggedPath = draggedItem?.path || e.dataTransfer.getData('application/x-item-path');
+    const draggedName = draggedItem?.name || e.dataTransfer.getData('application/x-item-name');
+    const draggedType = draggedItem?.type || (e.dataTransfer.getData('application/x-item-type') as 'file' | 'directory' | null);
+    
+    if (!draggedPath || targetDir.type !== 'directory') {
       setDraggedItem(null);
       return;
     }
     
     // Don't move item into itself
-    if (draggedItem.path === targetDir.path) {
+    if (draggedPath === targetDir.path) {
       setDraggedItem(null);
       return;
     }
     
     // Don't move directory into its own subdirectory
-    if (draggedItem.type === 'directory' && targetDir.path.startsWith(draggedItem.path + '/')) {
+    if (draggedType === 'directory' && targetDir.path.startsWith(draggedPath + '/')) {
       showToast(t('cannotMoveIntoSelf'), 'error');
       setDraggedItem(null);
       return;
@@ -1998,7 +2030,7 @@ export default function FileManager({ user, onLogout, initialPath, initialFile: 
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           action: 'move',
-          path: draggedItem.path,
+          path: draggedPath,
           targetPath: targetDir.path,
         }),
       });
@@ -2008,7 +2040,7 @@ export default function FileManager({ user, onLogout, initialPath, initialFile: 
       if (res.ok) {
         loadFiles();
         setTreeRefreshKey((k) => k + 1);
-        showToast(`"${draggedItem.name}" ${t('itemMovedTo')} "${targetDir.name}" ${t('moved')}`, 'success');
+        showToast(`"${draggedName || draggedPath}" ${t('itemMovedTo')} "${targetDir.name}" ${t('moved')}`, 'success');
       } else {
         showToast(data.error || t('movingError'), 'error');
       }
@@ -2410,22 +2442,47 @@ export default function FileManager({ user, onLogout, initialPath, initialFile: 
         {/* Main Content */}
         <div 
           className={`flex-1 flex flex-col overflow-hidden bg-white dark:bg-gray-900 relative min-w-0 ${
-            externalDragOver ? 'ring-2 ring-blue-500 ring-offset-2' : ''
+            externalDragOver || dragOverItem === currentPath ? 'ring-2 ring-blue-500 ring-offset-2' : ''
           }`}
           onDragOver={(e) => {
+            // Handle external file drops
             if (e.dataTransfer.types.includes('Files')) {
               e.preventDefault();
               setExternalDragOver(true);
               setExternalDragTarget(currentPath);
+              return;
+            }
+            
+            // Check if drag is from tree or table (internal drag)
+            const hasTreeDrag = e.dataTransfer.types.includes('application/x-item-path');
+            const draggedPath = draggedItem?.path;
+            const draggedType = draggedItem?.type;
+            
+            // Only handle if we have draggedItem (from table) or if it's a tree drag
+            if ((draggedPath && draggedType) || hasTreeDrag) {
+              // For now, allow dropping on current path if it's not the same as dragged path
+              // We'll do full validation in onDrop
+              if (!draggedPath || draggedPath !== currentPath) {
+                e.preventDefault();
+                e.dataTransfer.dropEffect = 'move';
+                setDragOverItem(currentPath);
+                setInternalDragOver(true);
+              }
             }
           }}
           onDragLeave={(e) => {
             if (!e.currentTarget.contains(e.relatedTarget as Node)) {
               setExternalDragOver(false);
               setExternalDragTarget(null);
+              setInternalDragOver(false);
+              // Only clear dragOverItem if it's the current path
+              if (dragOverItem === currentPath) {
+                setDragOverItem(null);
+              }
             }
           }}
           onDrop={(e) => {
+            // Handle external file drops
             if (e.dataTransfer.files.length > 0) {
               e.preventDefault();
               e.stopPropagation();
@@ -2433,6 +2490,57 @@ export default function FileManager({ user, onLogout, initialPath, initialFile: 
               handleExternalFilesDrop(files, currentPath);
               setExternalDragOver(false);
               setExternalDragTarget(null);
+              return;
+            }
+            
+            // Handle internal drags (from tree or table) to current path
+            const hasTreeDrag = e.dataTransfer.types.includes('application/x-item-path');
+            const draggedPath = draggedItem?.path || (hasTreeDrag ? e.dataTransfer.getData('application/x-item-path') : null);
+            const draggedName = draggedItem?.name || (hasTreeDrag ? e.dataTransfer.getData('application/x-item-name') : null);
+            const draggedType = draggedItem?.type || (hasTreeDrag ? (e.dataTransfer.getData('application/x-item-type') as 'file' | 'directory' | null) : null);
+            
+            if (draggedPath && draggedType && draggedPath !== currentPath) {
+              e.preventDefault();
+              e.stopPropagation();
+              setDragOverItem(null);
+              
+              // Don't move directory into its own subdirectory
+              if (draggedType === 'directory' && currentPath.startsWith(draggedPath + '/')) {
+                showToast(t('cannotMoveIntoSelf'), 'error');
+                setDraggedItem(null);
+                return;
+              }
+              
+              // Move item to current path
+              setInternalDragOver(false);
+              (async () => {
+                try {
+                  const res = await fetch('/api/files', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                      action: 'move',
+                      path: draggedPath,
+                      targetPath: currentPath,
+                    }),
+                  });
+
+                  const data = await res.json();
+
+                  if (res.ok) {
+                    loadFiles();
+                    setTreeRefreshKey((k) => k + 1);
+                    showToast(`"${draggedName || draggedPath}" ${t('itemMovedTo')} "${currentPath.split('/').pop() || 'Root'}" ${t('moved')}`, 'success');
+                  } else {
+                    showToast(data.error || t('movingError'), 'error');
+                  }
+                } catch (error) {
+                  console.error('Fehler beim Verschieben:', error);
+                  showToast(t('movingError'), 'error');
+                } finally {
+                  setDraggedItem(null);
+                }
+              })();
             }
           }}
         >
@@ -2450,6 +2558,25 @@ export default function FileManager({ user, onLogout, initialPath, initialFile: 
                       {externalDragTarget !== null && externalDragTarget !== currentPath
                         ? `In: ${externalDragTarget.split('/').pop() || 'Root'}`
                         : `In: ${currentPath || 'Root'}`}
+                    </p>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+          
+          {/* Internal Drag Overlay (for drags from tree or table) */}
+          {internalDragOver && (
+            <div className="absolute inset-0 z-50 bg-green-500/10 border-4 border-dashed border-green-500 flex items-center justify-center pointer-events-none">
+              <div className="bg-white dark:bg-gray-800 px-6 py-4 rounded-xl shadow-2xl border border-green-500">
+                <div className="flex items-center gap-3">
+                  <svg className="w-8 h-8 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4" />
+                  </svg>
+                  <div>
+                    <p className="font-semibold text-gray-900 dark:text-white">{language === 'de' ? 'Hier ablegen zum Verschieben' : 'Drop here to move'}</p>
+                    <p className="text-sm text-gray-600 dark:text-gray-400">
+                      {language === 'de' ? `In: ${currentPath.split('/').pop() || 'Root'}` : `Into: ${currentPath.split('/').pop() || 'Root'}`}
                     </p>
                   </div>
                 </div>
@@ -3066,17 +3193,25 @@ export default function FileManager({ user, onLogout, initialPath, initialFile: 
                         }}
                         onDragEnd={handleDragEnd}
                         onDragOver={(e) => {
-                          // Handle both internal and external drags
+                          // Check if drag is from tree (external to table) by checking dataTransfer types
+                          const hasTreeDrag = e.dataTransfer.types.includes('application/x-item-path') && !draggedItem;
+                          
+                          // Handle external file drops
                           if (e.dataTransfer.types.includes('Files') && !draggedItem) {
                             handleExternalDragOver(file, e);
-                          } else {
+                          } else if (hasTreeDrag || draggedItem) {
+                            // Handle drags from tree or internal drags
                             handleDragOver(file, e);
                           }
                         }}
                         onDragLeave={(e) => {
+                          // Check if drag is from tree (external to table) by checking dataTransfer types
+                          const hasTreeDrag = e.dataTransfer.types.includes('application/x-item-path') && !draggedItem;
+                          
                           if (e.dataTransfer.types.includes('Files') && !draggedItem) {
                             handleExternalDragLeave();
-                          } else {
+                          } else if (hasTreeDrag || draggedItem) {
+                            // Handle drags from tree or internal drags
                             handleDragLeave();
                           }
                         }}

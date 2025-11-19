@@ -164,8 +164,12 @@ export default function FileTree({ currentPath, onNavigate, onRefresh, onExterna
       return;
     }
     
-    // Handle internal item moves
-    if (draggedItem && draggedItem !== '') {
+    // Check if drag is from table (external to tree)
+    const dragSource = e.dataTransfer.getData('application/x-drag-source');
+    const draggedPath = draggedItem || e.dataTransfer.getData('application/x-item-path');
+    
+    // Handle internal item moves or items dragged from table
+    if (draggedPath && draggedPath !== '') {
       e.preventDefault();
       e.stopPropagation();
       e.dataTransfer.dropEffect = 'move';
@@ -191,16 +195,20 @@ export default function FileTree({ currentPath, onNavigate, onRefresh, onExterna
       return;
     }
     
-    // Handle internal item moves
-    if (draggedItem && onMoveItem) {
+    // Check if drag is from table (external to tree)
+    const dragSource = e.dataTransfer.getData('application/x-drag-source');
+    const draggedPath = draggedItem || e.dataTransfer.getData('application/x-item-path');
+    
+    // Handle internal item moves or items dragged from table
+    if (draggedPath && onMoveItem) {
       // Don't move root into root (shouldn't happen, but just in case)
-      if (draggedItem === '') {
+      if (draggedPath === '') {
         setDraggedItem(null);
         return;
       }
       
       try {
-        await onMoveItem(draggedItem, '');
+        await onMoveItem(draggedPath, '');
       } catch (error) {
         console.error('Fehler beim Verschieben:', error);
       } finally {
@@ -329,6 +337,11 @@ function TreeNode({
     setDraggedItemType(item.type);
     e.dataTransfer.effectAllowed = 'move';
     e.dataTransfer.setData('text/plain', item.path);
+    e.dataTransfer.setData('application/x-item-type', item.type);
+    e.dataTransfer.setData('application/x-item-path', item.path);
+    e.dataTransfer.setData('application/x-item-name', item.name);
+    // Mark that this is from the tree, not from the table
+    e.dataTransfer.setData('application/x-drag-source', 'tree');
     
     // Create a custom drag image
     const dragImage = document.createElement('div');
@@ -359,16 +372,21 @@ function TreeNode({
       return;
     }
     
-    // Handle internal item moves (both files and directories)
-    if (draggedItem && draggedItem !== item.path && draggedItemType) {
+    // Check if drag is from table (external to tree)
+    const dragSource = e.dataTransfer.getData('application/x-drag-source');
+    const draggedPath = draggedItem || e.dataTransfer.getData('application/x-item-path');
+    const draggedType = draggedItemType || (e.dataTransfer.getData('application/x-item-type') as 'file' | 'directory' | null);
+    
+    // Handle internal item moves (both files and directories) or items dragged from table
+    if (draggedPath && draggedPath !== item.path && draggedType) {
       // For directories: check if target is a subdirectory
-      if (draggedItemType === 'directory') {
-        const draggedParent = draggedItem.split('/').slice(0, -1).join('/');
+      if (draggedType === 'directory') {
+        const draggedParent = draggedPath.split('/').slice(0, -1).join('/');
         const isParent = draggedParent === item.path;
-        const isSubdirectory = item.path.startsWith(draggedItem + '/');
+        const isSubdirectory = item.path.startsWith(draggedPath + '/');
         
         // Allow if it's the parent directory or if it's not a subdirectory
-        if (isParent || (!isSubdirectory && draggedItem !== item.path)) {
+        if (isParent || (!isSubdirectory && draggedPath !== item.path)) {
           e.preventDefault();
           e.stopPropagation();
           e.dataTransfer.dropEffect = 'move';
@@ -413,21 +431,26 @@ function TreeNode({
       return;
     }
     
-    // Handle internal item moves (both files and directories)
-    if (item.type === 'directory' && draggedItem && draggedItemType && onMoveItem) {
+    // Check if drag is from table (external to tree)
+    const dragSource = e.dataTransfer.getData('application/x-drag-source');
+    const draggedPath = draggedItem || e.dataTransfer.getData('application/x-item-path');
+    const draggedType = draggedItemType || (e.dataTransfer.getData('application/x-item-type') as 'file' | 'directory' | null);
+    
+    // Handle internal item moves (both files and directories) or items dragged from table
+    if (item.type === 'directory' && draggedPath && draggedType && onMoveItem) {
       // Don't move item into itself
-      if (draggedItem === item.path) {
+      if (draggedPath === item.path) {
         setDraggedItem(null);
         setDraggedItemType(null);
         return;
       }
       
-      if (draggedItemType === 'directory') {
+      if (draggedType === 'directory') {
         // For directories: Don't move directory into its own subdirectory
         // But allow moving to parent (one level up)
-        const draggedParent = draggedItem.split('/').slice(0, -1).join('/');
+        const draggedParent = draggedPath.split('/').slice(0, -1).join('/');
         const isParent = draggedParent === item.path;
-        const isSubdirectory = item.path.startsWith(draggedItem + '/');
+        const isSubdirectory = item.path.startsWith(draggedPath + '/');
         
         if (isSubdirectory && !isParent) {
           setDraggedItem(null);
@@ -438,7 +461,7 @@ function TreeNode({
       // For files: no additional validation needed, can be moved to any directory
       
       try {
-        await onMoveItem(draggedItem, item.path);
+        await onMoveItem(draggedPath, item.path);
       } catch (error) {
         console.error('Fehler beim Verschieben:', error);
       } finally {
