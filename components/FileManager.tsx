@@ -2902,7 +2902,6 @@ export default function FileManager({ user, onLogout, initialPath, initialFile: 
                   </svg>
                 </button>
                 <div className="hidden md:flex items-center gap-1 text-sm text-gray-600 dark:text-gray-400 px-2 min-w-0">
-                  <span className="font-medium">{language === 'de' ? 'Pfad:' : 'Path:'}</span>
                   <div className="flex items-center gap-1 min-w-0">
                     <button
                       onClick={() => navigateToPath('')}

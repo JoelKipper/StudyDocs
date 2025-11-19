@@ -107,7 +107,7 @@ export default function SearchBar({
         {searchQuery && (
           <button
             onClick={onClear}
-            className="absolute inset-y-0 right-0 pr-3 flex items-center text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
+            className="absolute inset-y-0 right-8 flex items-center text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
           >
             <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path
@@ -122,7 +122,7 @@ export default function SearchBar({
         <button
           ref={filterButtonRef}
           onClick={() => setShowFilters(!showFilters)}
-          className={`absolute right-8 top-1/2 -translate-y-1/2 p-1 rounded ${
+          className={`absolute right-0 top-1/2 -translate-y-1/2 pr-3 flex items-center ${
             showFilters || filters.fileType !== 'all' || filters.minSize || filters.maxSize || filters.dateFrom || filters.dateTo
               ? 'text-blue-600 dark:text-blue-400'
               : 'text-gray-400 hover:text-gray-600 dark:hover:text-gray-300'
