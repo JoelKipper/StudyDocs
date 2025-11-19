@@ -85,6 +85,7 @@ export default function ContextMenu({
       className="fixed z-50 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg shadow-xl py-1 min-w-[180px] animate-scale-in"
       style={{ left: `${x}px`, top: `${y}px` }}
       onClick={(e) => e.stopPropagation()}
+      onMouseLeave={onClose}
     >
       {itemType === 'directory' && onOpen && (
         <button
