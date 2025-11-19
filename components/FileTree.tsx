@@ -34,8 +34,8 @@ export default function FileTree({ currentPath, onNavigate, onRefresh, onExterna
       const saved = localStorage.getItem(storageKey);
       if (saved) {
         try {
-          const paths = JSON.parse(saved);
-          const savedSet = new Set(paths);
+          const paths = JSON.parse(saved) as string[];
+          const savedSet = new Set<string>(paths);
           // Only load saved paths, don't auto-expand root or current path
           return savedSet;
         } catch (e) {
