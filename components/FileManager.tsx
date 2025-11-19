@@ -193,6 +193,16 @@ export default function FileManager({ user, onLogout, initialPath, initialFile: 
   const [visibleRange, setVisibleRange] = useState({ start: 0, end: 50 }); // Virtualisierung: nur sichtbare Zeilen rendern
   const fileListContainerRef = useRef<HTMLDivElement>(null);
   const [filesLoaded, setFilesLoaded] = useState(false); // Track when files are loaded to trigger animation
+  
+  // Marquee selection state
+  const [marqueeSelection, setMarqueeSelection] = useState<{
+    isActive: boolean;
+    startX: number;
+    startY: number;
+    endX: number;
+    endY: number;
+  } | null>(null);
+  const marqueeStartRef = useRef<{ x: number; y: number } | null>(null);
 
   // Save path to localStorage whenever it changes
   useEffect(() => {
@@ -322,6 +332,78 @@ export default function FileManager({ user, onLogout, initialPath, initialFile: 
       return prev;
     });
   }, [files, sortField, sortDirection, loading]);
+
+  // Marquee selection handlers - defined before useEffect
+  const handleMarqueeMouseMove = useCallback((e: MouseEvent) => {
+    if (!marqueeSelection?.isActive || !marqueeStartRef.current) return;
+
+    const container = fileListContainerRef.current;
+    if (!container) return;
+
+    const rect = container.getBoundingClientRect();
+    const endX = e.clientX - rect.left;
+    const endY = e.clientY - rect.top + container.scrollTop;
+
+    setMarqueeSelection({
+      isActive: true,
+      startX: marqueeStartRef.current.x,
+      startY: marqueeStartRef.current.y,
+      endX,
+      endY,
+    });
+
+    // Update selection in real-time as marquee moves
+    const sorted = getSortedFiles();
+    const newSelection = new Set<string>();
+
+    const minX = Math.min(marqueeStartRef.current.x, endX);
+    const maxX = Math.max(marqueeStartRef.current.x, endX);
+    const minY = Math.min(marqueeStartRef.current.y, endY);
+    const maxY = Math.max(marqueeStartRef.current.y, endY);
+
+    sorted.forEach((file) => {
+      const row = container.querySelector(`tr[data-file-path="${file.path}"]`) as HTMLElement;
+      if (row) {
+        const rowRect = row.getBoundingClientRect();
+        const rowTop = rowRect.top - rect.top + container.scrollTop;
+        const rowBottom = rowTop + rowRect.height;
+        const rowLeft = rowRect.left - rect.left;
+        const rowRight = rowLeft + rowRect.width;
+
+        // Check if row intersects with marquee rectangle
+        const intersects =
+          rowLeft < maxX &&
+          rowRight > minX &&
+          rowTop < maxY &&
+          rowBottom > minY;
+
+        if (intersects) {
+          newSelection.add(file.path);
+        }
+      }
+    });
+
+    setSelectedItems(newSelection);
+  }, [marqueeSelection]);
+
+  const handleMarqueeMouseUp = useCallback(() => {
+    if (marqueeSelection?.isActive) {
+      setMarqueeSelection(null);
+      marqueeStartRef.current = null;
+    }
+  }, [marqueeSelection]);
+
+  // Marquee selection event listeners
+  useEffect(() => {
+    if (marqueeSelection?.isActive) {
+      document.addEventListener('mousemove', handleMarqueeMouseMove);
+      document.addEventListener('mouseup', handleMarqueeMouseUp);
+      return () => {
+        document.removeEventListener('mousemove', handleMarqueeMouseMove);
+        document.removeEventListener('mouseup', handleMarqueeMouseUp);
+      };
+    }
+  }, [marqueeSelection, handleMarqueeMouseMove, handleMarqueeMouseUp]);
 
   // Virtualisierung: Intersection Observer für Lazy Loading beim Scrollen
   useEffect(() => {
@@ -1091,6 +1173,42 @@ export default function FileManager({ user, onLogout, initialPath, initialFile: 
       return newSet;
     });
   }
+
+  // Marquee selection handlers
+  const handleMarqueeMouseDown = useCallback((e: React.MouseEvent<HTMLDivElement>) => {
+    // Only start marquee selection if clicking on empty space (not on a file row or other interactive element)
+    const target = e.target as HTMLElement;
+    if (target.closest('tr') || target.closest('button') || target.closest('input') || target.closest('a') || target.closest('th') || target.closest('td')) {
+      return;
+    }
+
+    // Prevent marquee selection on mobile
+    if (isMobile) return;
+
+    // Don't start if clicking on the table itself (only on empty space)
+    if (target.closest('table')) {
+      return;
+    }
+
+    const container = fileListContainerRef.current;
+    if (!container) return;
+
+    const rect = container.getBoundingClientRect();
+    const startX = e.clientX - rect.left;
+    const startY = e.clientY - rect.top + container.scrollTop;
+
+    marqueeStartRef.current = { x: startX, y: startY };
+    setMarqueeSelection({
+      isActive: true,
+      startX,
+      startY,
+      endX: startX,
+      endY: startY,
+    });
+
+    e.preventDefault();
+    e.stopPropagation();
+  }, [isMobile]);
 
   function selectRange(startIndex: number, endIndex: number) {
     const sorted = getSortedFiles();
@@ -2518,6 +2636,8 @@ export default function FileManager({ user, onLogout, initialPath, initialFile: 
                 ref={fileListContainerRef}
                 className="flex flex-col overflow-auto relative flex-1 w-full"
                 onContextMenu={handleEmptyContextMenu}
+                onMouseDown={handleMarqueeMouseDown}
+                style={{ userSelect: marqueeSelection?.isActive ? 'none' : 'auto' }}
                 onTouchStart={(e) => {
                   if (isMobile && fileListContainerRef.current?.scrollTop === 0) {
                     pullStartY.current = e.touches[0].clientY;
@@ -2564,6 +2684,20 @@ export default function FileManager({ user, onLogout, initialPath, initialFile: 
                     </div>
                   </div>
                 )}
+                
+                {/* Marquee Selection Rectangle */}
+                {marqueeSelection && marqueeSelection.isActive && (
+                  <div
+                    className="absolute border-2 border-blue-500 bg-blue-500/10 pointer-events-none z-50"
+                    style={{
+                      left: `${Math.min(marqueeSelection.startX, marqueeSelection.endX)}px`,
+                      top: `${Math.min(marqueeSelection.startY, marqueeSelection.endY)}px`,
+                      width: `${Math.abs(marqueeSelection.endX - marqueeSelection.startX)}px`,
+                      height: `${Math.abs(marqueeSelection.endY - marqueeSelection.startY)}px`,
+                    }}
+                  />
+                )}
+                
             {loading ? (
               <div className="flex flex-col items-center justify-center h-full">
                 <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mb-4"></div>
