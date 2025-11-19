@@ -35,23 +35,16 @@ export default function FileTree({ currentPath, onNavigate, onRefresh, onExterna
       if (saved) {
         try {
           const paths = JSON.parse(saved);
-          return new Set(paths);
+          const savedSet = new Set(paths);
+          // Only load saved paths, don't auto-expand root or current path
+          return savedSet;
         } catch (e) {
-          // Fallback to default
+          // Fallback to empty set
         }
       }
     }
-    // Always include root and current path
-    const defaultExpanded = new Set(['']);
-    if (currentPath) {
-      const parts = currentPath.split('/').filter(Boolean);
-      let current = '';
-      parts.forEach((part) => {
-        current = current ? `${current}/${part}` : part;
-        defaultExpanded.add(current);
-      });
-    }
-    return defaultExpanded;
+    // Start with empty set - only expand what user manually opens
+    return new Set<string>();
   });
   const [loading, setLoading] = useState(true);
   const [treeLoaded, setTreeLoaded] = useState(false); // Track when tree is loaded to trigger animation
@@ -61,9 +54,12 @@ export default function FileTree({ currentPath, onNavigate, onRefresh, onExterna
 
   // Save expanded state to localStorage whenever it changes
   useEffect(() => {
-    if (typeof window !== 'undefined') {
+    if (typeof window !== 'undefined' && expanded.size > 0) {
       const paths = Array.from(expanded);
       localStorage.setItem(storageKey, JSON.stringify(paths));
+    } else if (typeof window !== 'undefined' && expanded.size === 0) {
+      // Clear localStorage if nothing is expanded
+      localStorage.removeItem(storageKey);
     }
   }, [expanded, storageKey]);
 
@@ -72,24 +68,8 @@ export default function FileTree({ currentPath, onNavigate, onRefresh, onExterna
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  useEffect(() => {
-    // Auto-expand path to current directory
-    if (currentPath) {
-      const parts = currentPath.split('/').filter(Boolean);
-      const pathsToExpand = [''];
-      let current = '';
-      parts.forEach((part) => {
-        current = current ? `${current}/${part}` : part;
-        pathsToExpand.push(current);
-      });
-      // Merge with existing expanded paths
-      setExpanded(prev => {
-        const newExpanded = new Set(prev);
-        pathsToExpand.forEach(path => newExpanded.add(path));
-        return newExpanded;
-      });
-    }
-  }, [currentPath]);
+  // Don't auto-expand paths - only expand what user manually opens
+  // The currentPath will be expanded when user navigates to it via onClick
 
   async function loadFullTree() {
     setLoading(true);
@@ -522,6 +502,7 @@ function TreeNode({
         <button
           onClick={() => {
             if (item.type === 'directory') {
+              // Only navigate, don't auto-expand
               onNavigate(item.path);
             } else {
               // For files, navigate to parent directory
