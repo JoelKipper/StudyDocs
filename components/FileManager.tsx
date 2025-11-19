@@ -107,7 +107,7 @@ export default function FileManager({ user, onLogout, initialPath, initialFile: 
   
   // Helper function to show toast with auto-incrementing ID
   const showToast = useCallback((message: string, type: 'success' | 'error' | 'info' = 'info') => {
-    setToast({ message, type });
+    setToast({ message, type, id: ++toastIdCounter.current });
   }, []);
   
   const [searchQuery, setSearchQuery] = useState('');
