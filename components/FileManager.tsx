@@ -2077,7 +2077,7 @@ export default function FileManager({ user, onLogout, initialPath, initialFile: 
   }, [currentPath, isMobile]);
 
   return (
-    <div className="min-h-screen bg-gray-50 dark:bg-gray-900 flex flex-col">
+    <div className="h-screen bg-gray-50 dark:bg-gray-900 flex flex-col overflow-hidden">
       {/* Header */}
       <header className="bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 shadow-sm">
         <div className="px-4 sm:px-6 lg:px-8 py-3">
@@ -3231,7 +3231,7 @@ export default function FileManager({ user, onLogout, initialPath, initialFile: 
             {/* File Preview - Fullscreen (only shown when file is double-clicked) */}
             {previewFile && (
               <div 
-                className="relative overflow-hidden flex-1 bg-gray-50 dark:bg-gray-900"
+                className="relative flex-1 bg-gray-50 dark:bg-gray-900 flex flex-col overflow-hidden min-h-0"
               >
                 <FilePreview
                   file={previewFile}

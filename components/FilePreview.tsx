@@ -153,7 +153,7 @@ export default function FilePreview({ file, onClose }: FilePreviewProps) {
 
 
   return (
-    <div className="w-full h-full flex flex-col bg-white dark:bg-gray-800 border-l border-gray-200 dark:border-gray-700">
+    <div className="w-full h-full flex flex-col bg-white dark:bg-gray-800 border-l border-gray-200 dark:border-gray-700 overflow-hidden">
       {/* Header */}
       <div className="flex items-center justify-between p-3 border-b border-gray-200 dark:border-gray-700 flex-shrink-0">
         <div className="flex items-center gap-3 flex-1 min-w-0">
@@ -235,7 +235,7 @@ export default function FilePreview({ file, onClose }: FilePreviewProps) {
       </div>
 
       {/* Preview Content */}
-      <div className={`flex-1 overflow-hidden bg-gray-50 dark:bg-gray-900 ${previewType === 'pdf' ? 'p-0 relative' : 'p-4'}`} style={{ position: 'relative', minHeight: '100%' }}>
+      <div className={`flex-1 overflow-y-auto bg-gray-50 dark:bg-gray-900 ${previewType === 'pdf' ? 'p-0 relative' : 'p-4'}`} style={{ position: 'relative' }}>
         {error ? (
           <div className="flex items-center justify-center h-full">
             <div className="text-center">
@@ -274,20 +274,15 @@ export default function FilePreview({ file, onClose }: FilePreviewProps) {
             </div>
           </div>
         ) : previewType === 'pdf' && previewUrl ? (
-          <div className="w-full h-full relative" style={{ minHeight: '100%', height: '100%' }}>
+          <div className="w-full min-h-full relative">
             {/* Use object tag for better PDF support */}
             <object
               data={previewUrl}
               type="application/pdf"
-              className="w-full h-full border-0"
+              className="w-full border-0"
               style={{ 
                 width: '100%', 
-                height: '100%',
-                position: 'absolute',
-                top: 0,
-                left: 0,
-                right: 0,
-                bottom: 0
+                minHeight: '100vh'
               }}
               onLoad={() => {
                 setLoading(false);
@@ -302,16 +297,11 @@ export default function FilePreview({ file, onClose }: FilePreviewProps) {
               <iframe
                 ref={iframeRef}
                 src={previewUrl}
-                className="w-full h-full border-0"
+                className="w-full border-0"
                 title={file.name}
                 style={{ 
                   width: '100%', 
-                  height: '100%',
-                  position: 'absolute',
-                  top: 0,
-                  left: 0,
-                  right: 0,
-                  bottom: 0
+                  minHeight: '100vh'
                 }}
                 onLoad={() => {
                   setLoading(false);
@@ -324,7 +314,7 @@ export default function FilePreview({ file, onClose }: FilePreviewProps) {
               />
             </object>
             {loading && (
-              <div className="absolute inset-0 flex items-center justify-center bg-gray-50 dark:bg-gray-900 z-10">
+              <div className="sticky top-0 left-0 right-0 flex items-center justify-center bg-gray-50 dark:bg-gray-900 z-10 py-8">
                 <div className="text-center">
                   <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
                   <p className="text-gray-600 dark:text-gray-400">{t('loading')}</p>
@@ -332,7 +322,7 @@ export default function FilePreview({ file, onClose }: FilePreviewProps) {
               </div>
             )}
             {error && (
-              <div className="absolute inset-0 flex items-center justify-center bg-gray-50 dark:bg-gray-900 z-10">
+              <div className="sticky top-0 left-0 right-0 flex items-center justify-center bg-gray-50 dark:bg-gray-900 z-10 py-8">
                 <div className="text-center">
                   <div className="w-16 h-16 bg-red-100 dark:bg-red-900/20 rounded-full flex items-center justify-center mx-auto mb-4">
                     <svg className="w-8 h-8 text-red-600 dark:text-red-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -345,7 +335,7 @@ export default function FilePreview({ file, onClose }: FilePreviewProps) {
             )}
           </div>
         ) : previewType === 'image' && previewUrl ? (
-          <div className="w-full h-full flex items-center justify-center">
+          <div className="w-full min-h-full flex items-center justify-center py-8">
             <img
               src={previewUrl}
               alt={file.name}
@@ -355,7 +345,7 @@ export default function FilePreview({ file, onClose }: FilePreviewProps) {
         ) : previewType === 'text' && previewUrl ? (
           <TextPreview url={previewUrl} />
         ) : previewType === 'video' && previewUrl ? (
-          <div className="w-full h-full flex items-center justify-center bg-black">
+          <div className="w-full min-h-full flex items-center justify-center bg-black py-8">
             <video
               src={previewUrl}
               controls
@@ -370,7 +360,7 @@ export default function FilePreview({ file, onClose }: FilePreviewProps) {
             </video>
           </div>
         ) : previewType === 'audio' && previewUrl ? (
-          <div className="w-full h-full flex items-center justify-center bg-gray-50 dark:bg-gray-900 p-8">
+          <div className="w-full min-h-full flex items-center justify-center bg-gray-50 dark:bg-gray-900 p-8">
             <div className="w-full max-w-2xl bg-white dark:bg-gray-800 rounded-lg shadow-lg p-6">
               <div className="flex items-center gap-4 mb-6">
                 <div className="w-16 h-16 bg-blue-100 dark:bg-blue-900/20 rounded-lg flex items-center justify-center flex-shrink-0">
@@ -400,11 +390,12 @@ export default function FilePreview({ file, onClose }: FilePreviewProps) {
             </div>
           </div>
         ) : previewType === 'office' && previewUrl ? (
-          <div className="w-full h-full relative">
+          <div className="w-full min-h-full relative">
             <iframe
               src={`https://view.officeapps.live.com/op/embed.aspx?src=${encodeURIComponent(typeof window !== 'undefined' ? window.location.origin + previewUrl : previewUrl)}`}
-              className="w-full h-full border-0"
+              className="w-full border-0"
               title={file.name}
+              style={{ minHeight: '100vh' }}
               onLoad={() => {
                 setLoading(false);
                 setError('');
@@ -415,7 +406,7 @@ export default function FilePreview({ file, onClose }: FilePreviewProps) {
               }}
             />
             {loading && (
-              <div className="absolute inset-0 flex items-center justify-center bg-gray-50 dark:bg-gray-900 z-10">
+              <div className="sticky top-0 left-0 right-0 flex items-center justify-center bg-gray-50 dark:bg-gray-900 z-10 py-8">
                 <div className="text-center">
                   <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
                   <p className="text-gray-600 dark:text-gray-400">{t('loading')}</p>
@@ -423,7 +414,7 @@ export default function FilePreview({ file, onClose }: FilePreviewProps) {
               </div>
             )}
             {error && (
-              <div className="absolute inset-0 flex items-center justify-center bg-gray-50 dark:bg-gray-900 z-10">
+              <div className="sticky top-0 left-0 right-0 flex items-center justify-center bg-gray-50 dark:bg-gray-900 z-10 py-8">
                 <div className="text-center">
                   <div className="w-16 h-16 bg-red-100 dark:bg-red-900/20 rounded-full flex items-center justify-center mx-auto mb-4">
                     <svg className="w-8 h-8 text-red-600 dark:text-red-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -501,7 +492,7 @@ function TextPreview({ url }: { url: string }) {
   }
 
   return (
-    <div className="bg-white dark:bg-gray-800 rounded-lg shadow-lg p-6 w-full h-full overflow-auto">
+    <div className="bg-white dark:bg-gray-800 rounded-lg shadow-lg p-6 w-full">
       <pre className="text-sm text-gray-900 dark:text-gray-100 whitespace-pre-wrap font-mono">
         {content}
       </pre>
