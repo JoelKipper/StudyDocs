@@ -6,9 +6,10 @@ import ReplaceModal from './ReplaceModal';
 interface FileUploadProps {
   currentPath: string;
   onUploaded: () => void;
+  children?: React.ReactNode;
 }
 
-export default function FileUpload({ currentPath, onUploaded }: FileUploadProps) {
+export default function FileUpload({ currentPath, onUploaded, children }: FileUploadProps) {
   const [uploading, setUploading] = useState(false);
   const [error, setError] = useState('');
   const [progress, setProgress] = useState(0);
@@ -101,25 +102,34 @@ export default function FileUpload({ currentPath, onUploaded }: FileUploadProps)
           onChange={handleFileSelect}
           disabled={uploading}
           className="hidden"
-          id="file-upload"
+          id={`file-upload-${currentPath}`}
         />
-        <label
-          htmlFor="file-upload"
-          className={`inline-flex items-center justify-center p-2 rounded-lg transition-colors cursor-pointer ${
-            uploading
-              ? 'text-gray-400 cursor-not-allowed'
-              : 'text-gray-600 hover:text-gray-900 dark:text-gray-400 dark:hover:text-gray-100 hover:bg-gray-100 dark:hover:bg-gray-700'
-          }`}
-          title="Datei hochladen"
-        >
-          {uploading ? (
-            <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-gray-400"></div>
-          ) : (
-            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
-            </svg>
-          )}
-        </label>
+        {children ? (
+          <label
+            htmlFor={`file-upload-${currentPath}`}
+            className={`cursor-pointer ${uploading ? 'opacity-50 cursor-not-allowed' : ''}`}
+          >
+            {children}
+          </label>
+        ) : (
+          <label
+            htmlFor={`file-upload-${currentPath}`}
+            className={`inline-flex items-center justify-center p-2 rounded-lg transition-colors cursor-pointer ${
+              uploading
+                ? 'text-gray-400 cursor-not-allowed'
+                : 'text-gray-600 hover:text-gray-900 dark:text-gray-400 dark:hover:text-gray-100 hover:bg-gray-100 dark:hover:bg-gray-700'
+            }`}
+            title="Datei hochladen"
+          >
+            {uploading ? (
+              <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-gray-400"></div>
+            ) : (
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
+              </svg>
+            )}
+          </label>
+        )}
         {uploading && progress > 0 && (
           <div className="absolute top-full left-0 right-0 mt-2 h-1 bg-gray-200 dark:bg-gray-700 rounded-full overflow-hidden">
             <div

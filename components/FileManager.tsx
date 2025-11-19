@@ -127,6 +127,17 @@ export default function FileManager({ user, onLogout, initialPath, initialFile: 
     return 256;
   });
   const [isResizing, setIsResizing] = useState(false);
+  const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
+  const [isMobile, setIsMobile] = useState(false);
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(() => {
+    if (typeof window !== 'undefined') {
+      const saved = localStorage.getItem(`studydocs-sidebar-collapsed-${user.id}`);
+      return saved === 'true';
+    }
+    return false;
+  });
+  const [pullToRefresh, setPullToRefresh] = useState({ isPulling: false, distance: 0 });
+  const pullStartY = useRef<number | null>(null);
   const [draggedItem, setDraggedItem] = useState<FileItem | null>(null);
   const [dragOverItem, setDragOverItem] = useState<string | null>(null);
   const [externalDragOver, setExternalDragOver] = useState(false);
@@ -189,6 +200,13 @@ export default function FileManager({ user, onLogout, initialPath, initialFile: 
     }
   }, [sidebarWidth, user.id]);
 
+  // Save sidebar collapsed state to localStorage
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      localStorage.setItem(`studydocs-sidebar-collapsed-${user.id}`, sidebarCollapsed.toString());
+    }
+  }, [sidebarCollapsed, user.id]);
+
   // Save preview width to localStorage
   useEffect(() => {
     if (typeof window !== 'undefined') {
@@ -196,8 +214,10 @@ export default function FileManager({ user, onLogout, initialPath, initialFile: 
     }
   }, [previewWidth, user.id]);
 
-  // Handle sidebar resize
+  // Handle sidebar resize (Desktop only)
   useEffect(() => {
+    if (isMobile) return; // Don't allow resizing on mobile
+    
     function handleMouseMove(e: MouseEvent) {
       if (!isResizing) return;
       
@@ -222,7 +242,7 @@ export default function FileManager({ user, onLogout, initialPath, initialFile: 
       document.body.style.cursor = '';
       document.body.style.userSelect = '';
     };
-  }, [isResizing]);
+  }, [isResizing, isMobile]);
 
   // Handle preview resize
   useEffect(() => {
@@ -1934,6 +1954,23 @@ export default function FileManager({ user, onLogout, initialPath, initialFile: 
   const pathParts = currentPath ? currentPath.split('/').filter(Boolean) : [];
   const sortedFiles = getSortedFiles();
 
+  // Detect mobile viewport
+  useEffect(() => {
+    function checkMobile() {
+      setIsMobile(window.innerWidth < 768); // md breakpoint
+    }
+    checkMobile();
+    window.addEventListener('resize', checkMobile);
+    return () => window.removeEventListener('resize', checkMobile);
+  }, []);
+
+  // Close mobile sidebar when navigating
+  useEffect(() => {
+    if (isMobile) {
+      setMobileSidebarOpen(false);
+    }
+  }, [currentPath, isMobile]);
+
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-gray-900 flex flex-col">
       {/* Header */}
@@ -1980,11 +2017,27 @@ export default function FileManager({ user, onLogout, initialPath, initialFile: 
         </div>
       </header>
 
-      <div className="flex-1 flex overflow-hidden">
+      <div className="flex-1 flex overflow-hidden relative">
+        {/* Mobile Sidebar Overlay */}
+        {isMobile && mobileSidebarOpen && (
+          <div
+            className="fixed inset-0 bg-black/50 z-40 md:hidden"
+            onClick={() => setMobileSidebarOpen(false)}
+          />
+        )}
+
         {/* Sidebar - File Tree / Favorites */}
         <div
-          className="bg-white dark:bg-gray-800 border-r border-gray-200 dark:border-gray-700 flex flex-col relative"
-          style={{ width: `${sidebarWidth}px`, minWidth: '200px', maxWidth: '600px' }}
+          className={`bg-white dark:bg-gray-800 border-r border-gray-200 dark:border-gray-700 flex flex-col relative transition-all duration-300 ${
+            isMobile
+              ? `fixed inset-y-0 left-0 z-50 w-80 shadow-2xl ${
+                  mobileSidebarOpen ? 'translate-x-0' : '-translate-x-full'
+                }`
+              : sidebarCollapsed
+              ? 'w-0 overflow-hidden'
+              : ''
+          }`}
+          style={!isMobile && !sidebarCollapsed ? { width: `${sidebarWidth}px`, minWidth: '200px', maxWidth: '600px' } : {}}
         >
           {/* Tabs */}
           <div className="flex border-b border-gray-200 dark:border-gray-700 flex-shrink-0">
@@ -2101,21 +2154,23 @@ export default function FileManager({ user, onLogout, initialPath, initialFile: 
             <StorageQuota />
           </div>
           
-          {/* Resize Handle */}
-          <div
-            onMouseDown={(e) => {
-              e.preventDefault();
-              setIsResizing(true);
-            }}
-            className={`absolute top-0 right-0 w-1 h-full cursor-col-resize hover:bg-blue-500 transition-colors ${
-              isResizing ? 'bg-blue-500' : 'bg-transparent'
-            }`}
-            style={{ zIndex: 10 }}
-          >
-            <div className="absolute top-1/2 right-0 transform -translate-y-1/2 translate-x-1/2 w-3 h-12 bg-gray-300 dark:bg-gray-600 rounded-full flex items-center justify-center opacity-0 hover:opacity-100 transition-opacity">
-              <div className="w-0.5 h-8 bg-gray-500 dark:bg-gray-400 rounded-full"></div>
+          {/* Resize Handle - Only on Desktop */}
+          {!isMobile && (
+            <div
+              onMouseDown={(e) => {
+                e.preventDefault();
+                setIsResizing(true);
+              }}
+              className={`absolute top-0 right-0 w-1 h-full cursor-col-resize hover:bg-blue-500 transition-colors ${
+                isResizing ? 'bg-blue-500' : 'bg-transparent'
+              }`}
+              style={{ zIndex: 10 }}
+            >
+              <div className="absolute top-1/2 right-0 transform -translate-y-1/2 translate-x-1/2 w-3 h-12 bg-gray-300 dark:bg-gray-600 rounded-full flex items-center justify-center opacity-0 hover:opacity-100 transition-opacity">
+                <div className="w-0.5 h-8 bg-gray-500 dark:bg-gray-400 rounded-full"></div>
+              </div>
             </div>
-          </div>
+          )}
         </div>
 
         {/* Main Content */}
@@ -2170,9 +2225,27 @@ export default function FileManager({ user, onLogout, initialPath, initialFile: 
 
           {/* Toolbar */}
           <div className="border-b border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800/50 flex-shrink-0 relative">
-            <div className="px-4 py-2 flex items-center gap-4">
+            <div className="px-2 md:px-4 py-2 flex items-center gap-2 md:gap-4 flex-wrap">
+              {/* Sidebar Toggle Button - Mobile only */}
+              {isMobile && (
+                <button
+                  onClick={() => setMobileSidebarOpen(!mobileSidebarOpen)}
+                  className="p-1.5 hover:bg-gray-200 dark:hover:bg-gray-700 rounded transition-colors flex-shrink-0"
+                  title={mobileSidebarOpen ? (language === 'de' ? 'Sidebar ausblenden' : 'Hide sidebar') : (language === 'de' ? 'Sidebar einblenden' : 'Show sidebar')}
+                >
+                  {mobileSidebarOpen ? (
+                    <svg className="w-5 h-5 text-gray-600 dark:text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                    </svg>
+                  ) : (
+                    <svg className="w-5 h-5 text-gray-600 dark:text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
+                    </svg>
+                  )}
+                </button>
+              )}
               {/* Navigation */}
-              <div className="flex items-center gap-2 flex-shrink-0">
+              <div className="flex items-center gap-1 md:gap-2 flex-shrink-0">
                 <button
                   onClick={navigateUp}
                   disabled={!currentPath}
@@ -2192,7 +2265,7 @@ export default function FileManager({ user, onLogout, initialPath, initialFile: 
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
                   </svg>
                 </button>
-                <div className="flex items-center gap-1 text-sm text-gray-600 dark:text-gray-400 px-2 min-w-0">
+                <div className="hidden md:flex items-center gap-1 text-sm text-gray-600 dark:text-gray-400 px-2 min-w-0">
                   <span className="font-medium">{language === 'de' ? 'Pfad:' : 'Path:'}</span>
                   <div className="flex items-center gap-1 min-w-0">
                     <button
@@ -2216,10 +2289,29 @@ export default function FileManager({ user, onLogout, initialPath, initialFile: 
                     ))}
                   </div>
                 </div>
+                {/* Mobile Breadcrumb - Simplified */}
+                <div className="md:hidden flex items-center gap-1 text-xs text-gray-600 dark:text-gray-400 min-w-0 flex-1">
+                  <button
+                    onClick={() => navigateToPath('')}
+                    className="hover:text-blue-600 dark:hover:text-blue-400 truncate font-medium"
+                  >
+                    {t('root')}
+                  </button>
+                  {pathParts.length > 0 && (
+                    <>
+                      <svg className="w-3 h-3 text-gray-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                      </svg>
+                      <span className="truncate font-medium">
+                        {pathParts[pathParts.length - 1]}
+                      </span>
+                    </>
+                  )}
+                </div>
               </div>
 
               {/* Search Bar */}
-              <div className="flex-1 max-w-md min-w-0">
+              <div className="flex-1 max-w-md min-w-0 hidden md:block">
                 <SearchBar
                   searchQuery={searchQuery}
                   onSearchChange={setSearchQuery}
@@ -2283,33 +2375,80 @@ export default function FileManager({ user, onLogout, initialPath, initialFile: 
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
                   </svg>
                 </button>
-                {/* Always available buttons */}
+                {/* Always available buttons - Hidden on mobile (moved to bottom nav) */}
                 <button
                   onClick={handleCreateDirectory}
-                  className="p-2 text-gray-600 hover:text-gray-900 dark:text-gray-400 dark:hover:text-gray-100 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors"
+                  className="hidden md:flex p-2 text-gray-600 hover:text-gray-900 dark:text-gray-400 dark:hover:text-gray-100 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors"
                   title={t('newDirectory')}
                 >
                   <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z" />
                   </svg>
                 </button>
-                <FileUpload
-                  currentPath={currentPath}
-                  onUploaded={handleRefresh}
-                />
+                <div className="hidden md:block">
+                  <FileUpload
+                    currentPath={currentPath}
+                    onUploaded={handleRefresh}
+                  />
+                </div>
               </div>
             </div>
           </div>
 
           {/* File List and Preview Container */}
-          <div className="flex-1 flex overflow-hidden">
+          <div className="flex-1 flex overflow-hidden pb-16 md:pb-0">
             {/* File List - Table View */}
             {!previewFile && (
               <div 
                 ref={fileListContainerRef}
                 className="flex flex-col overflow-auto relative flex-1"
                 onContextMenu={handleEmptyContextMenu}
+                onTouchStart={(e) => {
+                  if (isMobile && fileListContainerRef.current?.scrollTop === 0) {
+                    pullStartY.current = e.touches[0].clientY;
+                  }
+                }}
+                onTouchMove={(e) => {
+                  if (isMobile && pullStartY.current !== null && fileListContainerRef.current?.scrollTop === 0) {
+                    const distance = e.touches[0].clientY - pullStartY.current;
+                    if (distance > 0) {
+                      setPullToRefresh({ isPulling: true, distance: Math.min(distance, 100) });
+                    }
+                  }
+                }}
+                onTouchEnd={() => {
+                  if (isMobile && pullToRefresh.isPulling && pullToRefresh.distance > 50) {
+                    handleRefresh();
+                  }
+                  setPullToRefresh({ isPulling: false, distance: 0 });
+                  pullStartY.current = null;
+                }}
               >
+                {/* Pull to Refresh Indicator */}
+                {isMobile && pullToRefresh.isPulling && (
+                  <div 
+                    className="absolute top-0 left-0 right-0 flex items-center justify-center bg-blue-50 dark:bg-blue-900/20 transition-all duration-200"
+                    style={{ 
+                      height: `${Math.min(pullToRefresh.distance, 100)}px`,
+                      transform: `translateY(-${Math.min(pullToRefresh.distance, 100)}px)`
+                    }}
+                  >
+                    <div className="flex flex-col items-center gap-2">
+                      {pullToRefresh.distance > 50 ? (
+                        <>
+                          <svg className="w-6 h-6 text-blue-600 dark:text-blue-400 animate-spin" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                          </svg>
+                          <span className="text-xs text-blue-600 dark:text-blue-400 font-medium">{t('refresh')}</span>
+                        </>
+                      ) : (
+                        <svg className="w-6 h-6 text-blue-600 dark:text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 14l-7 7m0 0l-7-7m7 7V3" />
+                        </svg>
+                      )}
+                    </div>
+                  </div>
+                )}
             {loading ? (
               <div className="flex flex-col items-center justify-center h-full">
                 <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mb-4"></div>
@@ -2335,7 +2474,168 @@ export default function FileManager({ user, onLogout, initialPath, initialFile: 
                 </p>
               </div>
             ) : (
-              <table className="w-full">
+              <>
+                {/* Mobile Card View */}
+                <div className="md:hidden space-y-2 p-2">
+                  {sortedFiles.map((file, index) => (
+                    <div
+                      key={file.path}
+                      className={`bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-3 transition-all duration-200 ${
+                        selectedItems.has(file.path)
+                          ? 'ring-2 ring-blue-500 dark:ring-blue-400 bg-blue-50 dark:bg-blue-900/20'
+                          : 'hover:bg-gray-50 dark:hover:bg-gray-700/50'
+                      } ${filesLoaded ? 'animate-slide-down-stagger' : 'opacity-0'}`}
+                      style={{ animationDelay: filesLoaded ? `${index * 50}ms` : '0ms' }}
+                      onClick={(e) => {
+                        if (e.detail === 1) {
+                          const timer = setTimeout(() => {
+                            if (!clickTimerRef.current) return;
+                            handleRowClick(file, e);
+                          }, 200);
+                          clickTimerRef.current = timer;
+                        }
+                      }}
+                      onDoubleClick={(e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        if (clickTimerRef.current) {
+                          clearTimeout(clickTimerRef.current);
+                          clickTimerRef.current = null;
+                        }
+                        if (file.type === 'directory') {
+                          navigateToPath(file.path);
+                        } else {
+                          setPreviewFile(file);
+                        }
+                      }}
+                      onContextMenu={(e) => {
+                        e.preventDefault();
+                        setContextMenu({
+                          visible: true,
+                          x: e.clientX,
+                          y: e.clientY,
+                          item: file,
+                          isEmpty: false,
+                        });
+                      }}
+                    >
+                      <div className="flex items-center gap-3">
+                        {selectedItems.size > 0 && (
+                          <input
+                            type="checkbox"
+                            checked={selectedItems.has(file.path)}
+                            onChange={(e) => {
+                              e.stopPropagation();
+                              toggleSelection(file.path, index);
+                            }}
+                            onClick={(e) => e.stopPropagation()}
+                            className="w-5 h-5 rounded border-2 border-gray-300 dark:border-gray-600 text-blue-600 dark:text-blue-500 bg-white dark:bg-gray-700 focus:ring-2 focus:ring-blue-500 dark:focus:ring-blue-400 cursor-pointer transition-all duration-200 hover:border-blue-400 dark:hover:border-blue-500 checked:bg-blue-600 dark:checked:bg-blue-500 checked:border-blue-600 dark:checked:border-blue-500"
+                          />
+                        )}
+                        <div className="flex-shrink-0">
+                          <FileIcon file={file} />
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-2">
+                            <p className="text-sm font-medium text-gray-900 dark:text-white truncate">
+                              {renamingItem?.path === file.path ? (
+                                <input
+                                  ref={renameInputRef}
+                                  type="text"
+                                  value={renameValue}
+                                  onChange={(e) => setRenameValue(e.target.value)}
+                                  onBlur={confirmRename}
+                                  onKeyDown={handleRenameKeyDown}
+                                  className="w-full px-2 py-1 text-sm border border-blue-500 rounded focus:outline-none focus:ring-2 focus:ring-blue-500 dark:bg-gray-700 dark:text-white"
+                                  onClick={(e) => e.stopPropagation()}
+                                />
+                              ) : (
+                                file.name
+                              )}
+                            </p>
+                            {file.type === 'file' && file.size !== undefined && (
+                              <span className="text-xs text-gray-500 dark:text-gray-400 flex-shrink-0">
+                                {formatSize(file.size)}
+                              </span>
+                            )}
+                            {file.type === 'directory' && file.size !== undefined && file.size > 0 && (
+                              <span className="text-xs text-gray-500 dark:text-gray-400 flex-shrink-0">
+                                {formatSize(file.size)}
+                              </span>
+                            )}
+                          </div>
+                          {file.metadata?.lastModifiedAt && (
+                            <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                              {new Date(file.metadata.lastModifiedAt).toLocaleDateString(language === 'de' ? 'de-DE' : 'en-US', {
+                                day: '2-digit',
+                                month: '2-digit',
+                                year: 'numeric',
+                              })}
+                            </p>
+                          )}
+                        </div>
+                        <div className="flex items-center gap-1">
+                          {file.type === 'file' && (
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setPreviewFile(file);
+                              }}
+                              className="p-1.5 text-gray-500 hover:text-blue-600 dark:text-gray-400 dark:hover:text-blue-400 hover:bg-gray-100 dark:hover:bg-gray-700 rounded transition-colors"
+                              title={t('open')}
+                            >
+                              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+                              </svg>
+                            </button>
+                          )}
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleDownload(file);
+                            }}
+                            className="p-1.5 text-gray-500 hover:text-green-600 dark:text-gray-400 dark:hover:text-green-400 hover:bg-gray-100 dark:hover:bg-gray-700 rounded transition-colors"
+                            title={t('download')}
+                          >
+                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+                            </svg>
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                  {creatingNewDirectory && (
+                    <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-3 bg-blue-50 dark:bg-blue-900/20">
+                      <div className="flex items-center gap-3">
+                        <div className="flex-shrink-0">
+                          <div className="w-8 h-8 bg-blue-100 dark:bg-blue-900/30 rounded flex items-center justify-center">
+                            <svg className="w-5 h-5 text-blue-600 dark:text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z" />
+                            </svg>
+                          </div>
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <input
+                            ref={newDirectoryInputRef}
+                            type="text"
+                            value={newDirectoryName}
+                            onChange={(e) => setNewDirectoryName(e.target.value)}
+                            onBlur={confirmCreateDirectory}
+                            onKeyDown={handleCreateDirectoryKeyDown}
+                            placeholder={t('newDirectory')}
+                            className="w-full px-2 py-1 text-sm border border-blue-500 rounded focus:outline-none focus:ring-2 focus:ring-blue-500 dark:bg-gray-700 dark:text-white"
+                            autoFocus
+                          />
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+                {/* Desktop Table View */}
+                <table className="hidden md:table w-full">
                 <thead className="bg-gray-50 dark:bg-gray-800/50 border-b border-gray-200 dark:border-gray-700 sticky top-0 z-10">
                   <tr>
                     <th 
@@ -2797,6 +3097,77 @@ export default function FileManager({ user, onLogout, initialPath, initialFile: 
                   ? 'Datei erfolgreich hochgeladen'
                   : 'Datei wird hochgeladen...'}
             </p>
+          </div>
+        </div>
+      )}
+
+      {/* Mobile Bottom Navigation */}
+      {isMobile && (
+        <div className="fixed bottom-0 left-0 right-0 bg-white dark:bg-gray-800 border-t border-gray-200 dark:border-gray-700 z-30 md:hidden">
+          <div className="flex items-center justify-around py-2 px-4">
+            <button
+              onClick={() => setMobileSidebarOpen(true)}
+              className="flex flex-col items-center gap-1 p-2 text-gray-600 dark:text-gray-400 hover:text-blue-600 dark:hover:text-blue-400 transition-colors"
+            >
+              <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
+              </svg>
+              <span className="text-xs">{language === 'de' ? 'Ordner' : 'Folders'}</span>
+            </button>
+            <button
+              onClick={handleCreateDirectory}
+              className="flex flex-col items-center gap-1 p-2 text-gray-600 dark:text-gray-400 hover:text-blue-600 dark:hover:text-blue-400 transition-colors"
+            >
+              <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z" />
+              </svg>
+              <span className="text-xs">{t('newDirectory')}</span>
+            </button>
+            <FileUpload
+              currentPath={currentPath}
+              onUploaded={handleRefresh}
+            >
+              <div className="flex flex-col items-center gap-1 p-2 text-gray-600 dark:text-gray-400 hover:text-blue-600 dark:hover:text-blue-400 transition-colors">
+                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
+                </svg>
+                <span className="text-xs">{t('upload')}</span>
+              </div>
+            </FileUpload>
+            <button
+              onClick={() => {
+                const searchInput = document.querySelector('input[type="search"]') as HTMLInputElement;
+                searchInput?.focus();
+              }}
+              className="flex flex-col items-center gap-1 p-2 text-gray-600 dark:text-gray-400 hover:text-blue-600 dark:hover:text-blue-400 transition-colors"
+            >
+              <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+              </svg>
+              <span className="text-xs">{t('search')}</span>
+            </button>
+            {selectedItems.size > 0 && (
+              <>
+                <button
+                  onClick={handleBulkDownload}
+                  className="flex flex-col items-center gap-1 p-2 text-blue-600 dark:text-blue-400 transition-colors"
+                >
+                  <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+                  </svg>
+                  <span className="text-xs">{t('download')}</span>
+                </button>
+                <button
+                  onClick={openBulkDeleteModal}
+                  className="flex flex-col items-center gap-1 p-2 text-red-600 dark:text-red-400 transition-colors"
+                >
+                  <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                  </svg>
+                  <span className="text-xs">{t('delete')}</span>
+                </button>
+              </>
+            )}
           </div>
         </div>
       )}

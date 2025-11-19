@@ -112,7 +112,7 @@ export default function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
     >
       <div
         ref={modalRef}
-        className="bg-white dark:bg-gray-800 rounded-xl shadow-2xl max-w-2xl w-full mx-4 max-h-[90vh] overflow-hidden animate-scale-in flex flex-col"
+        className="bg-white dark:bg-gray-800 rounded-xl shadow-2xl max-w-2xl w-full mx-4 max-h-[90vh] md:max-h-[90vh] h-[100vh] md:h-auto overflow-hidden animate-scale-in flex flex-col"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Header */}
