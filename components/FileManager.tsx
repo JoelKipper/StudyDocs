@@ -2994,11 +2994,7 @@ export default function FileManager({ user, onLogout, initialPath, initialFile: 
                               <FileIcon 
                                 fileName={file.name} 
                                 isDirectory={file.type === 'directory'}
-                                className={`w-5 h-5 ${
-                                  file.type === 'directory'
-                                    ? 'text-blue-600 dark:text-blue-400'
-                                    : 'text-gray-600 dark:text-gray-400'
-                                }`}
+                                className="w-5 h-5"
                               />
                             </div>
                             <div className="flex-1 min-w-0">

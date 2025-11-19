@@ -12,7 +12,7 @@ interface FilePreviewProps {
 export default function FilePreview({ file, onClose }: FilePreviewProps) {
   const { t, language } = useLanguage();
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
-  const [previewType, setPreviewType] = useState<'pdf' | 'image' | 'text' | 'unsupported' | null>(null);
+  const [previewType, setPreviewType] = useState<'pdf' | 'image' | 'text' | 'video' | 'audio' | 'office' | 'unsupported' | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const iframeRef = useRef<HTMLIFrameElement>(null);
@@ -56,6 +56,12 @@ export default function FilePreview({ file, onClose }: FilePreviewProps) {
       setPreviewType('image');
     } else if (['txt', 'md', 'json', 'xml', 'html', 'css', 'js', 'ts', 'jsx', 'tsx', 'py', 'java', 'cpp', 'c', 'h', 'sh', 'yaml', 'yml'].includes(fileExtension)) {
       setPreviewType('text');
+    } else if (['mp4', 'webm', 'ogg', 'mov', 'avi', 'mkv', 'flv', 'wmv'].includes(fileExtension)) {
+      setPreviewType('video');
+    } else if (['mp3', 'wav', 'ogg', 'flac', 'aac', 'm4a', 'wma'].includes(fileExtension)) {
+      setPreviewType('audio');
+    } else if (['doc', 'docx', 'xls', 'xlsx', 'ppt', 'pptx', 'odt', 'ods', 'odp'].includes(fileExtension)) {
+      setPreviewType('office');
     } else {
       setPreviewType('unsupported');
       setLoading(false);
@@ -77,8 +83,27 @@ export default function FilePreview({ file, onClose }: FilePreviewProps) {
       return () => {
         clearTimeout(timeout);
       };
+    } else if (['mp4', 'webm', 'ogg', 'mov', 'avi', 'mkv', 'flv', 'wmv', 'mp3', 'wav', 'ogg', 'flac', 'aac', 'm4a', 'wma'].includes(fileExtension)) {
+      // For video and audio, use direct URL
+      const url = `/api/files/preview?path=${encodeURIComponent(file.path)}`;
+      setPreviewUrl(url);
+      setLoading(false);
+    } else if (['doc', 'docx', 'xls', 'xlsx', 'ppt', 'pptx', 'odt', 'ods', 'odp'].includes(fileExtension)) {
+      // For Office documents, use Microsoft Office Online Viewer
+      const url = `/api/files/preview?path=${encodeURIComponent(file.path)}`;
+      setPreviewUrl(url);
+      setLoading(true);
+      
+      // Timeout for Office documents
+      const timeout = setTimeout(() => {
+        setLoading(false);
+      }, 10000);
+      
+      return () => {
+        clearTimeout(timeout);
+      };
     } else {
-      // For other types, use direct URL
+      // For other types (images, text), use direct URL
       const url = `/api/files/preview?path=${encodeURIComponent(file.path)}`;
       setPreviewUrl(url);
       setLoading(false);
@@ -142,6 +167,18 @@ export default function FilePreview({ file, onClose }: FilePreviewProps) {
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
                 </svg>
               ) : previewType === 'text' ? (
+                <svg className="w-5 h-5 text-blue-600 dark:text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                </svg>
+              ) : previewType === 'video' ? (
+                <svg className="w-5 h-5 text-blue-600 dark:text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                </svg>
+              ) : previewType === 'audio' ? (
+                <svg className="w-5 h-5 text-blue-600 dark:text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19V6l12-3v13M9 19c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zm12-3c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zM9 10l12-3" />
+                </svg>
+              ) : previewType === 'office' ? (
                 <svg className="w-5 h-5 text-blue-600 dark:text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
                 </svg>
@@ -317,6 +354,97 @@ export default function FilePreview({ file, onClose }: FilePreviewProps) {
           </div>
         ) : previewType === 'text' && previewUrl ? (
           <TextPreview url={previewUrl} />
+        ) : previewType === 'video' && previewUrl ? (
+          <div className="w-full h-full flex items-center justify-center bg-black">
+            <video
+              src={previewUrl}
+              controls
+              className="max-w-full max-h-full"
+              onLoadedData={() => setLoading(false)}
+              onError={() => {
+                setLoading(false);
+                setError(language === 'de' ? 'Fehler beim Laden des Videos' : 'Error loading video');
+              }}
+            >
+              {language === 'de' ? 'Ihr Browser unterstützt das Video-Tag nicht.' : 'Your browser does not support the video tag.'}
+            </video>
+          </div>
+        ) : previewType === 'audio' && previewUrl ? (
+          <div className="w-full h-full flex items-center justify-center bg-gray-50 dark:bg-gray-900 p-8">
+            <div className="w-full max-w-2xl bg-white dark:bg-gray-800 rounded-lg shadow-lg p-6">
+              <div className="flex items-center gap-4 mb-6">
+                <div className="w-16 h-16 bg-blue-100 dark:bg-blue-900/20 rounded-lg flex items-center justify-center flex-shrink-0">
+                  <svg className="w-8 h-8 text-blue-600 dark:text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19V6l12-3v13M9 19c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zm12-3c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zM9 10l12-3" />
+                  </svg>
+                </div>
+                <div className="flex-1 min-w-0">
+                  <h4 className="text-lg font-semibold text-gray-900 dark:text-white truncate">{file.name}</h4>
+                  <p className="text-sm text-gray-500 dark:text-gray-400">
+                    {language === 'de' ? 'Audio-Wiedergabe' : 'Audio Player'}
+                  </p>
+                </div>
+              </div>
+              <audio
+                src={previewUrl}
+                controls
+                className="w-full"
+                onLoadedData={() => setLoading(false)}
+                onError={() => {
+                  setLoading(false);
+                  setError(language === 'de' ? 'Fehler beim Laden der Audio-Datei' : 'Error loading audio file');
+                }}
+              >
+                {language === 'de' ? 'Ihr Browser unterstützt das Audio-Tag nicht.' : 'Your browser does not support the audio tag.'}
+              </audio>
+            </div>
+          </div>
+        ) : previewType === 'office' && previewUrl ? (
+          <div className="w-full h-full relative">
+            <iframe
+              src={`https://view.officeapps.live.com/op/embed.aspx?src=${encodeURIComponent(typeof window !== 'undefined' ? window.location.origin + previewUrl : previewUrl)}`}
+              className="w-full h-full border-0"
+              title={file.name}
+              onLoad={() => {
+                setLoading(false);
+                setError('');
+              }}
+              onError={() => {
+                setLoading(false);
+                setError(language === 'de' ? 'Fehler beim Laden des Office-Dokuments. Bitte laden Sie die Datei herunter.' : 'Error loading Office document. Please download the file.');
+              }}
+            />
+            {loading && (
+              <div className="absolute inset-0 flex items-center justify-center bg-gray-50 dark:bg-gray-900 z-10">
+                <div className="text-center">
+                  <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
+                  <p className="text-gray-600 dark:text-gray-400">{t('loading')}</p>
+                </div>
+              </div>
+            )}
+            {error && (
+              <div className="absolute inset-0 flex items-center justify-center bg-gray-50 dark:bg-gray-900 z-10">
+                <div className="text-center">
+                  <div className="w-16 h-16 bg-red-100 dark:bg-red-900/20 rounded-full flex items-center justify-center mx-auto mb-4">
+                    <svg className="w-8 h-8 text-red-600 dark:text-red-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                    </svg>
+                  </div>
+                  <p className="text-gray-600 dark:text-gray-400 mb-4">{error}</p>
+                  <a
+                    href={`/api/files/download?path=${encodeURIComponent(file.path)}`}
+                    download={file.name}
+                    className="inline-flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-sm font-medium transition-colors"
+                  >
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+                    </svg>
+                    {t('download')}
+                  </a>
+                </div>
+              </div>
+            )}
+          </div>
         ) : null}
       </div>
 

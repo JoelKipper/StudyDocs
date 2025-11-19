@@ -54,6 +54,48 @@ export async function GET(request: NextRequest) {
       contentType = 'text/markdown; charset=utf-8';
     } else if (['py', 'java', 'cpp', 'c', 'h', 'sh', 'yaml', 'yml'].includes(fileExtension)) {
       contentType = 'text/plain; charset=utf-8';
+    } else if (['mp4'].includes(fileExtension)) {
+      contentType = 'video/mp4';
+    } else if (['webm'].includes(fileExtension)) {
+      contentType = 'video/webm';
+    } else if (['ogg'].includes(fileExtension)) {
+      contentType = 'video/ogg';
+    } else if (['mov'].includes(fileExtension)) {
+      contentType = 'video/quicktime';
+    } else if (['avi'].includes(fileExtension)) {
+      contentType = 'video/x-msvideo';
+    } else if (['mkv'].includes(fileExtension)) {
+      contentType = 'video/x-matroska';
+    } else if (['mp3'].includes(fileExtension)) {
+      contentType = 'audio/mpeg';
+    } else if (['wav'].includes(fileExtension)) {
+      contentType = 'audio/wav';
+    } else if (['flac'].includes(fileExtension)) {
+      contentType = 'audio/flac';
+    } else if (['aac'].includes(fileExtension)) {
+      contentType = 'audio/aac';
+    } else if (['m4a'].includes(fileExtension)) {
+      contentType = 'audio/mp4';
+    } else if (['wma'].includes(fileExtension)) {
+      contentType = 'audio/x-ms-wma';
+    } else if (['doc'].includes(fileExtension)) {
+      contentType = 'application/msword';
+    } else if (['docx'].includes(fileExtension)) {
+      contentType = 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
+    } else if (['xls'].includes(fileExtension)) {
+      contentType = 'application/vnd.ms-excel';
+    } else if (['xlsx'].includes(fileExtension)) {
+      contentType = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
+    } else if (['ppt'].includes(fileExtension)) {
+      contentType = 'application/vnd.ms-powerpoint';
+    } else if (['pptx'].includes(fileExtension)) {
+      contentType = 'application/vnd.openxmlformats-officedocument.presentationml.presentation';
+    } else if (['odt'].includes(fileExtension)) {
+      contentType = 'application/vnd.oasis.opendocument.text';
+    } else if (['ods'].includes(fileExtension)) {
+      contentType = 'application/vnd.oasis.opendocument.spreadsheet';
+    } else if (['odp'].includes(fileExtension)) {
+      contentType = 'application/vnd.oasis.opendocument.presentation';
     }
 
     // Return file with appropriate headers

@@ -10,108 +10,158 @@ export default function FileIcon({ fileName, isDirectory, className = 'w-5 h-5' 
   // Handle undefined fileName
   if (!fileName) {
     return (
-      <svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-      </svg>
+      <div className={`${className} text-gray-500 dark:text-gray-400`}>
+        <svg className="w-full h-full" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+        </svg>
+      </div>
     );
   }
 
   if (isDirectory) {
     return (
-      <svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z" />
-      </svg>
+      <div className={`${className} text-yellow-500 dark:text-yellow-400`}>
+        <svg className="w-full h-full" fill="currentColor" viewBox="0 0 24 24">
+          <path d="M10 4H4c-1.11 0-2 .89-2 2v12c0 1.11.89 2 2 2h16c1.11 0 2-.89 2-2V8c0-1.11-.89-2-2-2h-8l-2-2z" />
+        </svg>
+      </div>
     );
   }
 
   const extension = fileName.split('.').pop()?.toLowerCase() || '';
   
-  // PDF
+  // Office documents - Check first to avoid conflicts
+  // Word Documents - Blue
+  if (['doc', 'docx'].includes(extension)) {
+    return (
+      <div className={`${className} text-blue-600 dark:text-blue-400`}>
+        <svg className="w-full h-full" fill="currentColor" viewBox="0 0 24 24">
+          <path d="M14,2H6A2,2 0 0,0 4,4V20A2,2 0 0,0 6,22H18A2,2 0 0,0 20,20V8L14,2M18,20H6V4H13V9H18V20Z" />
+          <path d="M8,12H16V13.5H8V12M8,14.5H13V16H8V14.5Z" />
+        </svg>
+      </div>
+    );
+  }
+
+  // Excel - Green
+  if (['xls', 'xlsx', 'csv'].includes(extension)) {
+    return (
+      <div className={`${className} text-green-600 dark:text-green-400`}>
+        <svg className="w-full h-full" fill="currentColor" viewBox="0 0 24 24">
+          <path d="M14,2H6A2,2 0 0,0 4,4V20A2,2 0 0,0 6,22H18A2,2 0 0,0 20,20V8L14,2M18,20H6V4H13V9H18V20Z" />
+          <path d="M8,12H16V13.5H8V12M8,14.5H16V16H8V14.5M8,17H13V18.5H8V17Z" />
+        </svg>
+      </div>
+    );
+  }
+
+  // PowerPoint - Orange
+  if (['ppt', 'pptx'].includes(extension)) {
+    return (
+      <div className={`${className} text-orange-600 dark:text-orange-400`}>
+        <svg className="w-full h-full" fill="currentColor" viewBox="0 0 24 24">
+          <path d="M14,2H6A2,2 0 0,0 4,4V20A2,2 0 0,0 6,22H18A2,2 0 0,0 20,20V8L14,2M18,20H6V4H13V9H18V20Z" />
+          <path d="M8,12H16V13.5H8V12M8,14.5H16V16H8V14.5M8,17H13V18.5H8V17Z" />
+        </svg>
+      </div>
+    );
+  }
+
+  // OpenDocument formats
+  if (['odt', 'ods', 'odp'].includes(extension)) {
+    return (
+      <div className={`${className} text-blue-500 dark:text-blue-400`}>
+        <svg className="w-full h-full" fill="currentColor" viewBox="0 0 24 24">
+          <path d="M14,2H6A2,2 0 0,0 4,4V20A2,2 0 0,0 6,22H18A2,2 0 0,0 20,20V8L14,2M18,20H6V4H13V9H18V20Z" />
+        </svg>
+      </div>
+    );
+  }
+
+  // PDF - Red
   if (extension === 'pdf') {
     return (
-      <svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 21h10a2 2 0 002-2V9.414a1 1 0 00-.293-.707l-5.414-5.414A1 1 0 0012.586 3H7a2 2 0 00-2 2v14a2 2 0 002 2z" />
-      </svg>
+      <div className={`${className} text-red-600 dark:text-red-400`}>
+        <svg className="w-full h-full" fill="currentColor" viewBox="0 0 24 24">
+          <path d="M14,2H6A2,2 0 0,0 4,4V20A2,2 0 0,0 6,22H18A2,2 0 0,0 20,20V8L14,2M18,20H6V4H13V9H18V20Z" />
+        </svg>
+      </div>
     );
   }
 
-  // Images
+  // Images - Green
   if (['jpg', 'jpeg', 'png', 'gif', 'webp', 'svg', 'bmp', 'ico', 'tiff'].includes(extension)) {
     return (
-      <svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
-      </svg>
+      <div className={`${className} text-green-600 dark:text-green-400`}>
+        <svg className="w-full h-full" fill="currentColor" viewBox="0 0 24 24">
+          <path d="M9,2V8H11V11H5C3.89,11 3,11.89 3,13V18A1,1 0 0,0 4,19H5V21A1,1 0 0,0 6,22H18A1,1 0 0,0 19,21V19H20A1,1 0 0,0 21,18V13A1,1 0 0,0 20,12H14V8H16V2H9M7,13H17V17H7V13Z" />
+        </svg>
+      </div>
     );
   }
 
-  // Video
+  // Video - Purple
   if (['mp4', 'avi', 'mov', 'wmv', 'flv', 'webm', 'mkv', 'm4v'].includes(extension)) {
     return (
-      <svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" />
-      </svg>
+      <div className={`${className} text-purple-600 dark:text-purple-400`}>
+        <svg className="w-full h-full" fill="currentColor" viewBox="0 0 24 24">
+          <path d="M17,10.5V7A1,1 0 0,0 16,6H4A1,1 0 0,0 3,7V17A1,1 0 0,0 4,18H16A1,1 0 0,0 17,17V13.5L21,17.5V6.5L17,10.5Z" />
+        </svg>
+      </div>
     );
   }
 
-  // Audio
+  // Audio - Blue
   if (['mp3', 'wav', 'flac', 'aac', 'ogg', 'wma', 'm4a'].includes(extension)) {
     return (
-      <svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19V6l12-3v13M9 19c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zm12-3c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zM9 10l12-3" />
-      </svg>
+      <div className={`${className} text-blue-600 dark:text-blue-400`}>
+        <svg className="w-full h-full" fill="currentColor" viewBox="0 0 24 24">
+          <path d="M14,3H10A1,1 0 0,0 9,4V20A1,1 0 0,0 10,21H14A1,1 0 0,0 15,20V4A1,1 0 0,0 14,3M19,3H16.5V15.5C16.5,18.53 14.03,21 11,21C7.97,21 5.5,18.53 5.5,15.5C5.5,12.47 7.97,10 11,10C12.15,10 13.3,10.35 14.25,11H19V3Z" />
+        </svg>
+      </div>
     );
   }
 
-  // Archive
+  // Archive - Brown/Amber
   if (['zip', 'rar', '7z', 'tar', 'gz', 'bz2', 'xz'].includes(extension)) {
     return (
-      <svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 8h14M5 8a2 2 0 110-4h14a2 2 0 110 4M5 8v10a2 2 0 002 2h10a2 2 0 002-2V8m-9 4h4" />
-      </svg>
+      <div className={`${className} text-amber-600 dark:text-amber-400`}>
+        <svg className="w-full h-full" fill="currentColor" viewBox="0 0 24 24">
+          <path d="M20,6H16L14,4H10L8,6H4A2,2 0 0,0 2,8V19A2,2 0 0,0 4,21H20A2,2 0 0,0 22,19V8A2,2 0 0,0 20,6M16,17H8V15H16V17M16,13H8V11H16V13M16,9H8V7H16V9Z" />
+        </svg>
+      </div>
     );
   }
 
-  // Code files
+  // Code files - Yellow/Orange
   if (['js', 'jsx', 'ts', 'tsx', 'html', 'css', 'scss', 'sass', 'less', 'json', 'xml', 'yaml', 'yml'].includes(extension)) {
     return (
-      <svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 20l4-16m4 4l4 4-4 4M6 16l-4-4 4-4" />
-      </svg>
+      <div className={`${className} text-yellow-600 dark:text-yellow-400`}>
+        <svg className="w-full h-full" fill="currentColor" viewBox="0 0 24 24">
+          <path d="M14.6,16.6L19.2,12L14.6,7.4L16,6L22,12L16,18L14.6,16.6M9.4,16.6L4.8,12L9.4,7.4L8,6L2,12L8,18L9.4,16.6Z" />
+        </svg>
+      </div>
     );
   }
 
-  // Text files
+  // Text files - Gray
   if (['txt', 'md', 'markdown', 'rtf'].includes(extension)) {
     return (
-      <svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-      </svg>
+      <div className={`${className} text-gray-600 dark:text-gray-400`}>
+        <svg className="w-full h-full" fill="currentColor" viewBox="0 0 24 24">
+          <path d="M14,2H6A2,2 0 0,0 4,4V20A2,2 0 0,0 6,22H18A2,2 0 0,0 20,20V8L14,2M18,20H6V4H13V9H18V20Z" />
+        </svg>
+      </div>
     );
   }
 
-  // Office documents
-  if (['doc', 'docx', 'xls', 'xlsx', 'ppt', 'pptx', 'odt', 'ods', 'odp'].includes(extension)) {
-    return (
-      <svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-      </svg>
-    );
-  }
-
-  // Spreadsheet
-  if (['csv', 'xls', 'xlsx', 'ods'].includes(extension)) {
-    return (
-      <svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 17v-2m3 2v-4m3 4v-6m2 10H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-      </svg>
-    );
-  }
-
-  // Default file icon
+  // Default file icon - Gray
   return (
-    <svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-    </svg>
+    <div className={`${className} text-gray-500 dark:text-gray-400`}>
+      <svg className="w-full h-full" fill="currentColor" viewBox="0 0 24 24">
+        <path d="M14,2H6A2,2 0 0,0 4,4V20A2,2 0 0,0 6,22H18A2,2 0 0,0 20,20V8L14,2M18,20H6V4H13V9H18V20Z" />
+      </svg>
+    </div>
   );
 }
 
