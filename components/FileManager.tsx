@@ -2012,51 +2012,63 @@ export default function FileManager({ user, onLogout, initialPath, initialFile: 
           />
         )}
 
-        {/* Sidebar - File Tree / Favorites */}
-        <div
-          className={`bg-white dark:bg-gray-800 border-r border-gray-200 dark:border-gray-700 flex flex-col relative transition-all duration-300 ${
-            isMobile
-              ? `fixed inset-y-0 left-0 z-50 w-80 shadow-2xl ${
-                  mobileSidebarOpen ? 'translate-x-0' : '-translate-x-full'
-                }`
-              : sidebarCollapsed
-              ? 'w-0 overflow-hidden'
-              : ''
-          }`}
-          style={!isMobile && !sidebarCollapsed ? { width: `${sidebarWidth}px`, minWidth: '200px', maxWidth: '600px' } : {}}
-        >
-          {/* Tabs */}
-          <div className="flex border-b border-gray-200 dark:border-gray-700 flex-shrink-0">
-            <button
-              onClick={() => setSidebarTab('tree')}
-              className={`flex-1 px-4 py-2 text-sm font-medium transition-colors ${
-                sidebarTab === 'tree'
-                  ? 'bg-gray-100 dark:bg-gray-700 text-blue-600 dark:text-blue-400 border-b-2 border-blue-600 dark:border-blue-400'
-                  : 'text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-800/50'
-              }`}
-            >
-              {language === 'de' ? 'Ordner' : 'Folders'}
-            </button>
-            <button
-              onClick={() => setSidebarTab('favorites')}
-              className={`flex-1 px-4 py-2 text-sm font-medium transition-colors relative ${
-                sidebarTab === 'favorites'
-                  ? 'bg-gray-100 dark:bg-gray-700 text-blue-600 dark:text-blue-400 border-b-2 border-blue-600 dark:border-blue-400'
-                  : 'text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-800/50'
-              }`}
-            >
-              {language === 'de' ? 'Favoriten' : 'Favorites'}
-              {favorites.size > 0 && (
-                <span className="absolute top-1 right-2 bg-blue-500 text-white text-xs rounded-full w-5 h-5 flex items-center justify-center">
-                  {favorites.size}
-                </span>
-              )}
-            </button>
-          </div>
+        {/* Sidebar - File Tree / Favorites - Desktop */}
+        {!isMobile && (
+          <div
+            className={`bg-white dark:bg-gray-800 border-r border-gray-200 dark:border-gray-700 flex flex-col relative transition-all duration-300 ${
+              sidebarCollapsed ? 'w-0 overflow-hidden border-r-0' : 'flex-shrink-0'
+            }`}
+            style={!sidebarCollapsed ? { width: `${sidebarWidth}px`, minWidth: '200px', maxWidth: '600px' } : { width: '0px', minWidth: '0px', maxWidth: '0px' }}
+          >
+          {/* Tabs and Collapse Button */}
+          {!sidebarCollapsed && (
+            <>
+              <div className="flex border-b border-gray-200 dark:border-gray-700 flex-shrink-0">
+                <button
+                  onClick={() => setSidebarTab('tree')}
+                  className={`flex-1 px-4 py-2 text-sm font-medium transition-colors ${
+                    sidebarTab === 'tree'
+                      ? 'bg-gray-100 dark:bg-gray-700 text-blue-600 dark:text-blue-400 border-b-2 border-blue-600 dark:border-blue-400'
+                      : 'text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-800/50'
+                  }`}
+                >
+                  {language === 'de' ? 'Ordner' : 'Folders'}
+                </button>
+                <button
+                  onClick={() => setSidebarTab('favorites')}
+                  className={`flex-1 px-4 py-2 text-sm font-medium transition-colors relative ${
+                    sidebarTab === 'favorites'
+                      ? 'bg-gray-100 dark:bg-gray-700 text-blue-600 dark:text-blue-400 border-b-2 border-blue-600 dark:border-blue-400'
+                      : 'text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-800/50'
+                  }`}
+                >
+                  {language === 'de' ? 'Favoriten' : 'Favorites'}
+                  {favorites.size > 0 && (
+                    <span className="absolute top-1 right-2 bg-blue-500 text-white text-xs rounded-full w-5 h-5 flex items-center justify-center">
+                      {favorites.size}
+                    </span>
+                  )}
+                </button>
+                {/* Collapse Button - Desktop only */}
+                <button
+                  onClick={() => setSidebarCollapsed(!sidebarCollapsed)}
+                  className="px-3 py-2 text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors flex-shrink-0"
+                  title={language === 'de' ? 'Sidebar ausblenden' : 'Hide sidebar'}
+                >
+                  <svg 
+                    className="w-5 h-5 transition-transform duration-300"
+                    fill="none" 
+                    stroke="currentColor" 
+                    viewBox="0 0 24 24"
+                  >
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                  </svg>
+                </button>
+              </div>
 
-          <div className="flex-1 overflow-y-auto custom-scrollbar p-2">
-            {sidebarTab === 'tree' ? (
-              <FileTree
+              <div className="flex-1 overflow-y-auto custom-scrollbar p-2">
+              {sidebarTab === 'tree' ? (
+                <FileTree
                 key={`tree-${treeRefreshKey}`}
                 currentPath={currentPath}
                 onNavigate={navigateToPath}
@@ -2131,15 +2143,35 @@ export default function FileManager({ user, onLogout, initialPath, initialFile: 
                 }}
               />
             )}
-          </div>
+              </div>
+              
+              {/* Storage Quota - Bottom of Sidebar */}
+              <div className="border-t border-gray-200 dark:border-gray-700 p-3 bg-gray-50 dark:bg-gray-800/50 flex-shrink-0">
+                <StorageQuota />
+              </div>
+            </>
+          )}
           
-          {/* Storage Quota - Bottom of Sidebar */}
-          <div className="border-t border-gray-200 dark:border-gray-700 p-3 bg-gray-50 dark:bg-gray-800/50 flex-shrink-0">
-            <StorageQuota />
-          </div>
+          {/* Collapse Button when collapsed */}
+          {sidebarCollapsed && (
+            <button
+              onClick={() => setSidebarCollapsed(false)}
+              className="absolute top-4 -right-10 p-2 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-r-lg shadow-md hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors z-20"
+              title={language === 'de' ? 'Sidebar einblenden' : 'Show sidebar'}
+            >
+              <svg 
+                className="w-5 h-5 text-gray-600 dark:text-gray-400 rotate-180"
+                fill="none" 
+                stroke="currentColor" 
+                viewBox="0 0 24 24"
+              >
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+              </svg>
+            </button>
+          )}
           
           {/* Resize Handle - Only on Desktop */}
-          {!isMobile && (
+          {!sidebarCollapsed && (
             <div
               onMouseDown={(e) => {
                 e.preventDefault();
@@ -2156,10 +2188,126 @@ export default function FileManager({ user, onLogout, initialPath, initialFile: 
             </div>
           )}
         </div>
+        )}
+
+        {/* Mobile Sidebar */}
+        {isMobile && (
+          <div
+            className={`fixed inset-y-0 left-0 z-50 w-80 shadow-2xl bg-white dark:bg-gray-800 border-r border-gray-200 dark:border-gray-700 flex flex-col transition-transform duration-300 ${
+              mobileSidebarOpen ? 'translate-x-0' : '-translate-x-full'
+            }`}
+          >
+            {/* Tabs */}
+            <div className="flex border-b border-gray-200 dark:border-gray-700 flex-shrink-0">
+              <button
+                onClick={() => setSidebarTab('tree')}
+                className={`flex-1 px-4 py-2 text-sm font-medium transition-colors ${
+                  sidebarTab === 'tree'
+                    ? 'bg-gray-100 dark:bg-gray-700 text-blue-600 dark:text-blue-400 border-b-2 border-blue-600 dark:border-blue-400'
+                    : 'text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-800/50'
+                }`}
+              >
+                {language === 'de' ? 'Ordner' : 'Folders'}
+              </button>
+              <button
+                onClick={() => setSidebarTab('favorites')}
+                className={`flex-1 px-4 py-2 text-sm font-medium transition-colors relative ${
+                  sidebarTab === 'favorites'
+                    ? 'bg-gray-100 dark:bg-gray-700 text-blue-600 dark:text-blue-400 border-b-2 border-blue-600 dark:border-blue-400'
+                    : 'text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-800/50'
+                }`}
+              >
+                {language === 'de' ? 'Favoriten' : 'Favorites'}
+                {favorites.size > 0 && (
+                  <span className="absolute top-1 right-2 bg-blue-500 text-white text-xs rounded-full w-5 h-5 flex items-center justify-center">
+                    {favorites.size}
+                  </span>
+                )}
+              </button>
+            </div>
+
+            <div className="flex-1 overflow-y-auto custom-scrollbar p-2">
+              {sidebarTab === 'tree' ? (
+                <FileTree
+                  key={`tree-${treeRefreshKey}`}
+                  currentPath={currentPath}
+                  onNavigate={navigateToPath}
+                  onRefresh={handleRefresh}
+                  onExternalDrop={handleExternalFilesDrop}
+                  userId={user.id}
+                  onFileDoubleClick={async (filePath: string, fileName: string) => {
+                    const fileItem: FileItem = {
+                      name: fileName,
+                      path: filePath,
+                      type: 'file',
+                    };
+                    setPreviewFile(fileItem);
+                  }}
+                  onMoveItem={async (itemPath: string, targetPath: string) => {
+                    try {
+                      const res = await fetch('/api/files', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                          action: 'move',
+                          path: itemPath,
+                          targetPath: targetPath,
+                        }),
+                      });
+
+                      const data = await res.json();
+
+                      if (res.ok) {
+                        loadFiles();
+                        setTreeRefreshKey((k) => k + 1);
+                        const item = files.find(f => f.path === itemPath);
+                        const target = files.find(f => f.path === targetPath);
+                        showToast(`"${item?.name || t('file')}" ${t('itemMovedTo')} "${target?.name || t('root')}" ${t('moved')}`, 'success');
+                      } else {
+                        showToast(data.error || t('errorMoving'), 'error');
+                      }
+                    } catch (error) {
+                      console.error('Fehler beim Verschieben:', error);
+                      showToast(t('errorMoving'), 'error');
+                    }
+                  }}
+                />
+              ) : (
+                <FavoritesList
+                  key={`favorites-${treeRefreshKey}`}
+                  currentPath={currentPath}
+                  onNavigate={navigateToPath}
+                  userId={user.id}
+                  refreshKey={treeRefreshKey}
+                  onFileDoubleClick={async (filePath: string, fileName: string) => {
+                    const fileItem: FileItem = {
+                      name: fileName,
+                      path: filePath,
+                      type: 'file',
+                    };
+                    setPreviewFile(fileItem);
+                  }}
+                  onFavoriteRemoved={() => {
+                    fetch('/api/files/favorites')
+                      .then(res => res.json())
+                      .then(data => {
+                        setFavorites(new Set(data.favorites.map((f: { path: string }) => f.path)));
+                      })
+                      .catch(console.error);
+                  }}
+                />
+              )}
+            </div>
+
+            <div className="border-t border-gray-200 dark:border-gray-700 p-3 bg-gray-50 dark:bg-gray-800/50 flex-shrink-0">
+              <StorageQuota />
+            </div>
+          </div>
+        )}
 
         {/* Main Content */}
         <div 
-          className={`flex-1 flex flex-col overflow-hidden bg-white dark:bg-gray-900 relative ${
+          className={`flex-1 flex flex-col overflow-hidden bg-white dark:bg-gray-900 relative min-w-0 ${
             externalDragOver ? 'ring-2 ring-blue-500 ring-offset-2' : ''
           }`}
           onDragOver={(e) => {
@@ -2210,24 +2358,6 @@ export default function FileManager({ user, onLogout, initialPath, initialFile: 
           {/* Toolbar */}
           <div className="border-b border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800/50 flex-shrink-0 relative">
             <div className="px-2 md:px-4 py-2 flex items-center gap-2 md:gap-4 flex-wrap">
-              {/* Sidebar Toggle Button - Mobile only */}
-              {isMobile && (
-                <button
-                  onClick={() => setMobileSidebarOpen(!mobileSidebarOpen)}
-                  className="p-1.5 hover:bg-gray-200 dark:hover:bg-gray-700 rounded transition-colors flex-shrink-0"
-                  title={mobileSidebarOpen ? (language === 'de' ? 'Sidebar ausblenden' : 'Hide sidebar') : (language === 'de' ? 'Sidebar einblenden' : 'Show sidebar')}
-                >
-                  {mobileSidebarOpen ? (
-                    <svg className="w-5 h-5 text-gray-600 dark:text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                    </svg>
-                  ) : (
-                    <svg className="w-5 h-5 text-gray-600 dark:text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
-                    </svg>
-                  )}
-                </button>
-              )}
               {/* Navigation */}
               <div className="flex items-center gap-1 md:gap-2 flex-shrink-0">
                 <button
@@ -2385,7 +2515,7 @@ export default function FileManager({ user, onLogout, initialPath, initialFile: 
             {!previewFile && (
               <div 
                 ref={fileListContainerRef}
-                className="flex flex-col overflow-auto relative flex-1"
+                className="flex flex-col overflow-auto relative flex-1 w-full"
                 onContextMenu={handleEmptyContextMenu}
                 onTouchStart={(e) => {
                   if (isMobile && fileListContainerRef.current?.scrollTop === 0) {
@@ -2460,7 +2590,7 @@ export default function FileManager({ user, onLogout, initialPath, initialFile: 
             ) : (
               <>
                 {/* Mobile Card View */}
-                <div className="md:hidden space-y-2 p-2">
+                <div className="md:hidden space-y-2 p-2 w-full">
                   {sortedFiles.map((file, index) => (
                     <div
                       key={file.path}
@@ -2503,7 +2633,7 @@ export default function FileManager({ user, onLogout, initialPath, initialFile: 
                         });
                       }}
                     >
-                      <div className="flex items-center gap-3">
+                      <div className="flex items-center gap-3 w-full overflow-hidden">
                         {selectedItems.size > 0 && (
                           <input
                             type="checkbox"
@@ -2513,15 +2643,15 @@ export default function FileManager({ user, onLogout, initialPath, initialFile: 
                               toggleSelection(file.path);
                             }}
                             onClick={(e) => e.stopPropagation()}
-                            className="w-5 h-5 rounded border-2 border-gray-300 dark:border-gray-600 text-blue-600 dark:text-blue-500 bg-white dark:bg-gray-700 focus:ring-2 focus:ring-blue-500 dark:focus:ring-blue-400 cursor-pointer transition-all duration-200 hover:border-blue-400 dark:hover:border-blue-500 checked:bg-blue-600 dark:checked:bg-blue-500 checked:border-blue-600 dark:checked:border-blue-500"
+                            className="w-5 h-5 rounded border-2 border-gray-300 dark:border-gray-600 text-blue-600 dark:text-blue-500 bg-white dark:bg-gray-700 focus:ring-2 focus:ring-blue-500 dark:focus:ring-blue-400 cursor-pointer transition-all duration-200 hover:border-blue-400 dark:hover:border-blue-500 checked:bg-blue-600 dark:checked:bg-blue-500 checked:border-blue-600 dark:checked:border-blue-500 flex-shrink-0"
                           />
                         )}
                         <div className="flex-shrink-0">
                           <FileIcon fileName={file.name} isDirectory={file.type === 'directory'} />
                         </div>
-                        <div className="flex-1 min-w-0">
-                          <div className="flex items-center gap-2">
-                            <p className="text-sm font-medium text-gray-900 dark:text-white truncate">
+                        <div className="flex-1 min-w-0 overflow-hidden">
+                          <div className="flex items-center gap-2 min-w-0">
+                            <p className="text-sm font-medium text-gray-900 dark:text-white truncate flex-1 min-w-0">
                               {renamingItem?.path === file.path ? (
                                 <input
                                   ref={renameInputRef}
@@ -2549,7 +2679,7 @@ export default function FileManager({ user, onLogout, initialPath, initialFile: 
                             )}
                           </div>
                           {file.metadata?.lastModifiedAt && (
-                            <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                            <p className="text-xs text-gray-500 dark:text-gray-400 mt-1 truncate">
                               {new Date(file.metadata.lastModifiedAt).toLocaleDateString(language === 'de' ? 'de-DE' : 'en-US', {
                                 day: '2-digit',
                                 month: '2-digit',
@@ -2558,7 +2688,7 @@ export default function FileManager({ user, onLogout, initialPath, initialFile: 
                             </p>
                           )}
                         </div>
-                        <div className="flex items-center gap-1">
+                        <div className="flex items-center gap-1 flex-shrink-0">
                           {file.type === 'file' && (
                             <button
                               onClick={(e) => {
@@ -2619,7 +2749,7 @@ export default function FileManager({ user, onLogout, initialPath, initialFile: 
                 </div>
 
                 {/* Desktop Table View */}
-                <table className="hidden md:table w-full">
+                <table className="hidden md:table w-full table-auto">
                 <thead className="bg-gray-50 dark:bg-gray-800/50 border-b border-gray-200 dark:border-gray-700 sticky top-0 z-10">
                   <tr>
                     <th 
