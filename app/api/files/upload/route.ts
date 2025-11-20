@@ -54,7 +54,17 @@ export async function POST(request: NextRequest) {
     
     // Check if path already ends with the filename (for folder uploads with relative paths)
     let filePath: string;
-    if (path && path.endsWith(`/${file.name}`)) {
+    const pathEndsWithFilename = path && (path.endsWith(`/${file.name}`) || path === file.name);
+    
+    console.log('Path processing:', {
+      path: path,
+      fileName: file.name,
+      pathEndsWithFilename: pathEndsWithFilename,
+      pathEndsWithSlashFilename: path?.endsWith(`/${file.name}`),
+      pathEqualsFilename: path === file.name
+    });
+    
+    if (pathEndsWithFilename) {
       // Path already includes the filename, use it as is
       filePath = path;
     } else if (path) {
@@ -65,15 +75,24 @@ export async function POST(request: NextRequest) {
       filePath = file.name;
     }
     
+    console.log('Final filePath:', filePath);
+    
     // Ensure all parent directories exist before uploading the file
     const parentPath = filePath.includes('/') 
       ? filePath.substring(0, filePath.lastIndexOf('/'))
       : '';
-    await ensureDirectoriesExist(parentPath, user);
     
+    console.log('Parent path to ensure exists:', parentPath);
+    if (parentPath) {
+      await ensureDirectoriesExist(parentPath, user);
+      console.log('Directories ensured for path:', parentPath);
+    }
+    
+    console.log('Saving file to path:', filePath);
     await saveFile(filePath, buffer, user);
+    console.log('File saved successfully:', filePath);
     
-    return NextResponse.json({ success: true, fileName: file.name });
+    return NextResponse.json({ success: true, fileName: file.name, filePath: filePath });
   } catch (error: any) {
     console.error('Upload error:', error);
     return NextResponse.json({ error: error.message || 'Fehler beim Hochladen der Datei' }, { status: 500 });

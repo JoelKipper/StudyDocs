@@ -142,24 +142,32 @@ export default function FileUpload({ currentPath, onUploaded, onFolderUpload, ch
   }
 
   async function handleFolderSelect(e: React.ChangeEvent<HTMLInputElement>) {
+    console.log('=== handleFolderSelect CALLED ===');
+    console.log('Event target:', e.target);
+    console.log('Event target files:', e.target.files);
     const files = Array.from(e.target.files || []);
     console.log('handleFolderSelect called with', files.length, 'files');
-    console.log('Files:', files.map(f => ({
+    
+    const filesWithDetails = files.map(f => ({
       name: f.name,
       size: f.size,
       type: f.type,
       webkitRelativePath: (f as any).webkitRelativePath
-    })));
+    }));
+    console.log('Files:', filesWithDetails);
+    console.log('Files with webkitRelativePath:', files.filter(f => (f as any).webkitRelativePath).length);
     
     // If onFolderUpload callback is provided, use it (for FileManager)
     // Even if files.length === 0 (empty folder), we still want to create the folder
     if (onFolderUpload) {
-      console.log('Calling onFolderUpload with', files.length, 'files');
+      console.log('✓ Calling onFolderUpload with', files.length, 'files');
       onFolderUpload(files);
       if (folderInputRef.current) {
         folderInputRef.current.value = '';
       }
       return;
+    } else {
+      console.log('✗ onFolderUpload not provided');
     }
     
     if (files.length === 0) {
@@ -195,8 +203,7 @@ export default function FileUpload({ currentPath, onUploaded, onFolderUpload, ch
         <input
           ref={folderInputRef}
           type="file"
-          webkitdirectory=""
-          directory=""
+          {...({ webkitdirectory: '', directory: '' } as any)}
           multiple
           onChange={handleFolderSelect}
           disabled={uploading}
@@ -236,16 +243,6 @@ export default function FileUpload({ currentPath, onUploaded, onFolderUpload, ch
             </label>
             <label
               htmlFor={`folder-upload-${currentPath}`}
-              onClick={() => {
-                console.log('Folder upload button clicked');
-                // Ensure the folder input is triggered
-                setTimeout(() => {
-                  if (folderInputRef.current) {
-                    console.log('Triggering folder input click');
-                    folderInputRef.current.click();
-                  }
-                }, 0);
-              }}
               className={`inline-flex items-center justify-center p-2 rounded-lg transition-colors cursor-pointer ${
                 uploading
                   ? 'text-gray-400 cursor-not-allowed'

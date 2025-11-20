@@ -490,11 +490,20 @@ export default function FileManager({ user, onLogout, initialPath, initialFile: 
   useEffect(() => {
     async function processUploadQueue() {
       // Prevent multiple simultaneous uploads
-      if (uploadQueue.length === 0 || replaceModal.isOpen || isProcessingUpload) return;
+      if (uploadQueue.length === 0 || replaceModal.isOpen || isProcessingUpload) {
+        console.log('Skipping queue processing:', {
+          queueLength: uploadQueue.length,
+          replaceModalOpen: replaceModal.isOpen,
+          isProcessing: isProcessingUpload
+        });
+        return;
+      }
 
+      console.log('Processing upload queue, items:', uploadQueue.length);
       setIsProcessingUpload(true);
       const { file, targetPath, relativePath, folderName } = uploadQueue[0];
       const totalFiles = uploadQueue.length;
+      console.log('Processing file:', file.name, 'targetPath:', targetPath, 'relativePath:', relativePath);
       
       // Initialize progress for all uploads (single or multiple)
       if (!uploadProgress) {
@@ -630,15 +639,23 @@ export default function FileManager({ user, onLogout, initialPath, initialFile: 
         // If this is a folder upload, preserve the folder structure
         let uploadPath: string;
         if (relativePath && folderName) {
-          // Create the full path: targetPath/folderName/relativePath
-          // relativePath already contains the full path within the folder (including subdirectories and filename)
-          const folderPath = targetPath ? `${targetPath}/${folderName}` : folderName;
-          uploadPath = `${folderPath}/${relativePath}`;
+          // targetPath already contains the folder name (set in handleFolderUpload)
+          // relativePath contains the path within the folder (including subdirectories and filename)
+          // So we just need: targetPath/relativePath
+          uploadPath = targetPath ? `${targetPath}/${relativePath}` : relativePath;
         } else {
           // For regular files, include the filename in the path
           // API will check if path ends with filename and handle accordingly
           uploadPath = targetPath ? `${targetPath}/${file.name}` : file.name;
         }
+        
+        console.log('Upload path constructed:', {
+          fileName: file.name,
+          targetPath: targetPath,
+          relativePath: relativePath,
+          folderName: folderName,
+          uploadPath: uploadPath
+        });
         
         // Validate and clean the path
         uploadPath = uploadPath.replace(/\/+/g, '/').replace(/^\/|\/$/g, '');
@@ -761,13 +778,26 @@ export default function FileManager({ user, onLogout, initialPath, initialFile: 
       }
     }
 
+    console.log('Upload queue useEffect triggered:', {
+      queueLength: uploadQueue.length,
+      replaceModalOpen: replaceModal.isOpen,
+      isProcessing: isProcessingUpload
+    });
+    
     if (uploadQueue.length > 0 && !replaceModal.isOpen && !isProcessingUpload) {
+      console.log('Conditions met, scheduling queue processing');
       // Add small delay to prevent race conditions
       const timeoutId = setTimeout(() => {
+        console.log('Timeout fired, calling processUploadQueue');
         processUploadQueue();
       }, 100);
       
-      return () => clearTimeout(timeoutId);
+      return () => {
+        console.log('Cleaning up timeout');
+        clearTimeout(timeoutId);
+      };
+    } else {
+      console.log('Conditions not met, skipping queue processing');
     }
   }, [uploadQueue, replaceModal.isOpen, isProcessingUpload, uploadProgress]);
 
@@ -792,20 +822,9 @@ export default function FileManager({ user, onLogout, initialPath, initialFile: 
     }
   }
 
-  const handleExternalFilesDrop = useCallback(async (files: File[], targetPath: string) => {
-    // Add all files to queue
-    // Limit to prevent memory issues with too many files
-    const maxFiles = 100;
-    const filesToUpload = files.slice(0, maxFiles);
-    
-    if (files.length > maxFiles) {
-      showToast(`${files.length} Dateien ausgewählt, nur die ersten ${maxFiles} werden hochgeladen.`, 'info');
-    }
-    
-    setUploadQueue((prevQueue) => [...prevQueue, ...filesToUpload.map(file => ({ file, targetPath }))]);
-  }, [showToast]);
-
-  const handleFolderUpload = useCallback(async (files: File[]) => {
+  // Define handleFolderUpload first so it can be used by handleExternalFilesDrop
+  const handleFolderUpload = useCallback(async (files: File[], targetPathOverride?: string) => {
+    console.log('=== handleFolderUpload CALLED ===');
     console.log('handleFolderUpload called with', files.length, 'files');
     console.log('Files:', files.map(f => ({
       name: f.name,
@@ -870,21 +889,24 @@ export default function FileManager({ user, onLogout, initialPath, initialFile: 
       }
     }
 
+    // Use targetPathOverride if provided (for drag-and-drop), otherwise use currentPath
+    const uploadTargetPath = targetPathOverride !== undefined ? targetPathOverride : currentPath;
+
     console.log('Folder upload:', {
       totalFiles: files.length,
       folderName: folderName,
-      currentPath: currentPath
+      currentPath: uploadTargetPath
     });
 
     // First, create the folder with the same name
-    console.log('Creating folder:', folderName, 'in path:', currentPath);
+    console.log('Creating folder:', folderName, 'in path:', uploadTargetPath);
     try {
       const createRes = await fetch('/api/files', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           action: 'create-directory',
-          path: currentPath,
+          path: uploadTargetPath,
           name: folderName,
         }),
       });
@@ -905,11 +927,6 @@ export default function FileManager({ user, onLogout, initialPath, initialFile: 
         console.log('Folder already exists, continuing with upload');
       } else {
         console.log('Folder created successfully:', folderName);
-        showToast(`Ordner "${folderName}" wurde erstellt.`, 'success');
-        
-        // Refresh the file list and tree to show the new folder
-        await loadFiles();
-        setTreeRefreshKey((k) => k + 1);
       }
     } catch (err) {
       console.error('Error creating folder:', err);
@@ -917,9 +934,383 @@ export default function FileManager({ user, onLogout, initialPath, initialFile: 
       return;
     }
 
-    // TODO: After folder is created, upload files to it
-    // For now, we're only creating the folder to test if it works
-  }, [currentPath, showToast, t]);
+    // Construct the target path for files (inside the newly created folder)
+    const targetFolderPath = uploadTargetPath ? `${uploadTargetPath}/${folderName}` : folderName;
+
+    // If there are files to upload, upload them directly
+    if (files.length > 0) {
+      console.log('=== FOLDER UPLOAD START ===');
+      console.log('Total files received:', files.length);
+      console.log('Folder name:', folderName);
+      console.log('Target folder path:', targetFolderPath);
+      console.log('All files:', files.map(f => ({
+        name: f.name,
+        size: f.size,
+        type: f.type,
+        webkitRelativePath: (f as any).webkitRelativePath
+      })));
+      
+      // Filter out only truly invalid files (no name at all)
+      const validFiles = files.filter(file => {
+        if (!file.name || file.name.trim() === '') {
+          console.warn('Skipping invalid file (no name):', file.name || 'unnamed');
+          return false;
+        }
+        return true;
+      });
+
+      console.log('Valid files after filtering:', validFiles.length);
+
+      if (validFiles.length > 0) {
+        // Don't limit - upload ALL files
+        const filesToUpload = validFiles;
+        
+        console.log('Starting direct upload of ALL', filesToUpload.length, 'files to folder:', targetFolderPath);
+        
+        // Show progress
+        setUploadProgress({
+          total: filesToUpload.length,
+          completed: 0,
+          current: filesToUpload[0]?.name || ''
+        });
+
+        // Upload files directly one by one
+        let successCount = 0;
+        let errorCount = 0;
+        
+        for (let i = 0; i < filesToUpload.length; i++) {
+          const file = filesToUpload[i];
+          const fileRelativePath = (file as any).webkitRelativePath;
+          
+          // Determine the relative path within the folder
+          let pathWithinFolder: string;
+          if (fileRelativePath) {
+            // Remove the folder name from the path to get the relative path within the folder
+            if (fileRelativePath.startsWith(`${folderName}/`)) {
+              pathWithinFolder = fileRelativePath.substring(folderName.length + 1);
+            } else if (fileRelativePath === folderName) {
+              // File is directly in the folder root
+              pathWithinFolder = file.name;
+            } else {
+              // Fallback: use the file name
+              pathWithinFolder = file.name;
+            }
+          } else {
+            // If no webkitRelativePath, just use the file name
+            pathWithinFolder = file.name;
+          }
+          
+          // Construct the full upload path - ensure it includes the filename at the end
+          let uploadPath: string;
+          if (pathWithinFolder.includes('/')) {
+            // Path already includes subdirectories and filename
+            uploadPath = `${targetFolderPath}/${pathWithinFolder}`;
+          } else {
+            // Just filename, add it to the target path
+            uploadPath = `${targetFolderPath}/${pathWithinFolder}`;
+          }
+          
+          // Clean up the path
+          uploadPath = uploadPath.replace(/\/+/g, '/').replace(/^\/|\/$/g, '');
+          
+          console.log(`[${i + 1}/${filesToUpload.length}] Uploading:`, {
+            fileName: file.name,
+            webkitRelativePath: fileRelativePath,
+            pathWithinFolder: pathWithinFolder,
+            uploadPath: uploadPath,
+            fileSize: file.size
+          });
+          
+          // Update progress
+          setUploadProgress(prev => prev ? {
+            ...prev,
+            current: file.name,
+            completed: i
+          } : null);
+          
+          try {
+            const formData = new FormData();
+            formData.append('file', file);
+            formData.append('path', uploadPath);
+            
+            console.log(`[${i + 1}/${filesToUpload.length}] Sending request to /api/files/upload`);
+            
+            const res = await fetch('/api/files/upload', {
+              method: 'POST',
+              body: formData,
+            });
+            
+            console.log(`[${i + 1}/${filesToUpload.length}] Response status:`, res.status);
+            
+            const data = await res.json();
+            
+            if (res.ok) {
+              successCount++;
+              console.log(`[${i + 1}/${filesToUpload.length}] ✓ Uploaded successfully:`, file.name);
+            } else {
+              errorCount++;
+              console.error(`[${i + 1}/${filesToUpload.length}] ✗ Upload failed:`, data.error);
+            }
+          } catch (error: any) {
+            errorCount++;
+            console.error(`[${i + 1}/${filesToUpload.length}] ✗ Upload error:`, error.message);
+          }
+        }
+        
+        console.log('=== FOLDER UPLOAD COMPLETE ===');
+        console.log('Success:', successCount, 'Errors:', errorCount);
+        
+        // Clear progress
+        setUploadProgress(null);
+        
+        // Show result
+        if (errorCount === 0) {
+          showToast(`${successCount} Dateien erfolgreich hochgeladen.`, 'success');
+        } else {
+          showToast(`${successCount} Dateien hochgeladen, ${errorCount} Fehler.`, 'error');
+        }
+        
+        // Refresh file list and tree
+        await loadFiles();
+        setTreeRefreshKey((k) => k + 1);
+      } else {
+        // Folder created but no valid files to upload
+        console.log('No valid files to upload');
+        showToast(`Ordner "${folderName}" wurde erstellt.`, 'success');
+        await loadFiles();
+        setTreeRefreshKey((k) => k + 1);
+      }
+    } else {
+      // Empty folder was created
+      console.log('Empty folder created');
+      showToast(`Ordner "${folderName}" wurde erstellt.`, 'success');
+      await loadFiles();
+      setTreeRefreshKey((k) => k + 1);
+    }
+  }, [currentPath, showToast, t, loadFiles, setTreeRefreshKey]);
+  
+  // Wrapper for handleFolderUpload that uses currentPath (for button uploads)
+  const handleFolderUploadWithCurrentPath = useCallback(async (files: File[]) => {
+    return handleFolderUpload(files, currentPath);
+  }, [handleFolderUpload, currentPath]);
+
+  // Helper function to extract files with folder structure from a DragEvent
+  const extractFilesWithFolderStructure = useCallback(async (e: DragEvent | React.DragEvent): Promise<File[]> => {
+    const files: File[] = [];
+    
+    // IMPORTANT: dataTransfer.items is only available during the drop event
+    // and might be null/undefined if accessed incorrectly
+    const dataTransfer = e.dataTransfer;
+    if (!dataTransfer) {
+      console.warn('No dataTransfer in event');
+      return files;
+    }
+    
+    // Try to get files with folder structure using DataTransferItem API
+    // Check if items is available (it's a DataTransferItemList, not an array)
+    const items = dataTransfer.items ? Array.from(dataTransfer.items) : [];
+    
+    console.log('=== EXTRACT FILES WITH FOLDER STRUCTURE ===');
+    console.log('Event type:', e.type);
+    console.log('dataTransfer:', dataTransfer);
+    console.log('dataTransfer.items:', dataTransfer.items);
+    console.log('dataTransfer.items.length:', dataTransfer.items?.length);
+    console.log('Items count (Array.from):', items.length);
+    console.log('dataTransfer.files:', dataTransfer.files);
+    console.log('dataTransfer.files.length:', dataTransfer.files?.length);
+    
+    // Log each item
+    if (items.length > 0) {
+      items.forEach((item, index) => {
+        console.log(`Item ${index}:`, { kind: item.kind, type: item.type });
+      });
+    }
+    
+    if (items.length > 0) {
+      console.log('Using DataTransferItem API to extract folder structure');
+      console.log('Items:', items.map(item => ({ kind: item.kind, type: item.type })));
+      
+      // Process items to preserve folder structure
+      async function processItem(item: DataTransferItem, path: string = ''): Promise<void> {
+        if (item.kind === 'file') {
+          const entry = item.webkitGetAsEntry();
+          if (entry) {
+            if (entry.isFile) {
+              const file = await new Promise<File>((resolve) => {
+                (entry as FileSystemFileEntry).file(resolve);
+              });
+              // Create a File object with webkitRelativePath
+              const relativePath = path ? `${path}/${file.name}` : file.name;
+              const fileWithPath = new File([file], file.name, { type: file.type });
+              (fileWithPath as any).webkitRelativePath = relativePath;
+              files.push(fileWithPath);
+              console.log('Added file:', file.name, 'with path:', relativePath);
+            } else if (entry.isDirectory) {
+              const dirEntry = entry as FileSystemDirectoryEntry;
+              const dirName = dirEntry.name;
+              const newPath = path ? `${path}/${dirName}` : dirName;
+              
+              console.log('Processing directory:', dirName, 'at path:', newPath);
+              
+              // Read directory contents recursively
+              await processDirectoryEntry(dirEntry, newPath);
+            }
+          }
+        }
+      }
+      
+      async function processDirectoryEntry(dirEntry: FileSystemDirectoryEntry, path: string): Promise<void> {
+        const reader = dirEntry.createReader();
+        const readEntries = (): Promise<void> => {
+          return new Promise((resolve) => {
+            reader.readEntries((entries) => {
+              if (entries.length === 0) {
+                resolve();
+                return;
+              }
+              console.log(`Reading ${entries.length} entries from directory at path: ${path}`);
+              const promises = entries.map((entry) => {
+                if (entry.isFile) {
+                  return new Promise<void>((fileResolve) => {
+                    (entry as FileSystemFileEntry).file((file) => {
+                      const relativePath = `${path}/${file.name}`;
+                      const fileWithPath = new File([file], file.name, { type: file.type });
+                      (fileWithPath as any).webkitRelativePath = relativePath;
+                      files.push(fileWithPath);
+                      console.log('Added file from directory:', file.name, 'with path:', relativePath);
+                      fileResolve();
+                    });
+                  });
+                } else if (entry.isDirectory) {
+                  const newPath = `${path}/${entry.name}`;
+                  console.log('Found subdirectory:', entry.name, 'at path:', newPath);
+                  return processDirectoryEntry(entry as FileSystemDirectoryEntry, newPath);
+                }
+                return Promise.resolve();
+              });
+              Promise.all(promises).then(() => readEntries().then(resolve));
+            });
+          });
+        };
+        await readEntries();
+      }
+      
+      try {
+        for (const item of items) {
+          await processItem(item);
+        }
+        console.log('Extracted', files.length, 'files with folder structure');
+        console.log('Files with webkitRelativePath:', files.map(f => ({
+          name: f.name,
+          webkitRelativePath: (f as any).webkitRelativePath
+        })));
+      } catch (error) {
+        console.error('Error extracting files with folder structure:', error);
+        // Fallback to regular files on error
+        const regularFiles = Array.from(e.dataTransfer?.files || []);
+        files.push(...regularFiles);
+      }
+    } else {
+      // Fallback to regular files if DataTransferItem API is not available
+      console.log('DataTransferItem API not available, using regular files');
+      const regularFiles = Array.from(e.dataTransfer?.files || []);
+      files.push(...regularFiles);
+    }
+    
+    return files;
+  }, []);
+
+  const handleExternalFilesDrop = useCallback(async (files: File[], targetPath: string) => {
+    console.log('=== handleExternalFilesDrop CALLED ===');
+    console.log('Files dropped:', files.length, 'files');
+    console.log('Target path:', targetPath);
+    
+    const filesWithDetails = files.map(f => ({
+      name: f.name,
+      size: f.size,
+      type: f.type,
+      webkitRelativePath: (f as any).webkitRelativePath
+    }));
+    console.log('Files:', filesWithDetails);
+    
+    // Check if this is a folder upload (has webkitRelativePath)
+    const filesWithRelativePath = files.filter(f => (f as any).webkitRelativePath);
+    const hasRelativePaths = filesWithRelativePath.length > 0;
+    
+    console.log('Folder upload check:', {
+      totalFiles: files.length,
+      filesWithRelativePath: filesWithRelativePath.length,
+      hasRelativePaths: hasRelativePaths,
+      relativePaths: filesWithRelativePath.map(f => (f as any).webkitRelativePath)
+    });
+    
+    if (hasRelativePaths && files.length > 0) {
+      // This is a folder upload, use handleFolderUpload logic
+      console.log('✓ Detected folder upload via drag-and-drop, using folder upload logic');
+      console.log('Calling handleFolderUpload with', files.length, 'files and targetPath:', targetPath);
+      // Call handleFolderUpload with the files and targetPath
+      await handleFolderUpload(files, targetPath);
+      return;
+    } else {
+      console.log('✗ Not a folder upload (no webkitRelativePath), using regular file upload');
+      // If user dragged a folder but webkitRelativePath is missing, show a helpful message
+      if (files.length === 1 && files[0].name && !files[0].name.includes('.')) {
+        // Single file without extension might be a folder
+        showToast('⚠️ Drag-and-Drop unterstützt keine Ordnerstruktur. Bitte verwenden Sie das Ordner-Icon (📁) in der Toolbar für Ordner-Uploads.', 'info');
+      } else if (files.length > 1) {
+        // Multiple files might be from a folder
+        showToast('⚠️ Drag-and-Drop unterstützt keine Ordnerstruktur. Bitte verwenden Sie das Ordner-Icon (📁) in der Toolbar, um einen Ordner mit allen Dateien hochzuladen.', 'info');
+      }
+    }
+    
+    // Regular file upload - add all files to queue
+    // Limit to prevent memory issues with too many files
+    const maxFiles = 100;
+    const filesToUpload = files.slice(0, maxFiles);
+    
+    if (files.length > maxFiles) {
+      showToast(`${files.length} Dateien ausgewählt, nur die ersten ${maxFiles} werden hochgeladen.`, 'info');
+    }
+    
+    setUploadQueue((prevQueue) => [...prevQueue, ...filesToUpload.map(file => ({ file, targetPath }))]);
+  }, [showToast, handleFolderUpload, currentPath]);
+
+  // Wrapper function that accepts a DragEvent and extracts files with folder structure
+  const handleExternalDropWithEvent = useCallback(async (e: React.DragEvent, targetPath: string) => {
+    console.log('=== handleExternalDropWithEvent CALLED ===');
+    console.log('Target path:', targetPath);
+    console.log('Event:', e);
+    console.log('dataTransfer.files.length:', e.dataTransfer?.files?.length);
+    
+    try {
+      const files = await extractFilesWithFolderStructure(e);
+      console.log('Extracted files count:', files.length);
+      console.log('Files with webkitRelativePath:', files.filter(f => (f as any).webkitRelativePath).length);
+      
+      if (files.length > 0) {
+        await handleExternalFilesDrop(files, targetPath);
+      } else {
+        // If no files were extracted but files exist in dataTransfer, try fallback
+        const regularFiles = Array.from(e.dataTransfer?.files || []);
+        if (regularFiles.length > 0) {
+          console.warn('No files extracted with folder structure, trying regular file upload');
+          console.warn('⚠️ Drag-and-Drop unterstützt keine Ordnerstruktur. Bitte verwenden Sie das Ordner-Icon (📁) in der Toolbar für Ordner-Uploads.');
+          showToast('⚠️ Drag-and-Drop unterstützt keine Ordnerstruktur. Bitte verwenden Sie das Ordner-Icon (📁) in der Toolbar für Ordner-Uploads.', 'info');
+          await handleExternalFilesDrop(regularFiles, targetPath);
+        } else {
+          console.warn('No files extracted from drag event');
+        }
+      }
+    } catch (error) {
+      console.error('Error in handleExternalDropWithEvent:', error);
+      // Fallback to regular files
+      const regularFiles = Array.from(e.dataTransfer?.files || []);
+      if (regularFiles.length > 0) {
+        console.warn('Error extracting files, trying regular file upload');
+        await handleExternalFilesDrop(regularFiles, targetPath);
+      }
+    }
+  }, [extractFilesWithFolderStructure, handleExternalFilesDrop, showToast]);
 
   async function handleReplaceConfirm() {
     if (replaceModal.file && replaceModal.targetPath) {
@@ -1203,15 +1594,17 @@ export default function FileManager({ user, onLogout, initialPath, initialFile: 
       }
     }
 
-    function handleDrop(e: DragEvent) {
+    async function handleDrop(e: DragEvent) {
       e.preventDefault();
       e.stopPropagation();
       setExternalDragOver(false);
       
-      const files = Array.from(e.dataTransfer?.files || []);
+      const files = await extractFilesWithFolderStructure(e);
+      
       if (files.length > 0) {
         // Use currentPath as fallback if no specific target was set
         const target = externalDragTarget !== null ? externalDragTarget : currentPath;
+        console.log('Calling handleExternalFilesDrop with', files.length, 'files');
         handleExternalFilesDrop(files, target);
       }
       setExternalDragTarget(null);
@@ -1228,12 +1621,49 @@ export default function FileManager({ user, onLogout, initialPath, initialFile: 
     };
   }, [externalDragTarget, currentPath, handleExternalFilesDrop]);
 
+  // Debug function to log folder contents
+  function logFolderContents() {
+    console.log('=== FOLDER CONTENTS DEBUG ===');
+    console.log('Current Path:', currentPath);
+    console.log('Files in current folder:', files.length);
+    console.log('Files:', files.map(f => ({
+      name: f.name,
+      path: f.path,
+      type: f.type,
+      size: f.size,
+      createdBy: f.metadata?.createdBy,
+      lastModifiedBy: f.metadata?.lastModifiedBy
+    })));
+    console.log('============================');
+  }
+  
+  // Make it available globally for debugging
+  useEffect(() => {
+    (window as any).logFolderContents = logFolderContents;
+    return () => {
+      delete (window as any).logFolderContents;
+    };
+  }, [currentPath, files]);
+
   async function loadFiles() {
     setLoading(true);
     setFilesLoaded(false); // Reset animation trigger - items will be hidden
     try {
       const res = await fetch(`/api/files?path=${encodeURIComponent(currentPath)}`);
       const data = await res.json();
+      
+      // Debug: Log folder contents after loading
+      console.log('=== FOLDER LOADED ===');
+      console.log('Path:', currentPath);
+      console.log('Items loaded:', data.contents?.length || 0);
+      console.log('Items:', data.contents?.map((item: any) => ({
+        name: item.name,
+        path: item.path,
+        type: item.type,
+        size: item.size
+      })) || []);
+      console.log('====================');
+      
       if (res.ok) {
         setFiles(data.contents || []);
         setFocusedIndex(null); // Reset focus when loading new directory
@@ -2631,7 +3061,7 @@ export default function FileManager({ user, onLogout, initialPath, initialFile: 
                 currentPath={currentPath}
                 onNavigate={navigateToPath}
                 onRefresh={handleRefresh}
-                onExternalDrop={handleExternalFilesDrop}
+                onExternalDrop={handleExternalDropWithEvent}
                 userId={user.id}
                 refreshFolderPath={refreshFolderPath}
                 setRefreshFolderPath={setRefreshFolderPath}
@@ -2851,7 +3281,7 @@ export default function FileManager({ user, onLogout, initialPath, initialFile: 
                   currentPath={currentPath}
                   onNavigate={navigateToPath}
                   onRefresh={handleRefresh}
-                  onExternalDrop={handleExternalFilesDrop}
+                  onExternalDrop={handleExternalDropWithEvent}
                   userId={user.id}
                   refreshFolderPath={refreshFolderPath}
                   setRefreshFolderPath={setRefreshFolderPath}
@@ -3350,7 +3780,7 @@ export default function FileManager({ user, onLogout, initialPath, initialFile: 
                   <FileUpload
                     currentPath={currentPath}
                     onUploaded={handleRefresh}
-                    onFolderUpload={handleFolderUpload}
+                    onFolderUpload={handleFolderUploadWithCurrentPath}
                   />
                 </div>
               </div>
@@ -4131,7 +4561,7 @@ export default function FileManager({ user, onLogout, initialPath, initialFile: 
             <FileUpload
               currentPath={currentPath}
               onUploaded={handleRefresh}
-              onFolderUpload={handleFolderUpload}
+              onFolderUpload={handleFolderUploadWithCurrentPath}
             >
               <div className="flex flex-col items-center gap-1 p-2 text-gray-600 dark:text-gray-400 hover:text-blue-600 dark:hover:text-blue-400 transition-colors">
                 <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">

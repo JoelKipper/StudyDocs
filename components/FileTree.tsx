@@ -15,7 +15,7 @@ interface FileTreeProps {
   currentPath: string;
   onNavigate: (path: string) => void;
   onRefresh: () => void;
-  onExternalDrop?: (files: File[], targetPath: string) => void;
+  onExternalDrop?: (e: React.DragEvent, targetPath: string) => void;
   onMoveItem?: (itemPath: string, targetPath: string) => Promise<void>;
   onFileDoubleClick?: (filePath: string, fileName: string) => void;
   userId: string;
@@ -580,8 +580,7 @@ export default function FileTree({ currentPath, onNavigate, onRefresh, onExterna
     
     // Handle external file drops
     if (e.dataTransfer.files.length > 0 && onExternalDrop) {
-      const files = Array.from(e.dataTransfer.files);
-      onExternalDrop(files, '');
+      onExternalDrop(e, '');
       return;
     }
     
@@ -794,7 +793,7 @@ interface TreeNodeProps {
   onNavigate: (path: string) => void;
   isExpanded: (path: string) => boolean;
   onToggleExpand: (path: string) => void;
-  onExternalDrop?: (files: File[], targetPath: string) => void;
+  onExternalDrop?: (e: React.DragEvent, targetPath: string) => void;
   onMoveItem?: (itemPath: string, targetPath: string) => Promise<void>;
   onFileDoubleClick?: (filePath: string, fileName: string) => void;
   draggedItem: string | null;
@@ -943,8 +942,7 @@ function TreeNode({
     
     // Handle external file drops
     if (item.type === 'directory' && e.dataTransfer.files.length > 0 && onExternalDrop) {
-      const files = Array.from(e.dataTransfer.files);
-      onExternalDrop(files, item.path);
+      onExternalDrop(e, item.path);
       return;
     }
     
