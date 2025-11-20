@@ -5,6 +5,7 @@ import { useLanguage } from '@/contexts/LanguageContext';
 
 interface SearchFilters {
   fileType: 'all' | 'file' | 'directory';
+  fileExtensions?: string[];
   minSize?: number;
   maxSize?: number;
   dateFrom?: Date;
@@ -123,7 +124,7 @@ export default function SearchBar({
           ref={filterButtonRef}
           onClick={() => setShowFilters(!showFilters)}
           className={`absolute right-0 top-1/2 -translate-y-1/2 pr-3 flex items-center ${
-            showFilters || filters.fileType !== 'all' || filters.minSize || filters.maxSize || filters.dateFrom || filters.dateTo
+            showFilters || filters.fileType !== 'all' || (filters.fileExtensions && filters.fileExtensions.length > 0) || filters.minSize || filters.maxSize || filters.dateFrom || filters.dateTo
               ? 'text-blue-600 dark:text-blue-400'
               : 'text-gray-400 hover:text-gray-600 dark:hover:text-gray-300'
           }`}
@@ -160,13 +161,91 @@ export default function SearchBar({
                     fileType: e.target.value as 'all' | 'file' | 'directory',
                   })
                 }
-                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500 mb-3"
               >
                 <option value="all">{t('allTypes')}</option>
                 <option value="file">{t('filesOnly')}</option>
                 <option value="directory">{t('directoriesOnly')}</option>
               </select>
             </div>
+
+            {/* File Extensions Filter */}
+            {filters.fileType === 'file' || filters.fileType === 'all' ? (
+              <div>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                  {t('fileExtensions') || 'Dateitypen'}
+                </label>
+                <div className="max-h-48 overflow-y-auto border border-gray-300 dark:border-gray-600 rounded-lg p-2 bg-white dark:bg-gray-700">
+                  <div className="grid grid-cols-2 gap-2">
+                    {[
+                      { ext: 'pdf', label: 'PDF' },
+                      { ext: 'doc', label: 'DOC' },
+                      { ext: 'docx', label: 'DOCX' },
+                      { ext: 'xls', label: 'XLS' },
+                      { ext: 'xlsx', label: 'XLSX' },
+                      { ext: 'ppt', label: 'PPT' },
+                      { ext: 'pptx', label: 'PPTX' },
+                      { ext: 'txt', label: 'TXT' },
+                      { ext: 'md', label: 'Markdown' },
+                      { ext: 'jpg', label: 'JPG' },
+                      { ext: 'jpeg', label: 'JPEG' },
+                      { ext: 'png', label: 'PNG' },
+                      { ext: 'gif', label: 'GIF' },
+                      { ext: 'mp4', label: 'MP4' },
+                      { ext: 'mp3', label: 'MP3' },
+                      { ext: 'zip', label: 'ZIP' },
+                      { ext: 'js', label: 'JavaScript' },
+                      { ext: 'ts', label: 'TypeScript' },
+                      { ext: 'html', label: 'HTML' },
+                      { ext: 'css', label: 'CSS' },
+                      { ext: 'java', label: 'Java' },
+                      { ext: 'py', label: 'Python' },
+                    ].map(({ ext, label }) => (
+                      <label
+                        key={ext}
+                        className="flex items-center space-x-2 cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-600 rounded px-2 py-1"
+                      >
+                        <input
+                          type="checkbox"
+                          checked={filters.fileExtensions?.includes(ext) || false}
+                          onChange={(e) => {
+                            const currentExtensions = filters.fileExtensions || [];
+                            if (e.target.checked) {
+                              onFiltersChange({
+                                ...filters,
+                                fileExtensions: [...currentExtensions, ext],
+                              });
+                            } else {
+                              onFiltersChange({
+                                ...filters,
+                                fileExtensions: currentExtensions.filter((e) => e !== ext),
+                              });
+                            }
+                          }}
+                          className="w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500 dark:border-gray-600 dark:bg-gray-700"
+                        />
+                        <span className="text-sm text-gray-700 dark:text-gray-300">
+                          {label} (.{ext})
+                        </span>
+                      </label>
+                    ))}
+                  </div>
+                </div>
+                {filters.fileExtensions && filters.fileExtensions.length > 0 && (
+                  <button
+                    onClick={() =>
+                      onFiltersChange({
+                        ...filters,
+                        fileExtensions: undefined,
+                      })
+                    }
+                    className="mt-2 text-xs text-blue-600 dark:text-blue-400 hover:underline"
+                  >
+                    {t('clearExtensions') || 'Alle auswählen'}
+                  </button>
+                )}
+              </div>
+            ) : null}
 
             {/* Size Filter */}
             <div>
@@ -175,30 +254,106 @@ export default function SearchBar({
               </label>
               <div className="grid grid-cols-2 gap-2">
                 <div>
+                  <label className="block text-xs text-gray-500 dark:text-gray-400 mb-1">
+                    {t('minSize')} (KB)
+                  </label>
                   <input
-                    type="number"
+                    type="text"
+                    inputMode="numeric"
+                    pattern="[0-9]*"
                     placeholder={t('minSize')}
-                    value={filters.minSize || ''}
-                    onChange={(e) =>
-                      onFiltersChange({
-                        ...filters,
-                        minSize: e.target.value ? parseInt(e.target.value) * 1024 : undefined,
-                      })
-                    }
+                    value={filters.minSize ? Math.round(filters.minSize / 1024).toString() : ''}
+                    onChange={(e) => {
+                      const value = e.target.value;
+                      // Only allow numbers (including empty string)
+                      if (value === '' || /^\d+$/.test(value)) {
+                        onFiltersChange({
+                          ...filters,
+                          minSize: value ? parseInt(value) * 1024 : undefined,
+                        });
+                      }
+                    }}
+                    onKeyDown={(e) => {
+                      // Allow: backspace, delete, tab, escape, enter
+                      if ([8, 9, 27, 13, 46].includes(e.keyCode) ||
+                          // Allow: Ctrl+A, Ctrl+C, Ctrl+V, Ctrl+X
+                          (e.keyCode === 65 && (e.ctrlKey || e.metaKey)) ||
+                          (e.keyCode === 67 && (e.ctrlKey || e.metaKey)) ||
+                          (e.keyCode === 86 && (e.ctrlKey || e.metaKey)) ||
+                          (e.keyCode === 88 && (e.ctrlKey || e.metaKey)) ||
+                          // Allow: home, end, left, right, up, down
+                          (e.keyCode >= 35 && e.keyCode <= 40)) {
+                        return;
+                      }
+                      // Allow only numbers (0-9) from both keyboard and numpad
+                      if ((e.keyCode >= 48 && e.keyCode <= 57) || (e.keyCode >= 96 && e.keyCode <= 105)) {
+                        return;
+                      }
+                      e.preventDefault();
+                    }}
+                    onPaste={(e) => {
+                      e.preventDefault();
+                      const paste = (e.clipboardData || (window as any).clipboardData).getData('text');
+                      const numbersOnly = paste.replace(/\D/g, '');
+                      if (numbersOnly) {
+                        onFiltersChange({
+                          ...filters,
+                          minSize: parseInt(numbersOnly) * 1024,
+                        });
+                      }
+                    }}
                     className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
                   />
                 </div>
                 <div>
+                  <label className="block text-xs text-gray-500 dark:text-gray-400 mb-1">
+                    {t('maxSize')} (KB)
+                  </label>
                   <input
-                    type="number"
+                    type="text"
+                    inputMode="numeric"
+                    pattern="[0-9]*"
                     placeholder={t('maxSize')}
-                    value={filters.maxSize ? filters.maxSize / 1024 : ''}
-                    onChange={(e) =>
-                      onFiltersChange({
-                        ...filters,
-                        maxSize: e.target.value ? parseInt(e.target.value) * 1024 : undefined,
-                      })
-                    }
+                    value={filters.maxSize ? Math.round(filters.maxSize / 1024).toString() : ''}
+                    onChange={(e) => {
+                      const value = e.target.value;
+                      // Only allow numbers (including empty string)
+                      if (value === '' || /^\d+$/.test(value)) {
+                        onFiltersChange({
+                          ...filters,
+                          maxSize: value ? parseInt(value) * 1024 : undefined,
+                        });
+                      }
+                    }}
+                    onKeyDown={(e) => {
+                      // Allow: backspace, delete, tab, escape, enter
+                      if ([8, 9, 27, 13, 46].includes(e.keyCode) ||
+                          // Allow: Ctrl+A, Ctrl+C, Ctrl+V, Ctrl+X
+                          (e.keyCode === 65 && (e.ctrlKey || e.metaKey)) ||
+                          (e.keyCode === 67 && (e.ctrlKey || e.metaKey)) ||
+                          (e.keyCode === 86 && (e.ctrlKey || e.metaKey)) ||
+                          (e.keyCode === 88 && (e.ctrlKey || e.metaKey)) ||
+                          // Allow: home, end, left, right, up, down
+                          (e.keyCode >= 35 && e.keyCode <= 40)) {
+                        return;
+                      }
+                      // Allow only numbers (0-9) from both keyboard and numpad
+                      if ((e.keyCode >= 48 && e.keyCode <= 57) || (e.keyCode >= 96 && e.keyCode <= 105)) {
+                        return;
+                      }
+                      e.preventDefault();
+                    }}
+                    onPaste={(e) => {
+                      e.preventDefault();
+                      const paste = (e.clipboardData || (window as any).clipboardData).getData('text');
+                      const numbersOnly = paste.replace(/\D/g, '');
+                      if (numbersOnly) {
+                        onFiltersChange({
+                          ...filters,
+                          maxSize: parseInt(numbersOnly) * 1024,
+                        });
+                      }
+                    }}
                     className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
                   />
                 </div>
@@ -253,6 +408,7 @@ export default function SearchBar({
               onClick={() => {
                 onFiltersChange({
                   fileType: 'all',
+                  fileExtensions: undefined,
                   minSize: undefined,
                   maxSize: undefined,
                   dateFrom: undefined,

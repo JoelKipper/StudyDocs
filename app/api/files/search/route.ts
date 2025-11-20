@@ -50,6 +50,7 @@ export async function GET(request: NextRequest) {
     const { searchParams } = new URL(request.url);
     const query = searchParams.get('q') || '';
     const fileType = searchParams.get('type') || 'all';
+    const extensions = searchParams.get('extensions');
     const minSize = searchParams.get('minSize');
     const maxSize = searchParams.get('maxSize');
     const dateFrom = searchParams.get('dateFrom');
@@ -74,6 +75,16 @@ export async function GET(request: NextRequest) {
     // File type filter
     if (fileType !== 'all') {
       filtered = filtered.filter((file) => file.type === fileType);
+    }
+
+    // File extensions filter
+    if (extensions) {
+      const extensionList = extensions.split(',').map((ext) => ext.trim().toLowerCase());
+      filtered = filtered.filter((file) => {
+        if (file.type !== 'file') return false;
+        const fileExtension = file.name.split('.').pop()?.toLowerCase() || '';
+        return extensionList.includes(fileExtension);
+      });
     }
 
     // Size filter

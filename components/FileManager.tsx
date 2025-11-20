@@ -65,6 +65,7 @@ export default function FileManager({ user, onLogout, initialPath, initialFile: 
   
   const [files, setFiles] = useState<FileItem[]>([]);
   const [allFiles, setAllFiles] = useState<FileItem[]>([]); // All files for global search
+  const [recursiveFiles, setRecursiveFiles] = useState<FileItem[]>([]); // All files recursively from current path
   const [loading, setLoading] = useState(true);
   const [searchLoading, setSearchLoading] = useState(false);
   const [isGlobalSearch, setIsGlobalSearch] = useState(false);
@@ -114,6 +115,7 @@ export default function FileManager({ user, onLogout, initialPath, initialFile: 
   const [searchQuery, setSearchQuery] = useState('');
   const [searchFilters, setSearchFilters] = useState<{
     fileType: 'all' | 'file' | 'directory';
+    fileExtensions?: string[];
     minSize?: number;
     maxSize?: number;
     dateFrom?: Date;
@@ -1611,6 +1613,33 @@ export default function FileManager({ user, onLogout, initialPath, initialFile: 
     }
   };
 
+  async function loadFilesRecursive(dirPath: string): Promise<FileItem[]> {
+    const allFiles: FileItem[] = [];
+    
+    try {
+      const res = await fetch(`/api/files?path=${encodeURIComponent(dirPath)}`);
+      const data = await res.json();
+      
+      if (res.ok) {
+        const contents = data.contents || [];
+        
+        for (const item of contents) {
+          allFiles.push(item);
+          
+          // If it's a directory, recursively get its contents
+          if (item.type === 'directory') {
+            const subFiles = await loadFilesRecursive(item.path);
+            allFiles.push(...subFiles);
+          }
+        }
+      }
+    } catch (error) {
+      // Error loading directory
+    }
+    
+    return allFiles;
+  }
+
   async function loadFiles() {
     setLoading(true);
     setFilesLoaded(false); // Reset animation trigger - items will be hidden
@@ -1712,6 +1741,9 @@ export default function FileManager({ user, onLogout, initialPath, initialFile: 
       if (searchFilters.fileType !== 'all') {
         params.append('type', searchFilters.fileType);
       }
+      if (searchFilters.fileExtensions && searchFilters.fileExtensions.length > 0) {
+        params.append('extensions', searchFilters.fileExtensions.join(','));
+      }
       if (searchFilters.minSize !== undefined) {
         params.append('minSize', (searchFilters.minSize / 1024).toString());
       }
@@ -1747,6 +1779,42 @@ export default function FileManager({ user, onLogout, initialPath, initialFile: 
     }
   }
 
+  // Load recursive files when search or filters are active
+  useEffect(() => {
+    const hasActiveSearchOrFilter = 
+      searchQuery.trim() !== '' ||
+      searchFilters.fileType !== 'all' ||
+      (searchFilters.fileExtensions && searchFilters.fileExtensions.length > 0) ||
+      searchFilters.minSize !== undefined ||
+      searchFilters.maxSize !== undefined ||
+      searchFilters.dateFrom !== undefined ||
+      searchFilters.dateTo !== undefined;
+
+    if (hasActiveSearchOrFilter && !isGlobalSearch) {
+      // Set loading state for recursive file loading
+      setSearchLoading(true);
+      
+      // Load all files recursively from current path
+      loadFilesRecursive(currentPath)
+        .then((allRecursiveFiles) => {
+          setRecursiveFiles(allRecursiveFiles);
+        })
+        .catch((error) => {
+          // Error loading recursive files
+          setRecursiveFiles([]);
+        })
+        .finally(() => {
+          setSearchLoading(false);
+        });
+    } else {
+      // Clear recursive files when no search/filter is active
+      setRecursiveFiles([]);
+      if (!isGlobalSearch) {
+        setSearchLoading(false);
+      }
+    }
+  }, [currentPath, searchQuery, searchFilters, isGlobalSearch]);
+
   // Debounced search
   useEffect(() => {
     const timeoutId = setTimeout(() => {
@@ -1763,7 +1831,32 @@ export default function FileManager({ user, onLogout, initialPath, initialFile: 
       return allFiles;
     }
 
-    let filtered = [...filesToFilter];
+    // If search or filters are active, use recursive files from current path
+    const hasActiveSearchOrFilter = 
+      searchQuery.trim() !== '' ||
+      searchFilters.fileType !== 'all' ||
+      (searchFilters.fileExtensions && searchFilters.fileExtensions.length > 0) ||
+      searchFilters.minSize !== undefined ||
+      searchFilters.maxSize !== undefined ||
+      searchFilters.dateFrom !== undefined ||
+      searchFilters.dateTo !== undefined;
+
+    // Use recursive files if search/filter is active, otherwise use current folder files
+    // Only filter files that are under the current path
+    let filesToUse = filesToFilter;
+    if (hasActiveSearchOrFilter && recursiveFiles.length > 0) {
+      // Filter recursive files to only include those under current path
+      const currentPathPrefix = currentPath ? `${currentPath}/` : '';
+      filesToUse = recursiveFiles.filter((file) => {
+        // Include files that are in the current path or its subdirectories
+        if (currentPath === '') {
+          return true; // Root: include all files
+        }
+        return file.path.startsWith(currentPathPrefix) || file.path === currentPath;
+      });
+    }
+
+    let filtered = [...filesToUse];
 
     // Text search
     if (searchQuery.trim()) {
@@ -1777,6 +1870,15 @@ export default function FileManager({ user, onLogout, initialPath, initialFile: 
     // File type filter
     if (searchFilters.fileType !== 'all') {
       filtered = filtered.filter((file) => file.type === searchFilters.fileType);
+    }
+
+    // File extensions filter
+    if (searchFilters.fileExtensions && searchFilters.fileExtensions.length > 0) {
+      filtered = filtered.filter((file) => {
+        if (file.type !== 'file') return false;
+        const fileExtension = file.name.split('.').pop()?.toLowerCase() || '';
+        return searchFilters.fileExtensions!.includes(fileExtension);
+      });
     }
 
     // Size filter
@@ -3774,7 +3876,7 @@ export default function FileManager({ user, onLogout, initialPath, initialFile: 
                     setAllFiles([]);
                   }}
                 />
-                {(searchQuery || searchFilters.fileType !== 'all' || searchFilters.minSize || searchFilters.maxSize || searchFilters.dateFrom || searchFilters.dateTo) && (
+                {(searchQuery || searchFilters.fileType !== 'all' || (searchFilters.fileExtensions && searchFilters.fileExtensions.length > 0) || searchFilters.minSize || searchFilters.maxSize || searchFilters.dateFrom || searchFilters.dateTo) && (
                   <div className="mt-1 text-xs text-gray-500 dark:text-gray-400 flex items-center gap-2">
                     {searchLoading ? (
                       <>
@@ -3916,15 +4018,17 @@ export default function FileManager({ user, onLogout, initialPath, initialFile: 
                   />
                 )}
                 
-            {loading ? (
+            {loading || searchLoading ? (
               <div className="flex flex-col items-center justify-center h-full">
                 <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mb-4"></div>
-                <p className="text-gray-500 dark:text-gray-400">{t('loading')}</p>
+                <p className="text-gray-500 dark:text-gray-400">
+                  {searchLoading ? (language === 'de' ? 'Suche...' : 'Searching...') : t('loading')}
+                </p>
               </div>
             ) : sortedFiles.length === 0 && !creatingNewDirectory ? (
               <div className="flex flex-col items-center justify-center h-full">
                 <div className="w-16 h-16 bg-gray-100 dark:bg-gray-700 rounded-full flex items-center justify-center mb-4">
-                  {searchQuery || searchFilters.fileType !== 'all' || searchFilters.minSize || searchFilters.maxSize || searchFilters.dateFrom || searchFilters.dateTo ? (
+                  {searchQuery || searchFilters.fileType !== 'all' || (searchFilters.fileExtensions && searchFilters.fileExtensions.length > 0) || searchFilters.minSize || searchFilters.maxSize || searchFilters.dateFrom || searchFilters.dateTo ? (
                     <svg className="w-8 h-8 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
                     </svg>
