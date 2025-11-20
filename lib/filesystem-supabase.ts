@@ -19,6 +19,7 @@ export interface FileItem {
   size?: number;
   modified?: Date;
   metadata?: FileMetadata;
+  isPasswordProtected?: boolean;
 }
 
 interface FileMetadataRow {
@@ -35,6 +36,7 @@ interface FileMetadataRow {
   renamed_by: string | null;
   renamed_at: string | null;
   parent_path: string | null;
+  password_hash: string | null;
 }
 
 // Helper to normalize paths for Supabase Storage
@@ -175,6 +177,7 @@ async function rowToFileItem(row: FileMetadataRow): Promise<FileItem> {
     size: row.size || undefined,
     modified: row.last_modified_at ? new Date(row.last_modified_at) : new Date(row.created_at),
     metadata,
+    isPasswordProtected: !!row.password_hash,
   };
 }
 

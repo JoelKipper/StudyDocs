@@ -88,10 +88,21 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: 'Ungültiger oder abgelaufener Token' }, { status: 404 });
     }
 
+    // Check if the item is password protected
+    const { data: fileMetadata } = await supabaseServer
+      .from('file_metadata')
+      .select('password_hash, name')
+      .eq('path', shareData.item_path)
+      .single();
+
+    const isPasswordProtected = !!fileMetadata?.password_hash;
+
     return NextResponse.json({
       userId: shareData.user_id,
       itemPath: shareData.item_path,
       itemType: shareData.item_type,
+      itemName: fileMetadata?.name || shareData.item_path.split('/').pop() || '',
+      isPasswordProtected,
     });
   } catch (error: any) {
     console.error('Error getting share:', error);

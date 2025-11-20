@@ -3,13 +3,15 @@
 import { useEffect, useState, useRef } from 'react';
 import { useLanguage } from '@/contexts/LanguageContext';
 import ShareModal from './ShareModal';
+import PasswordModal from './PasswordModal';
 
 interface FilePreviewProps {
-  file: { name: string; path: string; type: 'file' | 'directory' } | null;
+  file: { name: string; path: string; type: 'file' | 'directory'; isPasswordProtected?: boolean } | null;
   onClose: () => void;
+  onFileUpdate?: (updatedFile: { name: string; path: string; type: 'file' | 'directory'; isPasswordProtected?: boolean }) => void;
 }
 
-export default function FilePreview({ file, onClose }: FilePreviewProps) {
+export default function FilePreview({ file, onClose, onFileUpdate }: FilePreviewProps) {
   const { t, language } = useLanguage();
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [previewType, setPreviewType] = useState<'pdf' | 'image' | 'text' | 'video' | 'audio' | 'office' | 'unsupported' | null>(null);
@@ -27,6 +29,14 @@ export default function FilePreview({ file, onClose }: FilePreviewProps) {
     itemName: '',
     itemPath: '',
     itemType: 'file',
+  });
+  const [passwordModal, setPasswordModal] = useState<{
+    isOpen: boolean;
+    mode: 'set' | 'verify' | 'remove';
+    error?: string;
+  }>({
+    isOpen: false,
+    mode: 'remove',
   });
 
   useEffect(() => {
@@ -189,13 +199,77 @@ export default function FilePreview({ file, onClose }: FilePreviewProps) {
               )}
           </div>
           <div className="flex-1 min-w-0">
-            <h3 className="text-sm font-semibold text-gray-900 dark:text-white truncate">{file.name}</h3>
+            <h3 className="text-sm font-semibold text-gray-900 dark:text-white truncate flex items-center gap-2">
+              {file.name}
+              {file.isPasswordProtected && (
+                <svg className="w-4 h-4 text-yellow-600 dark:text-yellow-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" title={language === 'de' ? 'Passwortgeschützt' : 'Password Protected'}>
+                  {/* Offenes Schloss - offener Bogen oben (U-Form) */}
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 9V7a4 4 0 118 0v2" />
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 13h12a2 2 0 012 2v4a2 2 0 01-2 2H6a2 2 0 01-2-2v-4a2 2 0 012-2z" />
+                </svg>
+              )}
+            </h3>
             <p className="text-xs text-gray-500 dark:text-gray-400">
               {t('preview')}
             </p>
           </div>
         </div>
         <div className="flex items-center gap-1">
+            {file.isPasswordProtected && (
+              <button
+                onClick={async () => {
+                  // Try to remove password protection directly without password modal
+                  // If user is owner, it will work; otherwise, show password modal
+                  try {
+                    const res = await fetch('/api/files/password', {
+                      method: 'POST',
+                      headers: { 'Content-Type': 'application/json' },
+                      body: JSON.stringify({
+                        path: file.path,
+                        password: '', // Empty - will work if user is owner
+                        action: 'remove',
+                      }),
+                    });
+
+                    const data = await res.json();
+
+                    if (!res.ok) {
+                      // If it fails, user is not owner or needs password - show password modal
+                      if (data.error && (data.error.includes('Passwort') || data.error.includes('password'))) {
+                        setPasswordModal({
+                          isOpen: true,
+                          mode: 'remove',
+                        });
+                      } else {
+                        alert(data.error || (language === 'de' ? 'Fehler beim Entfernen des Passworts' : 'Error removing password'));
+                      }
+                      return;
+                    }
+
+                    // Success - update the file state without reloading
+                    if (file && onFileUpdate) {
+                      onFileUpdate({
+                        ...file,
+                        isPasswordProtected: false,
+                      });
+                    }
+                  } catch (error: any) {
+                    // On error, show password modal as fallback
+                    setPasswordModal({
+                      isOpen: true,
+                      mode: 'remove',
+                    });
+                  }
+                }}
+                className="p-1.5 text-gray-500 hover:text-yellow-600 dark:text-gray-400 dark:hover:text-yellow-400 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors"
+                title={language === 'de' ? 'Passwort-Schutz entfernen' : 'Remove Password Protection'}
+              >
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 9V7a4 4 0 118 0v2" />
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 13h12a2 2 0 012 2v4a2 2 0 01-2 2H6a2 2 0 01-2-2v-4a2 2 0 012-2z" />
+                </svg>
+              </button>
+            )}
             <button
               onClick={() => {
                 setShareModal({
@@ -447,6 +521,56 @@ export default function FilePreview({ file, onClose }: FilePreviewProps) {
         itemPath={shareModal.itemPath}
         itemType={shareModal.itemType}
       />
+
+      {/* Password Modal */}
+      {file && (
+        <PasswordModal
+          isOpen={passwordModal.isOpen}
+          onClose={() => setPasswordModal({ isOpen: false, mode: 'remove' })}
+          onConfirm={async (password) => {
+            try {
+              // Try to remove password protection - if user is owner, password is optional
+              const res = await fetch('/api/files/password', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                  path: file.path,
+                  password: password || '', // Empty string if not provided (owner can remove without password)
+                  action: 'remove',
+                }),
+              });
+
+              const data = await res.json();
+
+              if (!res.ok) {
+                setPasswordModal(prev => ({
+                  ...prev,
+                  error: data.error || (language === 'de' ? 'Fehler beim Entfernen des Passworts' : 'Error removing password'),
+                }));
+                return;
+              }
+
+              // Success - update the file state without reloading
+              setPasswordModal({ isOpen: false, mode: 'remove' });
+              if (file && onFileUpdate) {
+                onFileUpdate({
+                  ...file,
+                  isPasswordProtected: false,
+                });
+              }
+            } catch (error: any) {
+              setPasswordModal(prev => ({
+                ...prev,
+                error: error.message || (language === 'de' ? 'Fehler beim Entfernen des Passworts' : 'Error removing password'),
+              }));
+            }
+          }}
+          itemName={file.name}
+          itemType={file.type}
+          mode={passwordModal.mode}
+          error={passwordModal.error}
+        />
+      )}
     </div>
   );
 }

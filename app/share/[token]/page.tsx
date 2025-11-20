@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import { useRouter, useParams } from 'next/navigation';
 import { useLanguage } from '@/contexts/LanguageContext';
+import PasswordModal from '@/components/PasswordModal';
 
 export default function SharePage() {
   const params = useParams();
@@ -10,6 +11,16 @@ export default function SharePage() {
   const { language } = useLanguage();
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const [shareData, setShareData] = useState<{
+    itemPath: string;
+    itemType: 'file' | 'directory';
+    itemName: string;
+    isPasswordProtected: boolean;
+  } | null>(null);
+  const [passwordModal, setPasswordModal] = useState({
+    isOpen: false,
+    error: '',
+  });
 
   useEffect(() => {
     let cancelled = false;
@@ -54,7 +65,22 @@ export default function SharePage() {
           return;
         }
 
-        // User is logged in, navigate to the shared item immediately
+        // Check if item is password protected
+        if (data.isPasswordProtected) {
+          if (!cancelled) {
+            setShareData({
+              itemPath: data.itemPath,
+              itemType: data.itemType,
+              itemName: data.itemName || data.itemPath.split('/').pop() || '',
+              isPasswordProtected: true,
+            });
+            setPasswordModal({ isOpen: true, error: '' });
+            setLoading(false);
+          }
+          return;
+        }
+
+        // User is logged in and item is not password protected, navigate to the shared item immediately
         cancelled = true; // Prevent any state updates
         // If it's a file, open it in preview; if it's a directory, navigate to it
         if (data.itemType === 'file') {
@@ -123,6 +149,67 @@ export default function SharePage() {
     );
   }
 
-  return null;
+  async function handlePasswordConfirm(password: string) {
+    if (!shareData) return;
+
+    try {
+      // Verify password
+      const res = await fetch('/api/files/password', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          path: shareData.itemPath,
+          password,
+          action: 'verify',
+        }),
+      });
+
+      const data = await res.json();
+
+      if (!res.ok) {
+        setPasswordModal({
+          isOpen: true,
+          error: data.error || (language === 'de' ? 'Falsches Passwort' : 'Wrong password'),
+        });
+        return;
+      }
+
+      // Password verified, navigate to the shared item
+      setPasswordModal({ isOpen: false, error: '' });
+      
+      // If it's a file, open it in preview; if it's a directory, navigate to it
+      if (shareData.itemType === 'file') {
+        // Extract directory path and file name
+        const pathParts = shareData.itemPath.split('/');
+        const fileName = pathParts.pop() || '';
+        const dirPath = pathParts.join('/');
+        window.location.replace(`/?path=${encodeURIComponent(dirPath)}&file=${encodeURIComponent(fileName)}`);
+      } else {
+        // Navigate to the directory
+        window.location.replace(`/?path=${encodeURIComponent(shareData.itemPath)}`);
+      }
+    } catch (error: any) {
+      setPasswordModal({
+        isOpen: true,
+        error: error.message || (language === 'de' ? 'Fehler beim Verifizieren des Passworts' : 'Error verifying password'),
+      });
+    }
+  }
+
+  return (
+    <>
+      {shareData && (
+        <PasswordModal
+          isOpen={passwordModal.isOpen}
+          onClose={() => router.push('/')}
+          onConfirm={handlePasswordConfirm}
+          itemName={shareData.itemName}
+          itemType={shareData.itemType}
+          mode="verify"
+          error={passwordModal.error}
+        />
+      )}
+    </>
+  );
 }
 

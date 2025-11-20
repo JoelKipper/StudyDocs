@@ -10,6 +10,7 @@ import Toast from './Toast';
 import SearchBar from './SearchBar';
 import SettingsModal from './SettingsModal';
 import ShareModal from './ShareModal';
+import PasswordModal from './PasswordModal';
 import FilePreview from './FilePreview';
 import FileIcon from './FileIcon';
 import StorageQuota from './StorageQuota';
@@ -32,6 +33,7 @@ interface FileItem {
   size?: number;
   modified?: Date;
   metadata?: FileMetadata;
+  isPasswordProtected?: boolean;
 }
 
 type SortField = 'name' | 'size' | 'type' | 'modified';
@@ -146,6 +148,16 @@ export default function FileManager({ user, onLogout, initialPath, initialFile: 
       return saved === 'true';
     }
     return false;
+  });
+  const [passwordModal, setPasswordModal] = useState<{
+    isOpen: boolean;
+    item: FileItem | null;
+    mode: 'set' | 'verify' | 'remove';
+    error?: string;
+  }>({
+    isOpen: false,
+    item: null,
+    mode: 'set',
   });
   const [pullToRefresh, setPullToRefresh] = useState({ isPulling: false, distance: 0 });
   const pullStartY = useRef<number | null>(null);
@@ -2795,8 +2807,166 @@ export default function FileManager({ user, onLogout, initialPath, initialFile: 
     }
   }
 
+  async function handlePasswordProtect(item: FileItem) {
+    if (item.isPasswordProtected) {
+      // Remove password protection
+      setPasswordModal({
+        isOpen: true,
+        item,
+        mode: 'remove',
+      });
+    } else {
+      // Set password protection
+      setPasswordModal({
+        isOpen: true,
+        item,
+        mode: 'set',
+      });
+    }
+  }
+
+  async function handlePasswordConfirm(password: string) {
+    if (!passwordModal.item) return;
+
+    const { item, mode } = passwordModal;
+
+    try {
+      const res = await fetch('/api/files/password', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          path: item.path,
+          password,
+          action: mode,
+        }),
+      });
+
+      const data = await res.json();
+
+      if (!res.ok) {
+        setPasswordModal(prev => ({
+          ...prev,
+          error: data.error || (language === 'de' ? 'Fehler beim Verarbeiten des Passworts' : 'Error processing password'),
+        }));
+        return;
+      }
+
+      // Success
+      setPasswordModal({ isOpen: false, item: null, mode: 'set' });
+      
+      if (mode === 'set') {
+        showToast(language === 'de' ? 'Passwort-Schutz aktiviert' : 'Password protection enabled', 'success');
+      } else if (mode === 'remove') {
+        showToast(language === 'de' ? 'Passwort-Schutz entfernt' : 'Password protection removed', 'success');
+      }
+
+      // Refresh file list
+      loadFiles(currentPath);
+      invalidateCache(currentPath);
+      setRefreshFolderPath(currentPath);
+      setTimeout(() => setRefreshFolderPath(null), 100);
+    } catch (error: any) {
+      setPasswordModal(prev => ({
+        ...prev,
+        error: error.message || (language === 'de' ? 'Fehler beim Verarbeiten des Passworts' : 'Error processing password'),
+      }));
+    }
+  }
+
+  async function handlePasswordVerifyForDownload(password: string) {
+    if (!passwordModal.item) return;
+
+    const { item } = passwordModal;
+
+    try {
+      // Verify password and download
+      const res = await fetch(`/api/files/password?path=${encodeURIComponent(item.path)}&password=${encodeURIComponent(password)}`);
+      
+      if (!res.ok) {
+        const data = await res.json();
+        setPasswordModal(prev => ({
+          ...prev,
+          error: data.error || (language === 'de' ? 'Falsches Passwort' : 'Wrong password'),
+        }));
+        return;
+      }
+
+      // Password verified, download the file
+      const blob = await res.blob();
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = item.name;
+      document.body.appendChild(a);
+      a.click();
+      window.URL.revokeObjectURL(url);
+      document.body.removeChild(a);
+      
+      setPasswordModal({ isOpen: false, item: null, mode: 'verify' });
+      showToast(t('fileDownloaded'), 'success');
+    } catch (error: any) {
+      setPasswordModal(prev => ({
+        ...prev,
+        error: error.message || (language === 'de' ? 'Fehler beim Download' : 'Error downloading'),
+      }));
+    }
+  }
+
+  async function handlePasswordVerifyForOpen(password: string) {
+    if (!passwordModal.item) return;
+
+    const { item } = passwordModal;
+
+    try {
+      // Verify password
+      const res = await fetch('/api/files/password', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          path: item.path,
+          password,
+          action: 'verify',
+        }),
+      });
+
+      const data = await res.json();
+
+      if (!res.ok) {
+        setPasswordModal(prev => ({
+          ...prev,
+          error: data.error || (language === 'de' ? 'Falsches Passwort' : 'Wrong password'),
+        }));
+        return;
+      }
+
+      // Password verified, open the file/folder
+      setPasswordModal({ isOpen: false, item: null, mode: 'verify' });
+      
+      if (item.type === 'directory') {
+        navigateToPath(item.path);
+      } else {
+        setPreviewFile(item);
+      }
+    } catch (error: any) {
+      setPasswordModal(prev => ({
+        ...prev,
+        error: error.message || (language === 'de' ? 'Fehler beim Öffnen' : 'Error opening'),
+      }));
+    }
+  }
+
   async function handleDownload(file: FileItem) {
     try {
+      // Check if file is password protected
+      if (file.isPasswordProtected) {
+        setPasswordModal({
+          isOpen: true,
+          item: file,
+          mode: 'verify',
+        });
+        return;
+      }
+
       // If it's a directory, download as ZIP
       if (file.type === 'directory') {
         showToast(t('creatingZip'), 'info');
@@ -4067,6 +4237,15 @@ export default function FileManager({ user, onLogout, initialPath, initialFile: 
                           clearTimeout(clickTimerRef.current);
                           clickTimerRef.current = null;
                         }
+                        // Check if file/folder is password protected
+                        if (file.isPasswordProtected) {
+                          setPasswordModal({
+                            isOpen: true,
+                            item: file,
+                            mode: 'verify',
+                          });
+                          return;
+                        }
                         if (file.type === 'directory') {
                           navigateToPath(file.path);
                         } else {
@@ -4102,7 +4281,7 @@ export default function FileManager({ user, onLogout, initialPath, initialFile: 
                         </div>
                         <div className="flex-1 min-w-0 overflow-hidden">
                           <div className="flex items-center gap-2 min-w-0">
-                            <p className="text-sm font-medium text-gray-900 dark:text-white truncate flex-1 min-w-0">
+                            <p className="text-sm font-medium text-gray-900 dark:text-white truncate flex-1 min-w-0 flex items-center gap-2">
                               {renamingItem?.path === file.path ? (
                                 <input
                                   ref={renameInputRef}
@@ -4115,7 +4294,14 @@ export default function FileManager({ user, onLogout, initialPath, initialFile: 
                                   onClick={(e) => e.stopPropagation()}
                                 />
                               ) : (
-                                file.name
+                                <>
+                                  {file.name}
+                                  {file.isPasswordProtected && (
+                                    <svg className="w-4 h-4 text-yellow-600 dark:text-yellow-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" title={language === 'de' ? 'Passwortgeschützt' : 'Password Protected'}>
+                                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+                                    </svg>
+                                  )}
+                                </>
                               )}
                             </p>
                             {file.type === 'file' && file.size !== undefined && (
@@ -4359,6 +4545,15 @@ export default function FileManager({ user, onLogout, initialPath, initialFile: 
                             clearTimeout(clickTimerRef.current);
                             clickTimerRef.current = null;
                           }
+                          // Check if file/folder is password protected
+                          if (file.isPasswordProtected) {
+                            setPasswordModal({
+                              isOpen: true,
+                              item: file,
+                              mode: 'verify',
+                            });
+                            return;
+                          }
                           // Deselect if file was selected by single click
                           if (selectedItems.has(file.path)) {
                             toggleSelection(file.path);
@@ -4486,8 +4681,13 @@ export default function FileManager({ user, onLogout, initialPath, initialFile: 
                                 />
                               ) : (
                                 <div className="flex flex-col min-w-0">
-                                  <div className="font-medium text-gray-900 dark:text-white truncate">
+                                  <div className="font-medium text-gray-900 dark:text-white truncate flex items-center gap-2">
                                     {file.name}
+                                    {file.isPasswordProtected && (
+                                      <svg className="w-4 h-4 text-yellow-600 dark:text-yellow-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" title={language === 'de' ? 'Passwortgeschützt' : 'Password Protected'}>
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+                                      </svg>
+                                    )}
                                   </div>
                                   {isGlobalSearch && file.path !== file.name && (
                                     <div className="text-xs text-gray-500 dark:text-gray-400 truncate mt-0.5">
@@ -4574,6 +4774,17 @@ export default function FileManager({ user, onLogout, initialPath, initialFile: 
                 <FilePreview
                   file={previewFile}
                   onClose={() => setPreviewFile(null)}
+                  onFileUpdate={(updatedFile) => {
+                    setPreviewFile(updatedFile);
+                    // Also update the file in the files list
+                    setFiles(prevFiles => 
+                      prevFiles.map(f => 
+                        f.path === updatedFile.path 
+                          ? { ...f, isPasswordProtected: updatedFile.isPasswordProtected }
+                          : f
+                      )
+                    );
+                  }}
                 />
               </div>
             )}
@@ -4615,6 +4826,8 @@ export default function FileManager({ user, onLogout, initialPath, initialFile: 
           onRename={contextMenu.item ? () => handleRename(contextMenu.item!) : undefined}
           onCreateDirectory={contextMenu.isEmpty ? handleCreateDirectoryFromContext : undefined}
           onShare={contextMenu.item ? () => handleShare(contextMenu.item!) : undefined}
+          onPasswordProtect={contextMenu.item ? () => handlePasswordProtect(contextMenu.item!) : undefined}
+          isPasswordProtected={contextMenu.item?.isPasswordProtected}
           onToggleFavorite={contextMenu.item ? () => handleToggleFavorite(contextMenu.item!) : undefined}
           isFavorite={contextMenu.item ? favorites.has(contextMenu.item.path) : false}
           itemType={contextMenu.isEmpty ? 'empty' : (contextMenu.item?.type || 'file')}
@@ -4858,6 +5071,31 @@ export default function FileManager({ user, onLogout, initialPath, initialFile: 
         itemName={shareModal.itemName}
         itemPath={shareModal.itemPath}
         itemType={shareModal.itemType}
+      />
+
+      {/* Password Modal */}
+      <PasswordModal
+        isOpen={passwordModal.isOpen}
+        onClose={() => setPasswordModal({ isOpen: false, item: null, mode: 'set' })}
+        onConfirm={(password) => {
+          if (passwordModal.mode === 'verify') {
+            // For verify mode, we need to check context
+            // If it was triggered from download button, use download handler
+            // Otherwise, use open handler
+            const isDownloadContext = contextMenu.item && contextMenu.item.path === passwordModal.item?.path;
+            if (isDownloadContext && passwordModal.item?.type === 'file') {
+              handlePasswordVerifyForDownload(password);
+            } else {
+              handlePasswordVerifyForOpen(password);
+            }
+          } else {
+            handlePasswordConfirm(password);
+          }
+        }}
+        itemName={passwordModal.item?.name || ''}
+        itemType={passwordModal.item?.type || 'file'}
+        mode={passwordModal.mode}
+        error={passwordModal.error}
       />
 
       {/* Toast */}
