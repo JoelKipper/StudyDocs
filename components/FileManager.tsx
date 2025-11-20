@@ -2861,7 +2861,7 @@ export default function FileManager({ user, onLogout, initialPath, initialFile: 
       }
 
       // Refresh file list
-      loadFiles(currentPath);
+      loadFiles();
       invalidateCache(currentPath);
       setRefreshFolderPath(currentPath);
       setTimeout(() => setRefreshFolderPath(null), 100);
