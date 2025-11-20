@@ -582,7 +582,22 @@ export default function FileManager({ user, onLogout, initialPath, initialFile: 
             
             // Invalidate cache and refresh file list and tree
             invalidateCache(targetPath);
+            
+            // Also invalidate tree cache for the parent folder
+            if (typeof window !== 'undefined') {
+              try {
+                const treeCacheKey = `studydocs-tree-${user.id}-${targetPath || 'root'}`;
+                localStorage.removeItem(treeCacheKey);
+              } catch (error) {
+                // Ignore errors
+              }
+            }
+            
             await loadFiles();
+            
+            // Refresh the parent folder in tree to show the new folder
+            setRefreshFolderPath(targetPath);
+            setTimeout(() => setRefreshFolderPath(null), 100);
             setTreeRefreshKey((k) => k + 1);
             
             // Remove this item from queue and continue with next
@@ -685,6 +700,21 @@ export default function FileManager({ user, onLogout, initialPath, initialFile: 
         }
 
         const data = await res.json();
+
+        // Invalidate cache and tree cache for the target path
+        invalidateCache(targetPath);
+        if (typeof window !== 'undefined') {
+          try {
+            const treeCacheKey = `studydocs-tree-${user.id}-${targetPath || 'root'}`;
+            localStorage.removeItem(treeCacheKey);
+          } catch (error) {
+            // Ignore errors
+          }
+        }
+        
+        // Refresh the parent folder in tree to show the new file
+        setRefreshFolderPath(targetPath);
+        setTimeout(() => setRefreshFolderPath(null), 100);
 
         // Update progress after successful upload
         if (uploadProgress) {
@@ -1172,9 +1202,23 @@ export default function FileManager({ user, onLogout, initialPath, initialFile: 
     if (uploadQueue.length === 0 && replaceModal.isOpen === false && !isProcessingUpload) {
       // All files processed, invalidate cache and refresh only current directory (not the entire tree)
       invalidateCache(currentPath);
+      
+      // Also invalidate tree cache for current path
+      if (typeof window !== 'undefined') {
+        try {
+          const treeCacheKey = `studydocs-tree-${user.id}-${currentPath || 'root'}`;
+          localStorage.removeItem(treeCacheKey);
+        } catch (error) {
+          // Ignore errors
+        }
+      }
+      
       loadFiles();
-      // Don't refresh tree on upload - only refresh if file was uploaded to a different directory
-      // setTreeRefreshKey((k) => k + 1);
+      
+      // Refresh the tree for current path
+      setRefreshFolderPath(currentPath);
+      setTimeout(() => setRefreshFolderPath(null), 100);
+      setTreeRefreshKey((k) => k + 1);
       
       // Show summary toast
       if (uploadProgress) {
