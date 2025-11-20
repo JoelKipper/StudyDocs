@@ -498,40 +498,40 @@ export default function FileManager({ user, onLogout, initialPath, initialFile: 
       const { file, targetPath, relativePath, folderName } = uploadQueue[0];
       const totalFiles = uploadQueue.length;
       
-      // Initialize progress for all uploads (single or multiple)
-      if (!uploadProgress) {
-        setUploadProgress({
-          total: totalFiles,
-          completed: 0,
-          current: file.name
-        });
-      } else {
-        // Update current file name
-        setUploadProgress(prev => prev ? { ...prev, current: file.name } : null);
-      }
+      // Clear upload progress first - we'll set it only if file doesn't exist
+      setUploadProgress(null);
       
       try {
-        // Check if file exists
+        // Check if file exists FIRST, before showing upload progress
+        let fileExists = false;
         try {
           const checkRes = await fetch(
             `/api/files/check?fileName=${encodeURIComponent(file.name)}&path=${encodeURIComponent(targetPath)}`
           );
           
-          if (!checkRes.ok) {
-            // Don't throw error, just continue with upload
-          } else {
+          if (checkRes.ok) {
             const checkData = await checkRes.json();
-            
             if (checkData.exists) {
-              // Show replace modal
-              setReplaceModal({ isOpen: true, file, targetPath });
-              setIsProcessingUpload(false);
-              return;
+              fileExists = true;
             }
           }
         } catch (error) {
           // Continue with upload even if check fails
         }
+        
+        // If file exists, show replace modal and don't show upload progress
+        if (fileExists) {
+          setReplaceModal({ isOpen: true, file, targetPath });
+          setIsProcessingUpload(false);
+          return;
+        }
+        
+        // File doesn't exist, proceed with upload - NOW show upload progress
+        setUploadProgress({
+          total: totalFiles,
+          completed: 0,
+          current: file.name
+        });
 
         // Validate file before upload
         if (!file || file.size === undefined) {
@@ -1182,12 +1182,45 @@ export default function FileManager({ user, onLogout, initialPath, initialFile: 
 
   async function handleReplaceConfirm() {
     if (replaceModal.file && replaceModal.targetPath) {
+      // Close replace modal first
+      const fileToUpload = replaceModal.file;
+      const targetPath = replaceModal.targetPath;
+      setReplaceModal({ isOpen: false, file: null, targetPath: '' });
+      
+      // Now show upload progress and start upload
+      setUploadProgress({
+        total: 1,
+        completed: 0,
+        current: fileToUpload.name
+      });
+      
       // Upload file with replacement
-      await uploadSingleFile(replaceModal.file, replaceModal.targetPath);
+      await uploadSingleFile(fileToUpload, targetPath);
+      
+      // Update progress to completed
+      setUploadProgress({
+        total: 1,
+        completed: 1,
+        current: fileToUpload.name
+      });
       
       // Process next file in queue
       setUploadQueue((queue) => queue.slice(1));
-      setReplaceModal({ isOpen: false, file: null, targetPath: '' });
+      
+      // Refresh file list
+      invalidateCache(targetPath);
+      if (typeof window !== 'undefined') {
+        try {
+          const treeCacheKey = `studydocs-tree-${user.id}-${targetPath || 'root'}`;
+          localStorage.removeItem(treeCacheKey);
+        } catch (error) {
+          // Ignore errors
+        }
+      }
+      loadFiles();
+      setRefreshFolderPath(targetPath);
+      setTimeout(() => setRefreshFolderPath(null), 100);
+      setTreeRefreshKey((k) => k + 1);
     }
   }
 
@@ -4502,37 +4535,9 @@ export default function FileManager({ user, onLogout, initialPath, initialFile: 
         />
       )}
 
-      {/* Replace Modal */}
-      <ReplaceModal
-        isOpen={replaceModal.isOpen}
-        onClose={handleReplaceCancel}
-        onConfirm={handleReplaceConfirm}
-        fileName={replaceModal.file?.name || ''}
-      />
-
-      {/* Settings Modal */}
-      <SettingsModal 
-        isOpen={settingsOpen} 
-        onClose={() => setSettingsOpen(false)}
-        user={user}
-        onUserUpdate={() => {
-          // Reload user data if needed
-          window.location.reload();
-        }}
-      />
-
-      {/* Share Modal */}
-      <ShareModal
-        isOpen={shareModal.isOpen}
-        onClose={() => setShareModal({ isOpen: false, itemName: '', itemPath: '', itemType: 'file' })}
-        itemName={shareModal.itemName}
-        itemPath={shareModal.itemPath}
-        itemType={shareModal.itemType}
-      />
-
-      {/* Upload Progress Overlay */}
-      {uploadProgress && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center">
+      {/* Upload Progress Overlay - must be rendered BEFORE ReplaceModal for z-index to work */}
+      {uploadProgress && !replaceModal.isOpen && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 z-40 flex items-center justify-center">
           <div className="bg-white dark:bg-gray-800 rounded-lg shadow-xl p-6 max-w-md w-full mx-4">
             <div className="flex items-center gap-4 mb-4">
               <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-500"></div>
@@ -4561,6 +4566,14 @@ export default function FileManager({ user, onLogout, initialPath, initialFile: 
           </div>
         </div>
       )}
+
+      {/* Replace Modal - rendered AFTER Upload Overlay so it appears on top with z-[60] */}
+      <ReplaceModal
+        isOpen={replaceModal.isOpen}
+        onClose={handleReplaceCancel}
+        onConfirm={handleReplaceConfirm}
+        fileName={replaceModal.file?.name || ''}
+      />
 
       {/* Mobile Bottom Navigation */}
       {isMobile && (
