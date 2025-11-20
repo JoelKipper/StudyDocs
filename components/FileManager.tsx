@@ -15,6 +15,7 @@ import FilePreview from './FilePreview';
 import FileIcon from './FileIcon';
 import StorageQuota from './StorageQuota';
 import FavoritesList from './FavoritesList';
+import InfoModal from './InfoModal';
 import { useLanguage } from '@/contexts/LanguageContext';
 
 interface FileMetadata {
@@ -186,6 +187,13 @@ export default function FileManager({ user, onLogout, initialPath, initialFile: 
     itemName: '',
     itemPath: '',
     itemType: 'file',
+  });
+  const [infoModal, setInfoModal] = useState<{
+    isOpen: boolean;
+    item: FileItem | null;
+  }>({
+    isOpen: false,
+    item: null,
   });
   const [previewFile, setPreviewFile] = useState<FileItem | null>(null);
   const [sidebarTab, setSidebarTab] = useState<'tree' | 'favorites'>(() => {
@@ -4832,6 +4840,12 @@ export default function FileManager({ user, onLogout, initialPath, initialFile: 
           isPasswordProtected={contextMenu.item?.isPasswordProtected}
           onToggleFavorite={contextMenu.item ? () => handleToggleFavorite(contextMenu.item!) : undefined}
           isFavorite={contextMenu.item ? favorites.has(contextMenu.item.path) : false}
+          onInfo={contextMenu.item ? () => {
+            setInfoModal({
+              isOpen: true,
+              item: contextMenu.item,
+            });
+          } : undefined}
           itemType={contextMenu.isEmpty ? 'empty' : (contextMenu.item?.type || 'file')}
         />
       )}
@@ -5073,6 +5087,13 @@ export default function FileManager({ user, onLogout, initialPath, initialFile: 
         itemName={shareModal.itemName}
         itemPath={shareModal.itemPath}
         itemType={shareModal.itemType}
+      />
+
+      {/* Info Modal */}
+      <InfoModal
+        isOpen={infoModal.isOpen}
+        onClose={() => setInfoModal({ isOpen: false, item: null })}
+        item={infoModal.item}
       />
 
       {/* Password Modal */}
