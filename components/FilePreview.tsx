@@ -202,7 +202,8 @@ export default function FilePreview({ file, onClose, onFileUpdate }: FilePreview
             <h3 className="text-sm font-semibold text-gray-900 dark:text-white truncate flex items-center gap-2">
               {file.name}
               {file.isPasswordProtected && (
-                <svg className="w-4 h-4 text-yellow-600 dark:text-yellow-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" title={language === 'de' ? 'Passwortgeschützt' : 'Password Protected'}>
+                <svg className="w-4 h-4 text-yellow-600 dark:text-yellow-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <title>{language === 'de' ? 'Passwortgeschützt' : 'Password Protected'}</title>
                   {/* Offenes Schloss - offener Bogen oben (U-Form) */}
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 9V7a4 4 0 118 0v2" />
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 13h12a2 2 0 012 2v4a2 2 0 01-2 2H6a2 2 0 01-2-2v-4a2 2 0 012-2z" />
