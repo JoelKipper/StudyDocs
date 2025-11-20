@@ -43,7 +43,7 @@ interface TreeNodeData extends FileItem {
 }
 
 export default function FileTree({ currentPath, onNavigate, onRefresh, onExternalDrop, onMoveItem, onFileDoubleClick, userId, refreshFolderPath, setRefreshFolderPath, onRename, onDelete, onDownload, onShare, onToggleFavorite, isFavorite, onItemDeleted, onItemRenamed, onItemMoved, onCreateDirectory }: FileTreeProps) {
-  const { language } = useLanguage();
+  const { language, t } = useLanguage();
   const storageKey = `studydocs-tree-expanded-${userId}`;
   
   // Load expanded state from localStorage
