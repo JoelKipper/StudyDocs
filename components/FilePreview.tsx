@@ -4,6 +4,8 @@ import { useEffect, useState, useRef } from 'react';
 import { useLanguage } from '@/contexts/LanguageContext';
 import ShareModal from './ShareModal';
 import PasswordModal from './PasswordModal';
+import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
+import { vscDarkPlus, vs } from 'react-syntax-highlighter/dist/esm/styles/prism';
 
 interface FilePreviewProps {
   file: { name: string; path: string; type: 'file' | 'directory'; isPasswordProtected?: boolean } | null;
@@ -418,7 +420,7 @@ export default function FilePreview({ file, onClose, onFileUpdate }: FilePreview
             />
           </div>
         ) : previewType === 'text' && previewUrl ? (
-          <TextPreview url={previewUrl} />
+          <TextPreview url={previewUrl} fileName={file.name} />
         ) : previewType === 'video' && previewUrl ? (
           <div className="w-full min-h-full flex items-center justify-center bg-black py-8">
             <video
@@ -576,22 +578,122 @@ export default function FilePreview({ file, onClose, onFileUpdate }: FilePreview
   );
 }
 
-function TextPreview({ url }: { url: string }) {
+function TextPreview({ url, fileName }: { url: string; fileName: string }) {
+  const { t, language } = useLanguage();
   const [content, setContent] = useState<string>('');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const [isDarkMode, setIsDarkMode] = useState(false);
+
+  // Detect dark mode
+  useEffect(() => {
+    const checkDarkMode = () => {
+      const isDark = document.documentElement.classList.contains('dark') || 
+                     window.matchMedia('(prefers-color-scheme: dark)').matches;
+      setIsDarkMode(isDark);
+    };
+    
+    checkDarkMode();
+    const observer = new MutationObserver(checkDarkMode);
+    observer.observe(document.documentElement, {
+      attributes: true,
+      attributeFilter: ['class'],
+    });
+    
+    return () => observer.disconnect();
+  }, []);
+
+  // Get language for syntax highlighting based on file extension
+  function getLanguageFromFileName(fileName: string): string {
+    const extension = fileName.split('.').pop()?.toLowerCase() || '';
+    
+    const languageMap: { [key: string]: string } = {
+      // JavaScript/TypeScript
+      'js': 'javascript',
+      'jsx': 'jsx',
+      'ts': 'typescript',
+      'tsx': 'tsx',
+      'mjs': 'javascript',
+      'cjs': 'javascript',
+      
+      // Web
+      'html': 'html',
+      'htm': 'html',
+      'css': 'css',
+      'scss': 'scss',
+      'sass': 'sass',
+      'less': 'less',
+      'vue': 'vue',
+      
+      // Data formats
+      'json': 'json',
+      'xml': 'xml',
+      'yaml': 'yaml',
+      'yml': 'yaml',
+      'toml': 'toml',
+      'ini': 'ini',
+      
+      // Programming languages
+      'py': 'python',
+      'java': 'java',
+      'cpp': 'cpp',
+      'c': 'c',
+      'h': 'c',
+      'hpp': 'cpp',
+      'cs': 'csharp',
+      'php': 'php',
+      'rb': 'ruby',
+      'go': 'go',
+      'rs': 'rust',
+      'swift': 'swift',
+      'kt': 'kotlin',
+      'scala': 'scala',
+      'r': 'r',
+      'pl': 'perl',
+      'sh': 'bash',
+      'bash': 'bash',
+      'zsh': 'bash',
+      'fish': 'bash',
+      'ps1': 'powershell',
+      'bat': 'batch',
+      'cmd': 'batch',
+      
+      // Markup
+      'md': 'markdown',
+      'markdown': 'markdown',
+      'tex': 'latex',
+      
+      // Config files
+      'env': 'bash',
+      'gitignore': 'git',
+      'dockerfile': 'dockerfile',
+      'makefile': 'makefile',
+      'cmake': 'cmake',
+      
+      // SQL
+      'sql': 'sql',
+      
+      // Other
+      'txt': 'plaintext',
+      'log': 'plaintext',
+    };
+    
+    return languageMap[extension] || 'plaintext';
+  }
 
   useEffect(() => {
     async function loadText() {
       try {
+        setLoading(true);
+        setError('');
         const res = await fetch(url);
         if (!res.ok) {
           throw new Error('Failed to load file');
         }
         const text = await res.text();
         setContent(text);
-      } catch (err) {
-        setError('Failed to load file content');
+      } catch (err: any) {
+        setError(err.message || 'Failed to load file content');
       } finally {
         setLoading(false);
       }
@@ -603,7 +705,10 @@ function TextPreview({ url }: { url: string }) {
   if (loading) {
     return (
       <div className="flex items-center justify-center h-full">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
+          <p className="text-gray-600 dark:text-gray-400">{t('loading')}</p>
+        </div>
       </div>
     );
   }
@@ -611,13 +716,47 @@ function TextPreview({ url }: { url: string }) {
   if (error) {
     return (
       <div className="flex items-center justify-center h-full">
-        <p className="text-red-600 dark:text-red-400">{error}</p>
+        <div className="text-center">
+          <p className="text-red-600 dark:text-red-400">{error}</p>
+        </div>
       </div>
     );
   }
 
+  const detectedLanguage = getLanguageFromFileName(fileName);
+  const isCodeFile = detectedLanguage !== 'plaintext' && detectedLanguage !== 'markdown';
+
+  // For code files, use syntax highlighting
+  if (isCodeFile) {
+    return (
+      <div className="h-full overflow-auto bg-white dark:bg-gray-900">
+        <SyntaxHighlighter
+          language={detectedLanguage}
+          style={isDarkMode ? vscDarkPlus : vs}
+          customStyle={{
+            margin: 0,
+            padding: '1rem',
+            background: isDarkMode ? '#1e1e1e' : '#ffffff',
+            fontSize: '0.875rem',
+            lineHeight: '1.5',
+          }}
+          showLineNumbers={true}
+          lineNumberStyle={{
+            minWidth: '3em',
+            paddingRight: '1em',
+            color: isDarkMode ? '#858585' : '#858585',
+            userSelect: 'none',
+          }}
+        >
+          {content}
+        </SyntaxHighlighter>
+      </div>
+    );
+  }
+
+  // For plain text and markdown, use simple pre tag
   return (
-    <div className="bg-white dark:bg-gray-800 rounded-lg shadow-lg p-6 w-full">
+    <div className="h-full overflow-auto bg-white dark:bg-gray-900 p-4">
       <pre className="text-sm text-gray-900 dark:text-gray-100 whitespace-pre-wrap font-mono">
         {content}
       </pre>
