@@ -88,11 +88,12 @@ export default function FileEditor({ file, onClose, onSave }: FileEditorProps) {
   useEffect(() => {
     if (!file) return;
 
+    const currentFile = file; // Store file in local variable to avoid null check issues
     async function loadFile() {
       try {
         setLoading(true);
         setError('');
-        const res = await fetch(`/api/files/edit?path=${encodeURIComponent(file.path)}`);
+        const res = await fetch(`/api/files/edit?path=${encodeURIComponent(currentFile.path)}`);
         if (!res.ok) {
           const data = await res.json();
           throw new Error(data.error || 'Failed to load file');
