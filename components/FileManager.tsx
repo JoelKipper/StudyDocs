@@ -161,7 +161,7 @@ export default function FileManager({ user, onLogout, initialPath, initialFile: 
     file: null,
     targetPath: '',
   });
-  const [uploadQueue, setUploadQueue] = useState<Array<{ file: File; targetPath: string }>>([]);
+  const [uploadQueue, setUploadQueue] = useState<Array<{ file: File; targetPath: string; relativePath?: string; folderName?: string }>>([]);
   const [shareModal, setShareModal] = useState<{
     isOpen: boolean;
     itemName: string;
@@ -493,7 +493,7 @@ export default function FileManager({ user, onLogout, initialPath, initialFile: 
       if (uploadQueue.length === 0 || replaceModal.isOpen || isProcessingUpload) return;
 
       setIsProcessingUpload(true);
-      const { file, targetPath } = uploadQueue[0];
+      const { file, targetPath, relativePath, folderName } = uploadQueue[0];
       const totalFiles = uploadQueue.length;
       
       // Initialize progress for all uploads (single or multiple)
@@ -533,35 +533,204 @@ export default function FileManager({ user, onLogout, initialPath, initialFile: 
           // Continue with upload even if check fails
         }
 
-        // File doesn't exist, upload it
-        const formData = new FormData();
-        formData.append('file', file);
-        formData.append('path', targetPath);
-
-        const res = await fetch('/api/files/upload', {
-          method: 'POST',
-          body: formData,
-        });
-
-        const data = await res.json();
-        if (!res.ok) {
-          // Only throw error if it's a real error, not a temporary network issue
-          const errorMessage = data.error || 'Fehler beim Hochladen';
-          if (errorMessage.includes('network') || errorMessage.includes('timeout') || errorMessage.includes('fetch')) {
-            // Retry once for network errors
-            console.warn('Netzwerkfehler, versuche erneut...');
-            const retryRes = await fetch('/api/files/upload', {
+        // Validate file before upload
+        if (!file || file.size === undefined) {
+          console.warn('Skipping invalid file (no file object or size):', file?.name || 'unknown');
+          // Skip this file and continue with next
+          setUploadQueue((queue) => queue.slice(1));
+          setIsProcessingUpload(false);
+          return;
+        }
+        
+        // Only skip files that are truly invalid (no name at all)
+        // Allow files without extension or type - they might be valid text files or other formats
+        if (!file.name || file.name.trim() === '') {
+          console.warn('Skipping invalid file (no name):', file.name || 'unknown');
+          // Skip this file and continue with next
+          setUploadQueue((queue) => queue.slice(1));
+          setIsProcessingUpload(false);
+          return;
+        }
+        
+        // Check if file has no extension - if so, create a folder instead
+        const hasExtension = (() => {
+          const name = file.name.trim();
+          const lastDotIndex = name.lastIndexOf('.');
+          // Has extension if: there's a dot, it's not at the start, and there's at least one character after it
+          return lastDotIndex > 0 && lastDotIndex < name.length - 1;
+        })();
+        
+        if (!hasExtension) {
+          console.log('File has no extension, creating folder instead:', file.name);
+          // Create a folder with the file name
+          try {
+            const createRes = await fetch('/api/files', {
               method: 'POST',
-              body: formData,
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                action: 'create-directory',
+                path: targetPath,
+                name: file.name,
+              }),
             });
-            const retryData = await retryRes.json();
-            if (!retryRes.ok) {
-              throw new Error(retryData.error || errorMessage);
+
+            const createData = await createRes.json();
+
+            if (!createRes.ok) {
+              const errorMessage = createData.error || '';
+              if (!errorMessage.includes('existiert bereits') && !errorMessage.includes('already exists')) {
+                console.error('Failed to create folder:', errorMessage);
+                throw new Error(errorMessage || 'Fehler beim Erstellen des Ordners');
+              }
+              console.log('Folder already exists');
+            } else {
+              console.log('Folder created successfully:', file.name);
             }
-          } else {
-            throw new Error(errorMessage);
+            
+            // Refresh file list and tree
+            await loadFiles();
+            setTreeRefreshKey((k) => k + 1);
+            
+            // Remove this item from queue and continue with next
+            setUploadQueue((queue) => queue.slice(1));
+            setIsProcessingUpload(false);
+            return;
+          } catch (err: any) {
+            console.error('Error creating folder:', err);
+            // Remove this item from queue and continue with next
+            setUploadQueue((queue) => queue.slice(1));
+            setIsProcessingUpload(false);
+            return;
           }
         }
+        
+        // For 0-byte files, create a minimal buffer to ensure FormData works
+        // Some browsers have issues with truly empty files in FormData
+        let fileToUpload: File = file;
+        if (file.size === 0) {
+          console.log('Converting 0-byte file to minimal blob for upload');
+          // Create a new File object with a minimal content for 0-byte files
+          // Use a single space character to ensure the file has content
+          const emptyBlob = new Blob([' '], { type: file.type || 'text/plain' });
+          fileToUpload = new File([emptyBlob], file.name, {
+            type: file.type || 'text/plain',
+            lastModified: file.lastModified || Date.now()
+          });
+          console.log('Created new file object:', {
+            name: fileToUpload.name,
+            size: fileToUpload.size,
+            type: fileToUpload.type
+          });
+        }
+        
+        // File doesn't exist, upload it
+        const formData = new FormData();
+        formData.append('file', fileToUpload);
+        
+        // If this is a folder upload, preserve the folder structure
+        let uploadPath: string;
+        if (relativePath && folderName) {
+          // Create the full path: targetPath/folderName/relativePath
+          // relativePath already contains the full path within the folder (including subdirectories and filename)
+          const folderPath = targetPath ? `${targetPath}/${folderName}` : folderName;
+          uploadPath = `${folderPath}/${relativePath}`;
+        } else {
+          // For regular files, include the filename in the path
+          // API will check if path ends with filename and handle accordingly
+          uploadPath = targetPath ? `${targetPath}/${file.name}` : file.name;
+        }
+        
+        // Validate and clean the path
+        uploadPath = uploadPath.replace(/\/+/g, '/').replace(/^\/|\/$/g, '');
+        
+        console.log('Uploading file:', {
+          fileName: file.name,
+          uploadPath,
+          relativePath,
+          folderName,
+          targetPath,
+          fileSize: file.size,
+          fileType: file.type
+        });
+        
+        formData.append('path', uploadPath);
+
+        // Verify FormData was created correctly
+        console.log('FormData created, entries:', {
+          hasFile: formData.has('file'),
+          hasPath: formData.has('path'),
+          pathValue: uploadPath
+        });
+
+        let res: Response;
+        let timeoutId: NodeJS.Timeout | null = null;
+        try {
+          // Use a timeout to prevent hanging requests
+          const controller = new AbortController();
+          timeoutId = setTimeout(() => {
+            console.warn('Upload timeout, aborting...');
+            controller.abort();
+          }, 60000); // 60 second timeout
+          
+          console.log('Starting fetch request to /api/files/upload');
+          
+          res = await fetch('/api/files/upload', {
+            method: 'POST',
+            body: formData,
+            signal: controller.signal,
+            // Don't set Content-Type header - browser will set it automatically with boundary for FormData
+          });
+          
+          if (timeoutId) clearTimeout(timeoutId);
+          console.log('Fetch request completed, status:', res.status);
+        } catch (fetchError: any) {
+          if (timeoutId) clearTimeout(timeoutId);
+          
+          // Network error (CORS, connection refused, etc.)
+          console.error('Network error during fetch:', fetchError);
+          console.error('Error type:', fetchError.constructor.name);
+          console.error('Error name:', fetchError.name);
+          console.error('Error message:', fetchError.message);
+          console.error('File details:', {
+            name: file.name,
+            size: file.size,
+            type: file.type,
+            uploadPath
+          });
+          
+          // Check if it's an abort (timeout)
+          if (fetchError.name === 'AbortError' || fetchError instanceof DOMException) {
+            throw new Error('Upload-Timeout: Die Verbindung dauerte zu lange');
+          }
+          
+          // Check if it's a size issue
+          if (file.size > 100 * 1024 * 1024) { // 100MB
+            throw new Error(`Datei zu groß (${Math.round(file.size / 1024 / 1024)}MB). Maximale Größe: 100MB`);
+          }
+          
+          // More specific error message
+          const errorMsg = fetchError.message || 'Verbindung fehlgeschlagen';
+          if (errorMsg.includes('Failed to fetch') || errorMsg.includes('NetworkError')) {
+            throw new Error(`Netzwerkfehler: Die Verbindung zum Server konnte nicht hergestellt werden. Bitte prüfe, ob der Server läuft.`);
+          }
+          
+          throw new Error(`Netzwerkfehler: ${errorMsg}`);
+        }
+
+        // Check if response is ok before trying to parse JSON
+        if (!res.ok) {
+          let errorMessage = 'Fehler beim Hochladen';
+          try {
+            const errorData = await res.json();
+            errorMessage = errorData.error || errorMessage;
+          } catch (parseError) {
+            // If JSON parsing fails, use status text
+            errorMessage = res.statusText || `HTTP ${res.status}`;
+          }
+          throw new Error(errorMessage);
+        }
+
+        const data = await res.json();
 
         // Update progress after successful upload
         if (uploadProgress) {
@@ -583,7 +752,11 @@ export default function FileManager({ user, onLogout, initialPath, initialFile: 
         }
       } finally {
         // Process next file in queue
-        setUploadQueue((queue) => queue.slice(1));
+        setUploadQueue((queue) => {
+          const remainingQueue = queue.slice(1);
+          console.log('File processed, remaining in queue:', remainingQueue.length);
+          return remainingQueue;
+        });
         setIsProcessingUpload(false);
       }
     }
@@ -596,7 +769,7 @@ export default function FileManager({ user, onLogout, initialPath, initialFile: 
       
       return () => clearTimeout(timeoutId);
     }
-  }, [uploadQueue, replaceModal.isOpen, isProcessingUpload]);
+  }, [uploadQueue, replaceModal.isOpen, isProcessingUpload, uploadProgress]);
 
   async function uploadSingleFile(file: File, targetPath: string) {
     try {
@@ -631,6 +804,122 @@ export default function FileManager({ user, onLogout, initialPath, initialFile: 
     
     setUploadQueue((prevQueue) => [...prevQueue, ...filesToUpload.map(file => ({ file, targetPath }))]);
   }, [showToast]);
+
+  const handleFolderUpload = useCallback(async (files: File[]) => {
+    console.log('handleFolderUpload called with', files.length, 'files');
+    console.log('Files:', files.map(f => ({
+      name: f.name,
+      size: f.size,
+      type: f.type,
+      webkitRelativePath: (f as any).webkitRelativePath
+    })));
+    
+    let folderName: string;
+    
+    // If folder is empty (no files), we need to ask for folder name
+    if (files.length === 0) {
+      // For empty folders, we can't extract the name from webkitRelativePath
+      // Ask the user for the folder name, or use a default name
+      const userInput = prompt('Bitte geben Sie den Namen für den leeren Ordner ein (oder lassen Sie leer für Standard-Namen):');
+      if (userInput === null) {
+        // User cancelled
+        console.log('User cancelled folder creation');
+        return;
+      }
+      if (userInput && userInput.trim()) {
+        folderName = userInput.trim();
+        console.log('Empty folder detected, using user-provided folder name:', folderName);
+      } else {
+        // Use default name if user left it empty
+        const now = new Date();
+        const timestamp = now.toISOString().slice(0, 19).replace(/:/g, '-').replace('T', '_');
+        folderName = `New Folder ${timestamp}`;
+        console.log('Empty folder detected, using default folder name:', folderName);
+      }
+    } else {
+      // Filter out only truly invalid files (no name at all)
+      const validFiles = files.filter(file => {
+        // Only skip files without names
+        if (!file.name || file.name.trim() === '') {
+          console.warn('Skipping invalid file (no name):', file.name || 'unnamed');
+          return false;
+        }
+        return true;
+      });
+
+      if (validFiles.length === 0) {
+        // Even if no valid files, we still want to create a folder
+        const now = new Date();
+        const timestamp = now.toISOString().slice(0, 19).replace(/:/g, '-').replace('T', '_');
+        folderName = `New Folder ${timestamp}`;
+        console.log('No valid files, using default folder name:', folderName);
+      } else {
+        // Extract folder name from first file's webkitRelativePath
+        const firstFile = validFiles[0];
+        const firstRelativePath = (firstFile as any).webkitRelativePath;
+        
+        if (!firstRelativePath) {
+          // If no webkitRelativePath, create a folder with a default name
+          const now = new Date();
+          const timestamp = now.toISOString().slice(0, 19).replace(/:/g, '-').replace('T', '_');
+          folderName = `Uploaded Folder ${timestamp}`;
+          console.log('No webkitRelativePath found, using default folder name:', folderName);
+        } else {
+          folderName = firstRelativePath.split('/')[0];
+        }
+      }
+    }
+
+    console.log('Folder upload:', {
+      totalFiles: files.length,
+      folderName: folderName,
+      currentPath: currentPath
+    });
+
+    // First, create the folder with the same name
+    console.log('Creating folder:', folderName, 'in path:', currentPath);
+    try {
+      const createRes = await fetch('/api/files', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'create-directory',
+          path: currentPath,
+          name: folderName,
+        }),
+      });
+
+      console.log('Create folder response status:', createRes.status);
+      const createData = await createRes.json();
+      console.log('Create folder response data:', createData);
+
+      if (!createRes.ok) {
+        // If folder already exists, that's okay - continue with upload
+        const errorMessage = createData.error || '';
+        console.log('Create folder error:', errorMessage);
+        if (!errorMessage.includes('existiert bereits') && !errorMessage.includes('already exists')) {
+          console.error('Failed to create folder:', errorMessage);
+          showToast(errorMessage || t('errorDeleting'), 'error');
+          return;
+        }
+        console.log('Folder already exists, continuing with upload');
+      } else {
+        console.log('Folder created successfully:', folderName);
+        showToast(`Ordner "${folderName}" wurde erstellt.`, 'success');
+        
+        // Refresh the file list and tree to show the new folder
+        await loadFiles();
+        setTreeRefreshKey((k) => k + 1);
+      }
+    } catch (err) {
+      console.error('Error creating folder:', err);
+      showToast(t('serverError'), 'error');
+      return;
+    }
+
+    // TODO: After folder is created, upload files to it
+    // For now, we're only creating the folder to test if it works
+  }, [currentPath, showToast, t]);
 
   async function handleReplaceConfirm() {
     if (replaceModal.file && replaceModal.targetPath) {
@@ -1927,6 +2216,36 @@ export default function FileManager({ user, onLogout, initialPath, initialFile: 
 
   async function handleDownload(file: FileItem) {
     try {
+      // If it's a directory, download as ZIP
+      if (file.type === 'directory') {
+        showToast(t('creatingZip'), 'info');
+        
+        const res = await fetch('/api/files/download-zip', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ paths: [file.path] }),
+        });
+
+        if (!res.ok) {
+          const data = await res.json();
+          showToast(data.error || t('zipError'), 'error');
+          return;
+        }
+
+        const blob = await res.blob();
+        const url = window.URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `${file.name}.zip`;
+        document.body.appendChild(a);
+        a.click();
+        window.URL.revokeObjectURL(url);
+        document.body.removeChild(a);
+        showToast(t('fileDownloaded'), 'success');
+        return;
+      }
+      
+      // For files, download directly
       const res = await fetch(`/api/files/download?path=${encodeURIComponent(file.path)}`);
       if (res.ok) {
         const blob = await res.blob();
@@ -1938,6 +2257,10 @@ export default function FileManager({ user, onLogout, initialPath, initialFile: 
         a.click();
         window.URL.revokeObjectURL(url);
         document.body.removeChild(a);
+        showToast(t('fileDownloaded'), 'success');
+      } else {
+        const data = await res.json();
+        showToast(data.error || t('downloadError'), 'error');
       }
     } catch (error) {
       console.error('Fehler beim Download:', error);
@@ -3027,6 +3350,7 @@ export default function FileManager({ user, onLogout, initialPath, initialFile: 
                   <FileUpload
                     currentPath={currentPath}
                     onUploaded={handleRefresh}
+                    onFolderUpload={handleFolderUpload}
                   />
                 </div>
               </div>
@@ -3618,17 +3942,15 @@ export default function FileManager({ user, onLogout, initialPath, initialFile: 
                         </td>
                         <td className="px-4 py-3 text-right" onClick={(e) => e.stopPropagation()}>
                           <div className="flex items-center justify-end gap-2">
-                            {file.type === 'file' && (
-                              <button
-                                onClick={() => handleDownload(file)}
-                                className="p-1.5 text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-900/20 rounded transition-colors"
-                                title={t('download')}
-                              >
-                                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
-                                </svg>
-                              </button>
-                            )}
+                            <button
+                              onClick={() => handleDownload(file)}
+                              className="p-1.5 text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-900/20 rounded transition-colors"
+                              title={t('download')}
+                            >
+                              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+                              </svg>
+                            </button>
                             <button
                               onClick={(e) => {
                                 e.stopPropagation();
@@ -3809,6 +4131,7 @@ export default function FileManager({ user, onLogout, initialPath, initialFile: 
             <FileUpload
               currentPath={currentPath}
               onUploaded={handleRefresh}
+              onFolderUpload={handleFolderUpload}
             >
               <div className="flex flex-col items-center gap-1 p-2 text-gray-600 dark:text-gray-400 hover:text-blue-600 dark:hover:text-blue-400 transition-colors">
                 <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">

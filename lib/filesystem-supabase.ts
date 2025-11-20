@@ -270,10 +270,20 @@ export async function createDirectory(dirPath: string, user: { id: string; name:
     .from('file_metadata')
     .select('id')
     .eq('path', normalizedPath)
-    .single();
+    .maybeSingle();
   
   if (existing) {
-    throw new Error('Verzeichnis existiert bereits');
+    // Directory already exists, return silently
+    return;
+  }
+  
+  // If parent path exists, ensure it's created first (recursively)
+  if (parentPath) {
+    try {
+      await createDirectory(parentPath, user);
+    } catch (error) {
+      // Ignore errors from parent creation (might already exist)
+    }
   }
   
   const { error } = await supabaseServer
@@ -283,11 +293,24 @@ export async function createDirectory(dirPath: string, user: { id: string; name:
       name: name,
       type: 'directory',
       size: 0,
-      parent_path: parentPath,
+      parent_path: parentPath || null,
       created_by: user.id,
     });
   
   if (error) {
+    // If error is "duplicate key" or similar, directory might have been created concurrently
+    // Check again if it exists now
+    const { data: checkAgain } = await supabaseServer
+      .from('file_metadata')
+      .select('id')
+      .eq('path', normalizedPath)
+      .maybeSingle();
+    
+    if (checkAgain) {
+      // Directory exists now, return silently
+      return;
+    }
+    
     console.error('Error creating directory:', error);
     throw new Error('Fehler beim Erstellen des Verzeichnisses');
   }
