@@ -40,6 +40,7 @@ interface FileTreeProps {
 interface TreeNodeData extends FileItem {
   children?: TreeNodeData[];
   loaded?: boolean;
+  hasSubdirectories?: boolean;
 }
 
 export default function FileTree({ currentPath, onNavigate, onRefresh, onExternalDrop, onMoveItem, onFileDoubleClick, userId, refreshFolderPath, setRefreshFolderPath, onRename, onDelete, onDownload, onShare, onToggleFavorite, isFavorite, onItemDeleted, onItemRenamed, onItemMoved, onCreateDirectory }: FileTreeProps) {
@@ -794,8 +795,8 @@ export default function FileTree({ currentPath, onNavigate, onRefresh, onExterna
           isActive('')
             ? 'bg-gradient-to-r from-blue-500 to-blue-600 text-white shadow-lg shadow-blue-500/30'
             : dragOverPath === ''
-            ? 'bg-blue-100 dark:bg-blue-900/30 border-2 border-blue-400 border-dashed text-gray-700 dark:text-gray-300'
-            : 'hover:bg-gray-100 dark:hover:bg-gray-700/50 text-gray-700 dark:text-gray-300 hover:translate-x-1'
+            ? 'bg-blue-50 dark:bg-blue-900/40 border-2 border-blue-500 border-solid shadow-md text-gray-700 dark:text-gray-300'
+            : 'hover:bg-gray-100 dark:hover:bg-gray-700/50 text-gray-700 dark:text-gray-300'
         }`}
       >
         <svg
@@ -987,10 +988,13 @@ function TreeNode({
   removeItemFromTree,
 }: TreeNodeProps) {
   const hasChildren = item.children && item.children.length > 0;
+  const hasSubdirs = item.hasSubdirectories !== undefined ? item.hasSubdirectories : hasChildren;
   const isActive = currentPath === item.path;
   const expanded = isExpanded(item.path);
   const isDragged = draggedItem === item.path;
   const isDragOver = dragOverPath === item.path;
+  const expandButtonRef = useRef<HTMLButtonElement>(null);
+  const expandTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
   async function handleDragStart(e: React.DragEvent) {
     // Allow dragging both files and directories
@@ -1023,6 +1027,29 @@ function TreeNode({
     // Only allow dropping on directories
     if (item.type !== 'directory') return;
     
+    // Auto-expand logic: if folder is closed, try to expand when hovering over it
+    // This works for all drag types (files from system, files from table, folders from tree)
+    if (!expanded) {
+      // Clear any existing timeout
+      if (expandTimeoutRef.current) {
+        clearTimeout(expandTimeoutRef.current);
+      }
+      
+      // Auto-expand after a delay (600ms) - shorter delay for better UX
+      expandTimeoutRef.current = setTimeout(() => {
+        // Double-check that folder is still closed before expanding
+        const currentExpanded = isExpanded(item.path);
+        if (!currentExpanded) {
+          onToggleExpand(item.path);
+        }
+        expandTimeoutRef.current = null;
+      }, 600);
+    } else if (expanded && expandTimeoutRef.current) {
+      // Clear timeout if folder is already expanded
+      clearTimeout(expandTimeoutRef.current);
+      expandTimeoutRef.current = null;
+    }
+    
     // Handle external file drops
     if (e.dataTransfer.types.includes('Files')) {
       e.preventDefault();
@@ -1030,7 +1057,7 @@ function TreeNode({
       if (dragOverPath !== item.path) {
         setDragOverPath(item.path);
       }
-      return;
+      return; // Return early for external file drops
     }
     
     // Check if drag is from table (external to tree)
@@ -1064,19 +1091,42 @@ function TreeNode({
           setDragOverPath(item.path);
         }
       }
+    } else {
+      // For any other drag (including items from table that might not have data yet)
+      // Still allow the drag over to enable auto-expand
+      e.preventDefault();
+      e.stopPropagation();
+      if (dragOverPath !== item.path) {
+        setDragOverPath(item.path);
+      }
     }
   }
 
   function handleDragLeave(e: React.DragEvent) {
-    // Only clear drag over if we're actually leaving the element
-    // This prevents flickering when moving between child elements
+    // Don't clear the expand timeout immediately - let it run if the user is still hovering
+    // The timeout will be cleared in handleDragOver if the folder is already expanded
+    // or if the user really leaves the element
+    
+    // Only clear drag over path if we're actually leaving
     const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
     const x = e.clientX;
     const y = e.clientY;
+    const threshold = 10;
+    const isLeaving = x < rect.left - threshold || x > rect.right + threshold || y < rect.top - threshold || y > rect.bottom + threshold;
     
-    // Check if mouse is still within the element bounds
-    if (x < rect.left || x > rect.right || y < rect.top || y > rect.bottom) {
-      setDragOverPath(null);
+    if (isLeaving) {
+      const relatedTarget = e.relatedTarget as HTMLElement;
+      const movingToChild = relatedTarget && (e.currentTarget as HTMLElement).contains(relatedTarget);
+      
+      // Only clear drag over path if we're really leaving (not moving to a child)
+      if (!movingToChild) {
+        setDragOverPath(null);
+        // Only clear timeout if we're really leaving the element
+        if (expandTimeoutRef.current) {
+          clearTimeout(expandTimeoutRef.current);
+          expandTimeoutRef.current = null;
+        }
+      }
     }
   }
 
@@ -1140,6 +1190,12 @@ function TreeNode({
   }
 
   function handleDragEnd() {
+    // Clear expand timeout
+    if (expandTimeoutRef.current) {
+      clearTimeout(expandTimeoutRef.current);
+      expandTimeoutRef.current = null;
+    }
+    
     setDraggedItem(null);
     setDraggedItemType(null);
     setDragOverPath(null);
@@ -1152,12 +1208,15 @@ function TreeNode({
           isActive
             ? 'bg-gradient-to-r from-blue-500 to-blue-600 text-white shadow-lg shadow-blue-500/30'
             : isDragOver
-            ? 'bg-blue-100 dark:bg-blue-900/30 border-2 border-blue-400 border-dashed text-gray-700 dark:text-gray-300'
+            ? 'bg-blue-50 dark:bg-blue-900/40 border-2 border-blue-500 border-solid shadow-md text-gray-700 dark:text-gray-300'
             : isDragged
-            ? 'opacity-50 text-gray-700 dark:text-gray-300'
+            ? 'opacity-50 text-gray-700 dark:text-gray-300 pointer-events-none'
             : 'hover:bg-gray-100 dark:hover:bg-gray-700/50 text-gray-700 dark:text-gray-300'
         }`}
-        style={{ paddingLeft: `${level * 20 + 12}px` }}
+        style={{ 
+          paddingLeft: `${level * 20 + 12}px`,
+          ...(isDragOver && { transform: 'none' })
+        }}
         draggable={true}
         onDragStart={handleDragStart}
         onDragOver={handleDragOver}
@@ -1166,6 +1225,7 @@ function TreeNode({
         onDragEnd={handleDragEnd}
       >
         <button
+          ref={expandButtonRef}
           onClick={(e) => {
             e.stopPropagation();
             onToggleExpand(item.path);
