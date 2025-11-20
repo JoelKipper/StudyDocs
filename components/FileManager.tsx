@@ -2164,39 +2164,65 @@ export default function FileManager({ user, onLogout, initialPath, initialFile: 
       return;
     }
 
-    const directoryName = newDirectoryName.trim();
-    const directoryPath = currentPath ? `${currentPath}/${directoryName}` : directoryName;
+    const name = newDirectoryName.trim();
+    
+    // Check if name has a file extension
+    const hasExtension = (() => {
+      const lastDotIndex = name.lastIndexOf('.');
+      // Has extension if: there's a dot, it's not at the start, and there's at least one character after it
+      return lastDotIndex > 0 && lastDotIndex < name.length - 1;
+    })();
 
-    // Clear the input immediately for better UX - this makes the input field disappear
-    const nameToCreate = directoryName;
+    // Clear the input immediately for better UX
     setCreatingNewDirectory(null);
+    const nameToCreate = name;
     setNewDirectoryName('');
 
     try {
-      const res = await fetch('/api/files', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          action: 'create-directory',
-          path: currentPath,
-          name: nameToCreate,
-        }),
-      });
+      if (hasExtension) {
+        // Create a file (empty file)
+        const formData = new FormData();
+        const emptyFile = new File([''], nameToCreate, { type: 'text/plain' });
+        formData.append('file', emptyFile);
+        formData.append('path', currentPath);
 
-      const data = await res.json();
+        const res = await fetch('/api/files/upload', {
+          method: 'POST',
+          body: formData,
+        });
 
-      if (!res.ok) {
-        showToast(data.error || t('errorDeleting'), 'error'); // Reusing errorDeleting for now
-        return;
+        const data = await res.json();
+
+        if (!res.ok) {
+          showToast(data.error || t('serverError'), 'error');
+          return;
+        }
+
+        await loadFiles();
+        showToast(`${t('file')} "${nameToCreate}" ${language === 'de' ? 'erstellt' : 'created'}`, 'success');
+      } else {
+        // Create a directory
+        const res = await fetch('/api/files', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            action: 'create-directory',
+            path: currentPath,
+            name: nameToCreate,
+          }),
+        });
+
+        const data = await res.json();
+
+        if (!res.ok) {
+          showToast(data.error || t('errorDeleting'), 'error');
+          return;
+        }
+        
+        await loadFiles();
+        setTreeRefreshKey((k) => k + 1);
+        showToast(`${t('directory')} "${nameToCreate}" ${language === 'de' ? 'erstellt' : 'created'}`, 'success');
       }
-      
-      // Reload files first
-      await loadFiles();
-      setTreeRefreshKey((k) => k + 1);
-      
-      // Don't set pending rename - just show the directory normally
-      // The user can rename it manually if needed
-      showToast(t('fileRenamed'), 'success'); // Reusing fileRenamed for now, could add createDirectorySuccess
     } catch (err) {
       showToast(t('serverError'), 'error');
     }
@@ -3770,7 +3796,7 @@ export default function FileManager({ user, onLogout, initialPath, initialFile: 
                 <button
                   onClick={handleCreateDirectory}
                   className="hidden md:flex p-2 text-gray-600 hover:text-gray-900 dark:text-gray-400 dark:hover:text-gray-100 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors"
-                  title={t('newDirectory')}
+                  title={language === 'de' ? 'Neu erstellen (Datei oder Ordner)' : 'Create new (file or folder)'}
                 >
                   <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
@@ -4032,7 +4058,7 @@ export default function FileManager({ user, onLogout, initialPath, initialFile: 
                             onChange={(e) => setNewDirectoryName(e.target.value)}
                             onBlur={confirmCreateDirectory}
                             onKeyDown={handleNewDirectoryKeyDown}
-                            placeholder={t('newDirectory')}
+                            placeholder={language === 'de' ? 'Name (mit Endung = Datei, ohne = Ordner)' : 'Name (with extension = file, without = folder)'}
                             className="w-full px-2 py-1 text-sm border border-blue-500 rounded focus:outline-none focus:ring-2 focus:ring-blue-500 dark:bg-gray-700 dark:text-white"
                             autoFocus
                           />
@@ -4161,7 +4187,7 @@ export default function FileManager({ user, onLogout, initialPath, initialFile: 
                               onChange={(e) => setNewDirectoryName(e.target.value)}
                               onKeyDown={handleNewDirectoryKeyDown}
                               onClick={(e) => e.stopPropagation()}
-                              placeholder="Verzeichnisname"
+                              placeholder={language === 'de' ? 'Name (mit Endung = Datei, ohne = Ordner)' : 'Name (with extension = file, without = folder)'}
                               className="w-full px-2 py-1 border border-blue-500 rounded text-sm font-medium text-gray-900 dark:text-white bg-white dark:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500"
                               autoFocus
                             />
@@ -4556,7 +4582,7 @@ export default function FileManager({ user, onLogout, initialPath, initialFile: 
               <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
               </svg>
-              <span className="text-xs">{t('newDirectory')}</span>
+              <span className="text-xs">{language === 'de' ? 'Neu' : 'New'}</span>
             </button>
             <FileUpload
               currentPath={currentPath}
