@@ -189,7 +189,9 @@ export async function GET(request: NextRequest) {
       try {
         const encryptedBuffer = await getFile(path);
         const decryptedBuffer = decryptFile(encryptedBuffer, password);
-        return new NextResponse(decryptedBuffer, {
+        // Convert Buffer to Uint8Array for NextResponse
+        const uint8Array = new Uint8Array(decryptedBuffer);
+        return new NextResponse(uint8Array, {
           headers: {
             'Content-Type': 'application/octet-stream',
           },
