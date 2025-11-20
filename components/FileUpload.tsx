@@ -135,10 +135,13 @@ export default function FileUpload({ currentPath, onUploaded, onFolderUpload, ch
   }
 
   async function handleFileSelect(e: React.ChangeEvent<HTMLInputElement>) {
-    const file = e.target.files?.[0];
-    if (!file) return;
+    const files = Array.from(e.target.files || []);
+    if (files.length === 0) return;
 
-    await uploadFile(file);
+    // Upload files one by one
+    for (const file of files) {
+      await uploadFile(file);
+    }
   }
 
   async function handleFolderSelect(e: React.ChangeEvent<HTMLInputElement>) {
@@ -195,6 +198,7 @@ export default function FileUpload({ currentPath, onUploaded, onFolderUpload, ch
         <input
           ref={fileInputRef}
           type="file"
+          multiple
           onChange={handleFileSelect}
           disabled={uploading}
           className="hidden"
