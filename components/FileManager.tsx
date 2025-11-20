@@ -4849,9 +4849,6 @@ export default function FileManager({ user, onLogout, initialPath, initialFile: 
         isOpen={settingsOpen}
         onClose={() => setSettingsOpen(false)}
         user={user}
-        onUserUpdate={(updatedUser) => {
-          // Handle user update if needed
-        }}
       />
 
       {/* Share Modal */}
