@@ -181,18 +181,73 @@ export default function FileTree({ currentPath, onNavigate, onRefresh, onExterna
   // Don't auto-expand paths - only expand what user manually opens
   // The currentPath will be expanded when user navigates to it via onClick
 
+  // Cache helper functions for FileTree
+  const getTreeCacheKey = (path: string) => `studydocs-tree-${userId}-${path || 'root'}`;
+  const TREE_CACHE_DURATION = 5 * 60 * 1000; // 5 minutes
+
+  const getCachedTreeData = (path: string): TreeNodeData[] | null => {
+    if (typeof window === 'undefined') return null;
+    try {
+      const cacheKey = getTreeCacheKey(path);
+      const cached = localStorage.getItem(cacheKey);
+      if (!cached) return null;
+      
+      const { data, timestamp } = JSON.parse(cached);
+      const age = Date.now() - timestamp;
+      
+      // Return cached data if still valid
+      if (age < TREE_CACHE_DURATION) {
+        return data;
+      }
+      
+      // Remove expired cache
+      localStorage.removeItem(cacheKey);
+      return null;
+    } catch (error) {
+      return null;
+    }
+  };
+
+  const setCachedTreeData = (path: string, data: TreeNodeData[]) => {
+    if (typeof window === 'undefined') return;
+    try {
+      const cacheKey = getTreeCacheKey(path);
+      const cacheData = {
+        data: data,
+        timestamp: Date.now()
+      };
+      localStorage.setItem(cacheKey, JSON.stringify(cacheData));
+    } catch (error) {
+      // Ignore localStorage errors
+    }
+  };
+
   async function loadFullTree() {
     setLoading(true);
     setTreeLoaded(false); // Reset animation trigger
+    
     try {
-      const rootTree = await loadTreeRecursive('');
+      // Load root tree - use cache for performance, but it will be refreshed in background
+      const rootTree = await loadTreeRecursive('', false);
       setTree(rootTree);
+      
       // Trigger animation immediately after state update using requestAnimationFrame
       requestAnimationFrame(() => {
         requestAnimationFrame(() => {
           setTreeLoaded(true);
         });
       });
+      
+      // In background, refresh root to ensure we have latest data (but don't block UI)
+      // This ensures new folders/files are visible after page reload without slowing down initial load
+      setTimeout(async () => {
+        try {
+          const freshRootTree = await loadTreeRecursive('', true); // Skip cache for fresh data
+          setTree(freshRootTree);
+        } catch (error) {
+          // Ignore errors in background refresh
+        }
+      }, 500); // Small delay to not interfere with initial render
     } catch (error) {
       // Error loading tree
     } finally {
@@ -200,7 +255,15 @@ export default function FileTree({ currentPath, onNavigate, onRefresh, onExterna
     }
   }
 
-  async function loadTreeRecursive(path: string): Promise<TreeNodeData[]> {
+  async function loadTreeRecursive(path: string, skipCache: boolean = false): Promise<TreeNodeData[]> {
+    // Try to load from cache first (unless skipCache is true)
+    if (!skipCache) {
+      const cachedData = getCachedTreeData(path);
+      if (cachedData) {
+        return cachedData;
+      }
+    }
+    
     try {
       const res = await fetch(`/api/files?path=${encodeURIComponent(path)}`);
       const data = await res.json();
@@ -212,7 +275,7 @@ export default function FileTree({ currentPath, onNavigate, onRefresh, onExterna
         // Load children for directories recursively
         const dirNodes: TreeNodeData[] = await Promise.all(
           dirs.map(async (dir: FileItem) => {
-            const children = await loadTreeRecursive(dir.path);
+            const children = await loadTreeRecursive(dir.path, skipCache);
             return {
               ...dir,
               children,
@@ -229,7 +292,12 @@ export default function FileTree({ currentPath, onNavigate, onRefresh, onExterna
         }));
         
         // Combine directories and files, directories first
-        return [...dirNodes, ...fileNodes];
+        const result = [...dirNodes, ...fileNodes];
+        
+        // Cache the result
+        setCachedTreeData(path, result);
+        
+        return result;
       }
     } catch (error) {
       // Error loading directory
@@ -238,21 +306,102 @@ export default function FileTree({ currentPath, onNavigate, onRefresh, onExterna
   }
 
   async function refreshFolderInTree(folderPath: string) {
-    // Load the contents of the folder
+    // Invalidate cache for this folder and all its children recursively
+    const invalidateCacheRecursive = (path: string) => {
+      if (typeof window === 'undefined') return;
+      try {
+        const cacheKey = getTreeCacheKey(path);
+        localStorage.removeItem(cacheKey);
+        
+        // Also invalidate cache for all child paths (we need to find them in the tree)
+        // For now, just invalidate the current path - children will be reloaded when accessed
+      } catch (error) {
+        // Ignore errors
+      }
+    };
+    
+    invalidateCacheRecursive(folderPath);
+    
+    // Force reload by bypassing cache - load fresh data
+    try {
+      const res = await fetch(`/api/files?path=${encodeURIComponent(folderPath)}`);
+      const data = await res.json();
+      if (res.ok) {
+        const allItems = data.contents || [];
+        const dirs = allItems.filter((item: FileItem) => item.type === 'directory');
+        const files = allItems.filter((item: FileItem) => item.type === 'file');
+        
+        // Load children for directories recursively (but don't cache yet)
+        const dirNodes: TreeNodeData[] = await Promise.all(
+          dirs.map(async (dir: FileItem) => {
+            // For refresh, we only load direct children, not recursively
+            // This keeps the refresh fast
+            return {
+              ...dir,
+              children: [], // Children will be loaded when expanded
+              loaded: false,
+              hasSubdirectories: true,
+            };
+          })
+        );
+        
+        // Add files as leaf nodes
+        const fileNodes: TreeNodeData[] = files.map((file: FileItem) => ({
+          ...file,
+          children: [],
+          loaded: true,
+        }));
+        
+        // Combine directories and files
+        const refreshedContents = [...dirNodes, ...fileNodes];
+        
+        // Update cache with fresh data
+        setCachedTreeData(folderPath, refreshedContents);
+        
+        // Update the tree by finding and updating the specific folder node
+        setTree((currentTree) => {
+          const updateNode = (nodes: TreeNodeData[]): TreeNodeData[] => {
+            return nodes.map((node) => {
+              if (node.path === folderPath && node.type === 'directory') {
+                // This is the folder we want to refresh - update its children
+                return {
+                  ...node,
+                  children: refreshedContents,
+                  loaded: true,
+                };
+              } else if (node.children && node.children.length > 0) {
+                // Recursively check children
+                return {
+                  ...node,
+                  children: updateNode(node.children),
+                };
+              }
+              return node;
+            });
+          };
+          
+          return updateNode(currentTree);
+        });
+        return;
+      }
+    } catch (error) {
+      // Error loading folder - fallback to using loadTreeRecursive
+    }
+    
+    // Fallback: use loadTreeRecursive (which will use cache if available)
     const refreshedContents = await loadTreeRecursive(folderPath);
     
-    // Update the tree by finding and updating the specific folder node
+    // Update the tree
     setTree((currentTree) => {
       const updateNode = (nodes: TreeNodeData[]): TreeNodeData[] => {
         return nodes.map((node) => {
           if (node.path === folderPath && node.type === 'directory') {
-            // This is the folder we want to refresh - update its children
             return {
               ...node,
               children: refreshedContents,
+              loaded: true,
             };
           } else if (node.children && node.children.length > 0) {
-            // Recursively check children
             return {
               ...node,
               children: updateNode(node.children),

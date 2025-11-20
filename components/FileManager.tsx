@@ -580,7 +580,8 @@ export default function FileManager({ user, onLogout, initialPath, initialFile: 
               }
             }
             
-            // Refresh file list and tree
+            // Invalidate cache and refresh file list and tree
+            invalidateCache(targetPath);
             await loadFiles();
             setTreeRefreshKey((k) => k + 1);
             
@@ -928,19 +929,68 @@ export default function FileManager({ user, onLogout, initialPath, initialFile: 
           showToast(`${successCount} Dateien hochgeladen, ${errorCount} Fehler.`, 'error');
         }
         
-        // Refresh file list and tree
+        // Invalidate cache and refresh file list and tree
+        invalidateCache(targetFolderPath);
+        invalidateCache(uploadTargetPath);
+        
+        // Also invalidate tree cache for the parent folder
+        if (typeof window !== 'undefined') {
+          try {
+            const treeCacheKey = `studydocs-tree-${user.id}-${uploadTargetPath || 'root'}`;
+            localStorage.removeItem(treeCacheKey);
+          } catch (error) {
+            // Ignore errors
+          }
+        }
+        
         await loadFiles();
+        
+        // Refresh the parent folder in tree to show the new folder and files
+        setRefreshFolderPath(uploadTargetPath);
+        setTimeout(() => setRefreshFolderPath(null), 100);
         setTreeRefreshKey((k) => k + 1);
       } else {
         // Folder created but no valid files to upload
+        invalidateCache(uploadTargetPath);
+        
+        // Also invalidate tree cache for the parent folder
+        if (typeof window !== 'undefined') {
+          try {
+            const treeCacheKey = `studydocs-tree-${user.id}-${uploadTargetPath || 'root'}`;
+            localStorage.removeItem(treeCacheKey);
+          } catch (error) {
+            // Ignore errors
+          }
+        }
+        
         showToast(`Ordner "${folderName}" wurde erstellt.`, 'success');
         await loadFiles();
+        
+        // Refresh the parent folder in tree to show the new folder
+        setRefreshFolderPath(uploadTargetPath);
+        setTimeout(() => setRefreshFolderPath(null), 100);
         setTreeRefreshKey((k) => k + 1);
       }
     } else {
       // Empty folder was created
+      invalidateCache(uploadTargetPath);
+      
+      // Also invalidate tree cache for the parent folder
+      if (typeof window !== 'undefined') {
+        try {
+          const treeCacheKey = `studydocs-tree-${user.id}-${uploadTargetPath || 'root'}`;
+          localStorage.removeItem(treeCacheKey);
+        } catch (error) {
+          // Ignore errors
+        }
+      }
+      
       showToast(`Ordner "${folderName}" wurde erstellt.`, 'success');
       await loadFiles();
+      
+      // Refresh the parent folder in tree to show the new folder
+      setRefreshFolderPath(uploadTargetPath);
+      setTimeout(() => setRefreshFolderPath(null), 100);
       setTreeRefreshKey((k) => k + 1);
     }
   }, [currentPath, showToast, t, loadFiles, setTreeRefreshKey]);
@@ -1120,7 +1170,8 @@ export default function FileManager({ user, onLogout, initialPath, initialFile: 
   // Track upload results
   useEffect(() => {
     if (uploadQueue.length === 0 && replaceModal.isOpen === false && !isProcessingUpload) {
-      // All files processed, refresh only current directory (not the entire tree)
+      // All files processed, invalidate cache and refresh only current directory (not the entire tree)
+      invalidateCache(currentPath);
       loadFiles();
       // Don't refresh tree on upload - only refresh if file was uploaded to a different directory
       // setTreeRefreshKey((k) => k + 1);
@@ -1410,25 +1461,121 @@ export default function FileManager({ user, onLogout, initialPath, initialFile: 
   }, [externalDragTarget, currentPath, handleExternalFilesDrop]);
 
 
+  // Cache helper functions
+  const getCacheKey = (path: string) => `studydocs-files-${user.id}-${path || 'root'}`;
+  const CACHE_DURATION = 5 * 60 * 1000; // 5 minutes
+
+  const getCachedFiles = (path: string): FileItem[] | null => {
+    if (typeof window === 'undefined') return null;
+    try {
+      const cacheKey = getCacheKey(path);
+      const cached = localStorage.getItem(cacheKey);
+      if (!cached) return null;
+      
+      const { data, timestamp } = JSON.parse(cached);
+      const age = Date.now() - timestamp;
+      
+      // Return cached data if still valid
+      if (age < CACHE_DURATION) {
+        return data;
+      }
+      
+      // Remove expired cache
+      localStorage.removeItem(cacheKey);
+      return null;
+    } catch (error) {
+      return null;
+    }
+  };
+
+  const setCachedFiles = (path: string, files: FileItem[]) => {
+    if (typeof window === 'undefined') return;
+    try {
+      const cacheKey = getCacheKey(path);
+      const cacheData = {
+        data: files,
+        timestamp: Date.now()
+      };
+      localStorage.setItem(cacheKey, JSON.stringify(cacheData));
+    } catch (error) {
+      // Ignore localStorage errors (quota exceeded, etc.)
+    }
+  };
+
+  const invalidateCache = (path?: string) => {
+    if (typeof window === 'undefined') return;
+    try {
+      if (path) {
+        // Invalidate specific path and all parent paths
+        const parts = path.split('/').filter(Boolean);
+        let currentPath = '';
+        const keysToRemove: string[] = [getCacheKey(path)];
+        
+        for (const part of parts) {
+          currentPath = currentPath ? `${currentPath}/${part}` : part;
+          keysToRemove.push(getCacheKey(currentPath));
+        }
+        
+        keysToRemove.forEach(key => localStorage.removeItem(key));
+      } else {
+        // Invalidate all caches for this user
+        const prefix = `studydocs-files-${user.id}-`;
+        const keysToRemove: string[] = [];
+        for (let i = 0; i < localStorage.length; i++) {
+          const key = localStorage.key(i);
+          if (key && key.startsWith(prefix)) {
+            keysToRemove.push(key);
+          }
+        }
+        keysToRemove.forEach(key => localStorage.removeItem(key));
+      }
+    } catch (error) {
+      // Ignore errors
+    }
+  };
+
   async function loadFiles() {
     setLoading(true);
     setFilesLoaded(false); // Reset animation trigger - items will be hidden
+    
+    // Try to load from cache first for instant display
+    const cachedFiles = getCachedFiles(currentPath);
+    if (cachedFiles) {
+      setFiles(cachedFiles);
+      setFocusedIndex(null);
+      requestAnimationFrame(() => {
+        requestAnimationFrame(() => {
+          setFilesLoaded(true);
+        });
+      });
+      setLoading(false);
+    }
+    
+    // Always fetch fresh data in the background
     try {
       const res = await fetch(`/api/files?path=${encodeURIComponent(currentPath)}`);
       const data = await res.json();
       
       if (res.ok) {
-        setFiles(data.contents || []);
+        const freshFiles = data.contents || [];
+        setFiles(freshFiles);
+        setCachedFiles(currentPath, freshFiles);
         setFocusedIndex(null); // Reset focus when loading new directory
+        
         // Trigger animation immediately after state update using requestAnimationFrame
-        requestAnimationFrame(() => {
+        if (!cachedFiles) {
           requestAnimationFrame(() => {
-            setFilesLoaded(true);
+            requestAnimationFrame(() => {
+              setFilesLoaded(true);
+            });
           });
-        });
+        }
       }
     } catch (error) {
-      // Error loading files
+      // Error loading files - if we have cached data, keep using it
+      if (!cachedFiles) {
+        setFiles([]);
+      }
     } finally {
       setLoading(false);
     }
@@ -1950,7 +2097,25 @@ export default function FileManager({ user, onLogout, initialPath, initialFile: 
           return;
         }
 
+        invalidateCache(currentPath);
+        
+        // Also invalidate tree cache for the parent folder (files don't appear in tree, but parent might need refresh)
+        if (typeof window !== 'undefined') {
+          try {
+            const treeCacheKey = `studydocs-tree-${user.id}-${currentPath || 'root'}`;
+            localStorage.removeItem(treeCacheKey);
+          } catch (error) {
+            // Ignore errors
+          }
+        }
+        
         await loadFiles();
+        
+        // Refresh the parent folder in tree to show the new file
+        setRefreshFolderPath(currentPath);
+        setTimeout(() => setRefreshFolderPath(null), 100);
+        setTreeRefreshKey((k) => k + 1);
+        
         showToast(`${t('file')} "${nameToCreate}" ${language === 'de' ? 'erstellt' : 'created'}`, 'success');
       } else {
         // Create a directory
@@ -1971,8 +2136,25 @@ export default function FileManager({ user, onLogout, initialPath, initialFile: 
           return;
         }
         
+        invalidateCache(currentPath);
+        
+        // Also invalidate tree cache for the parent folder
+        if (typeof window !== 'undefined') {
+          try {
+            const treeCacheKey = `studydocs-tree-${user.id}-${currentPath || 'root'}`;
+            localStorage.removeItem(treeCacheKey);
+          } catch (error) {
+            // Ignore errors
+          }
+        }
+        
         await loadFiles();
+        
+        // Refresh the parent folder in tree to show the new directory
+        setRefreshFolderPath(currentPath);
+        setTimeout(() => setRefreshFolderPath(null), 100);
         setTreeRefreshKey((k) => k + 1);
+        
         showToast(`${t('directory')} "${nameToCreate}" ${language === 'de' ? 'erstellt' : 'created'}`, 'success');
       }
     } catch (err) {
@@ -2084,6 +2266,10 @@ export default function FileManager({ user, onLogout, initialPath, initialFile: 
           );
         }
         
+        // Invalidate cache for both parent and current path
+        invalidateCache(normalizedParentPath);
+        invalidateCache(normalizedCurrentPath);
+        
         // Also refresh from server to ensure consistency
         loadFiles();
         
@@ -2185,12 +2371,15 @@ export default function FileManager({ user, onLogout, initialPath, initialFile: 
         }
       });
       
-      // Refresh each affected parent folder (this will update the folder contents)
+      // Invalidate cache for all affected parent paths
       parentPaths.forEach(parentPath => {
+        invalidateCache(parentPath);
         setRefreshFolderPath(parentPath);
         setTimeout(() => setRefreshFolderPath(null), 100);
       });
       
+      // Also invalidate current path cache
+      invalidateCache(currentPath);
       loadFiles();
       // Don't refresh entire tree - only affected folders are refreshed
       // setTreeRefreshKey((k) => k + 1);
@@ -2284,6 +2473,13 @@ export default function FileManager({ user, onLogout, initialPath, initialFile: 
         }
       }
 
+      // Invalidate cache for source and target paths
+      if (successfulItems.length > 0) {
+        const sourcePath = successfulItems[0]?.path.split('/').slice(0, -1).join('/') || '';
+        invalidateCache(sourcePath);
+        invalidateCache(currentPath);
+      }
+      
       loadFiles();
       setTreeRefreshKey((k) => k + 1);
     } catch (error: any) {
@@ -2306,6 +2502,7 @@ export default function FileManager({ user, onLogout, initialPath, initialFile: 
         showToast('Rückgängig für Löschungen wird noch nicht vollständig unterstützt', 'info' 
         );
         setActionHistory(prev => prev.slice(0, -1));
+        invalidateCache(currentPath);
         loadFiles();
         setTreeRefreshKey((k) => k + 1);
         return;
@@ -2340,6 +2537,8 @@ export default function FileManager({ user, onLogout, initialPath, initialFile: 
         setActionHistory(prev => prev.slice(0, -1));
         
         // Navigate to original location if we're currently in the target location
+        invalidateCache(from);
+        invalidateCache(to);
         if (currentPath === to) {
           navigateToPath(from);
         } else {
@@ -2373,6 +2572,7 @@ export default function FileManager({ user, onLogout, initialPath, initialFile: 
           }
         }
 
+        invalidateCache(currentPath);
         showToast(t('undoCopySuccess'), 'success');
         setActionHistory(prev => prev.slice(0, -1));
         loadFiles();
@@ -2628,6 +2828,9 @@ export default function FileManager({ user, onLogout, initialPath, initialFile: 
         
         // Update files state immediately if target is the current directory (add item)
         // We'll need to construct the new path and add it to the list
+        invalidateCache(normalizedTargetPath);
+        invalidateCache(normalizedDraggedParent);
+        
         if (normalizedTargetPath === normalizedCurrentPath) {
           // The item will be added when we reload, but we can add it optimistically
           // For now, just reload to get the updated list
@@ -2698,6 +2901,7 @@ export default function FileManager({ user, onLogout, initialPath, initialFile: 
   }
 
   function handleRefresh() {
+    invalidateCache(currentPath);
     loadFiles();
     // Don't refresh entire tree - only refresh affected folders via refreshFolderPath
     // setTreeRefreshKey((k) => k + 1);
