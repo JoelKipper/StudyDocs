@@ -27,7 +27,7 @@ export default function SearchBar({
   onFiltersChange,
   onClear,
 }: SearchBarProps) {
-  const { t } = useLanguage();
+  const { t, language } = useLanguage();
   const [isExpanded, setIsExpanded] = useState(false);
   const [showFilters, setShowFilters] = useState(false);
   const searchInputRef = useRef<HTMLInputElement>(null);
@@ -173,7 +173,7 @@ export default function SearchBar({
             {filters.fileType === 'file' || filters.fileType === 'all' ? (
               <div>
                 <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                  {t('fileExtensions') || 'Dateitypen'}
+                  {language === 'de' ? 'Dateitypen' : 'File Types'}
                 </label>
                 <div className="max-h-48 overflow-y-auto border border-gray-300 dark:border-gray-600 rounded-lg p-2 bg-white dark:bg-gray-700">
                   <div className="grid grid-cols-2 gap-2">
@@ -241,7 +241,7 @@ export default function SearchBar({
                     }
                     className="mt-2 text-xs text-blue-600 dark:text-blue-400 hover:underline"
                   >
-                    {t('clearExtensions') || 'Alle auswählen'}
+                    {language === 'de' ? 'Auswahl zurücksetzen' : 'Clear selection'}
                   </button>
                 )}
               </div>
