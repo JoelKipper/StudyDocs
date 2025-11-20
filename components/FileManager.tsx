@@ -12,6 +12,7 @@ import SettingsModal from './SettingsModal';
 import ShareModal from './ShareModal';
 import PasswordModal from './PasswordModal';
 import FilePreview from './FilePreview';
+import FileEditor from './FileEditor';
 import FileIcon from './FileIcon';
 import StorageQuota from './StorageQuota';
 import FavoritesList from './FavoritesList';
@@ -196,6 +197,7 @@ export default function FileManager({ user, onLogout, initialPath, initialFile: 
     item: null,
   });
   const [previewFile, setPreviewFile] = useState<FileItem | null>(null);
+  const [editFile, setEditFile] = useState<FileItem | null>(null);
   const [sidebarTab, setSidebarTab] = useState<'tree' | 'favorites'>(() => {
     if (typeof window !== 'undefined') {
       const saved = localStorage.getItem(`studydocs-sidebar-tab-${user.id}`);
@@ -2953,7 +2955,14 @@ export default function FileManager({ user, onLogout, initialPath, initialFile: 
       if (item.type === 'directory') {
         navigateToPath(item.path);
       } else {
-        setPreviewFile(item);
+        // Check if we're coming from edit mode or preview mode
+        // If passwordModal was opened from edit, go to edit; otherwise preview
+        const shouldEdit = passwordModal.item && editFile && passwordModal.item.path === editFile.path;
+        if (shouldEdit) {
+          setEditFile(item);
+        } else {
+          setPreviewFile(item);
+        }
       }
     } catch (error: any) {
       setPasswordModal(prev => ({
@@ -4123,7 +4132,7 @@ export default function FileManager({ user, onLogout, initialPath, initialFile: 
           {/* File List and Preview Container */}
           <div className="flex-1 flex overflow-hidden pb-16 md:pb-0">
             {/* File List - Table View */}
-            {!previewFile && (
+            {!previewFile && !editFile && (
               <div 
                 ref={fileListContainerRef}
                 className="flex flex-col overflow-auto relative flex-1 w-full"
@@ -4776,8 +4785,26 @@ export default function FileManager({ user, onLogout, initialPath, initialFile: 
           </div>
             )}
 
+            {/* File Editor - Fullscreen (only shown when file is edited) */}
+            {editFile && (
+              <div 
+                className="relative flex-1 bg-gray-50 dark:bg-gray-900 flex flex-col overflow-hidden min-h-0"
+              >
+                <FileEditor
+                  file={editFile}
+                  onClose={() => setEditFile(null)}
+                  onSave={() => {
+                    loadFiles();
+                    invalidateCache(currentPath);
+                    setRefreshFolderPath(currentPath);
+                    setTimeout(() => setRefreshFolderPath(null), 100);
+                  }}
+                />
+              </div>
+            )}
+
             {/* File Preview - Fullscreen (only shown when file is double-clicked) */}
-            {previewFile && (
+            {!editFile && previewFile && (
               <div 
                 className="relative flex-1 bg-gray-50 dark:bg-gray-900 flex flex-col overflow-hidden min-h-0"
               >
@@ -4794,6 +4821,20 @@ export default function FileManager({ user, onLogout, initialPath, initialFile: 
                           : f
                       )
                     );
+                  }}
+                  onEdit={() => {
+                    // Check if file is password protected
+                    if (previewFile.isPasswordProtected) {
+                      setPasswordModal({
+                        isOpen: true,
+                        item: previewFile,
+                        mode: 'verify',
+                      });
+                      return;
+                    }
+                    // Switch to edit mode
+                    setEditFile(previewFile);
+                    setPreviewFile(null);
                   }}
                 />
               </div>
@@ -4840,6 +4881,18 @@ export default function FileManager({ user, onLogout, initialPath, initialFile: 
           isPasswordProtected={contextMenu.item?.isPasswordProtected}
           onToggleFavorite={contextMenu.item ? () => handleToggleFavorite(contextMenu.item!) : undefined}
           isFavorite={contextMenu.item ? favorites.has(contextMenu.item.path) : false}
+          onEdit={contextMenu.item && contextMenu.item.type === 'file' ? () => {
+            // Check if file is password protected
+            if (contextMenu.item?.isPasswordProtected) {
+              setPasswordModal({
+                isOpen: true,
+                item: contextMenu.item,
+                mode: 'verify',
+              });
+              return;
+            }
+            setEditFile(contextMenu.item);
+          } : undefined}
           onInfo={contextMenu.item ? () => {
             setInfoModal({
               isOpen: true,
