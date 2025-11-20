@@ -884,7 +884,7 @@ export default function FileTree({ currentPath, onNavigate, onRefresh, onExterna
                 // onBlur is handled by the mousedown listener
                 // We don't need to do anything here to avoid conflicts
               }}
-              placeholder={language === 'de' ? 'Ordnername...' : 'Folder name...'}
+              placeholder={t('folderName')}
               className="flex-1 bg-transparent border-none outline-none text-sm text-gray-700 dark:text-gray-300 placeholder-gray-400 dark:placeholder-gray-500"
               autoFocus
             />

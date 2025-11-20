@@ -144,7 +144,7 @@ export default function FilePreview({ file, onClose }: FilePreviewProps) {
             </svg>
           </div>
           <p className="text-gray-500 dark:text-gray-400">
-            {language === 'de' ? 'Wählen Sie eine Datei aus, um die Vorschau anzuzeigen' : 'Select a file to view preview'}
+            {t('selectFileToPreview')}
           </p>
         </div>
       </div>
@@ -191,7 +191,7 @@ export default function FilePreview({ file, onClose }: FilePreviewProps) {
           <div className="flex-1 min-w-0">
             <h3 className="text-sm font-semibold text-gray-900 dark:text-white truncate">{file.name}</h3>
             <p className="text-xs text-gray-500 dark:text-gray-400">
-              {language === 'de' ? 'Vorschau' : 'Preview'}
+              {t('preview')}
             </p>
           </div>
         </div>
@@ -290,7 +290,7 @@ export default function FilePreview({ file, onClose }: FilePreviewProps) {
               }}
               onError={(e) => {
                 setLoading(false);
-                setError(language === 'de' ? 'Fehler beim Laden der PDF-Datei' : 'Error loading PDF file');
+                setError(t('errorLoadingPDF'));
               }}
             >
               {/* Fallback if object doesn't work */}
@@ -309,7 +309,7 @@ export default function FilePreview({ file, onClose }: FilePreviewProps) {
                 }}
                 onError={(e) => {
                   setLoading(false);
-                  setError(language === 'de' ? 'Fehler beim Laden der PDF-Datei' : 'Error loading PDF file');
+                  setError(t('errorLoadingPDF'));
                 }}
               />
             </object>
@@ -353,10 +353,10 @@ export default function FilePreview({ file, onClose }: FilePreviewProps) {
               onLoadedData={() => setLoading(false)}
               onError={() => {
                 setLoading(false);
-                setError(language === 'de' ? 'Fehler beim Laden des Videos' : 'Error loading video');
+                setError(t('errorLoadingVideo'));
               }}
             >
-              {language === 'de' ? 'Ihr Browser unterstützt das Video-Tag nicht.' : 'Your browser does not support the video tag.'}
+              {t('browserNotSupportVideo')}
             </video>
           </div>
         ) : previewType === 'audio' && previewUrl ? (
@@ -371,7 +371,7 @@ export default function FilePreview({ file, onClose }: FilePreviewProps) {
                 <div className="flex-1 min-w-0">
                   <h4 className="text-lg font-semibold text-gray-900 dark:text-white truncate">{file.name}</h4>
                   <p className="text-sm text-gray-500 dark:text-gray-400">
-                    {language === 'de' ? 'Audio-Wiedergabe' : 'Audio Player'}
+                    {t('audioPlayer')}
                   </p>
                 </div>
               </div>
@@ -382,10 +382,10 @@ export default function FilePreview({ file, onClose }: FilePreviewProps) {
                 onLoadedData={() => setLoading(false)}
                 onError={() => {
                   setLoading(false);
-                  setError(language === 'de' ? 'Fehler beim Laden der Audio-Datei' : 'Error loading audio file');
+                  setError(t('errorLoadingAudio'));
                 }}
               >
-                {language === 'de' ? 'Ihr Browser unterstützt das Audio-Tag nicht.' : 'Your browser does not support the audio tag.'}
+                {t('browserNotSupportAudio')}
               </audio>
             </div>
           </div>
@@ -402,7 +402,7 @@ export default function FilePreview({ file, onClose }: FilePreviewProps) {
               }}
               onError={() => {
                 setLoading(false);
-                setError(language === 'de' ? 'Fehler beim Laden des Office-Dokuments. Bitte laden Sie die Datei herunter.' : 'Error loading Office document. Please download the file.');
+                setError(t('errorLoadingOffice'));
               }}
             />
             {loading && (

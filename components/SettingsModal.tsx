@@ -503,7 +503,7 @@ export default function SettingsModal({ isOpen, onClose, user, onUserUpdate }: S
                   />
                   <div className="ml-3 flex-1">
                     <span className="text-sm font-medium text-gray-700 dark:text-gray-300 block">{t('light')}</span>
-                    <span className="text-xs text-gray-500 dark:text-gray-400">{language === 'de' ? 'Helles Erscheinungsbild' : 'Light appearance'}</span>
+                    <span className="text-xs text-gray-500 dark:text-gray-400">{t('lightAppearance')}</span>
                   </div>
                 </label>
                 <label className="flex items-center p-4 bg-gray-50 dark:bg-gray-700/50 rounded-lg cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors">
@@ -517,7 +517,7 @@ export default function SettingsModal({ isOpen, onClose, user, onUserUpdate }: S
                   />
                   <div className="ml-3 flex-1">
                     <span className="text-sm font-medium text-gray-700 dark:text-gray-300 block">{t('dark')}</span>
-                    <span className="text-xs text-gray-500 dark:text-gray-400">{language === 'de' ? 'Dunkles Erscheinungsbild' : 'Dark appearance'}</span>
+                    <span className="text-xs text-gray-500 dark:text-gray-400">{t('darkAppearance')}</span>
                   </div>
                 </label>
                 <label className="flex items-center p-4 bg-gray-50 dark:bg-gray-700/50 rounded-lg cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors">
@@ -531,7 +531,7 @@ export default function SettingsModal({ isOpen, onClose, user, onUserUpdate }: S
                   />
                   <div className="ml-3 flex-1">
                     <span className="text-sm font-medium text-gray-700 dark:text-gray-300 block">{t('system')}</span>
-                    <span className="text-xs text-gray-500 dark:text-gray-400">{language === 'de' ? 'Systemeinstellung verwenden' : 'Use system setting'}</span>
+                    <span className="text-xs text-gray-500 dark:text-gray-400">{t('useSystemSetting')}</span>
                   </div>
                 </label>
                 {theme === null && (

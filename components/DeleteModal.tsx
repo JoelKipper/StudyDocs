@@ -97,11 +97,11 @@ export default function DeleteModal({
           </div>
           {hasDirectories && (
             <p className="text-sm text-orange-600 dark:text-orange-400 mb-4 px-2 py-2 bg-orange-50 dark:bg-orange-900/20 rounded-lg border border-orange-200 dark:border-orange-800">
-              ⚠️ <strong>{language === 'de' ? 'Warnung:' : 'Warning:'}</strong> {isBulkDelete ? t('deleteWarningMultiple') : t('deleteWarning')}
+              ⚠️ <strong>{t('warning')}</strong> {isBulkDelete ? t('deleteWarningMultiple') : t('deleteWarning')}
             </p>
           )}
           <p className="text-sm text-gray-500 dark:text-gray-400 mb-6">
-            {language === 'de' ? 'Diese Aktion kann nicht rückgängig gemacht werden.' : 'This action cannot be undone.'}
+            {t('cannotUndo')}
           </p>
           <div className="flex gap-3 justify-end">
             <button

@@ -1263,7 +1263,7 @@ export default function FileManager({ user, onLogout, initialPath, initialFile: 
           if (uploadErrors.length === 0) {
             showToast(`${uploadProgress.total} ${t('filesUploadedSuccess')}`, 'success');
           } else {
-            showToast(`${successCount} ${t('filesUploadedPartial')} ${uploadProgress.total} ${language === 'de' ? 'Dateien hochgeladen. ' : 'files uploaded. '}${uploadErrors.length} ${language === 'de' ? 'Fehler' : 'errors'}.`, 'error');
+            showToast(`${successCount} ${t('filesUploadedPartial')} ${uploadProgress.total} ${t('filesUploaded')}. ${uploadErrors.length} ${t('errors')}.`, 'error');
           }
         } else {
           // Single file
@@ -2143,9 +2143,7 @@ export default function FileManager({ user, onLogout, initialPath, initialFile: 
             newSet.delete(item.path);
             return newSet;
           });
-          showToast(language === 'de' 
-              ? `"${item.name}" aus Favoriten entfernt`
-              : `"${item.name}" removed from favorites`, 'success' 
+          showToast(`"${item.name}" ${t('removedFromFavorites')}`, 'success' 
           );
           // Refresh favorites list if we're on the favorites tab
           if (sidebarTab === 'favorites') {
@@ -2165,9 +2163,7 @@ export default function FileManager({ user, onLogout, initialPath, initialFile: 
         });
         if (res.ok) {
           setFavorites(prev => new Set(prev).add(item.path));
-          showToast(language === 'de'
-              ? `"${item.name}" zu Favoriten hinzugefügt`
-              : `"${item.name}" added to favorites`, 'success' 
+          showToast(`"${item.name}" ${t('addedToFavorites')}`, 'success' 
           );
           // Refresh favorites list if we're on the favorites tab
           if (sidebarTab === 'favorites') {
@@ -2177,9 +2173,7 @@ export default function FileManager({ user, onLogout, initialPath, initialFile: 
       }
     } catch (error) {
       console.error('Error toggling favorite:', error);
-      showToast(language === 'de'
-          ? 'Fehler beim Aktualisieren der Favoriten'
-          : 'Error updating favorites', 'error' 
+      showToast(t('errorUpdatingFavorites'), 'error' 
       );
     }
   }
@@ -2295,7 +2289,7 @@ export default function FileManager({ user, onLogout, initialPath, initialFile: 
         setTimeout(() => setRefreshFolderPath(null), 100);
         setTreeRefreshKey((k) => k + 1);
         
-        showToast(`${t('file')} "${nameToCreate}" ${language === 'de' ? 'erstellt' : 'created'}`, 'success');
+        showToast(`${t('file')} "${nameToCreate}" ${t('created')}`, 'success');
       } else {
         // Create a directory
         const res = await fetch('/api/files', {
@@ -2334,7 +2328,7 @@ export default function FileManager({ user, onLogout, initialPath, initialFile: 
         setTimeout(() => setRefreshFolderPath(null), 100);
         setTreeRefreshKey((k) => k + 1);
         
-        showToast(`${t('directory')} "${nameToCreate}" ${language === 'de' ? 'erstellt' : 'created'}`, 'success');
+        showToast(`${t('directory')} "${nameToCreate}" ${t('created')}`, 'success');
       }
     } catch (err) {
       showToast(t('serverError'), 'error');
@@ -3181,7 +3175,7 @@ export default function FileManager({ user, onLogout, initialPath, initialFile: 
                       : 'text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-800/50'
                   }`}
                 >
-                  {language === 'de' ? 'Ordner' : 'Folders'}
+                  {t('folders')}
                 </button>
                 <button
                   onClick={() => setSidebarTab('favorites')}
@@ -3191,7 +3185,7 @@ export default function FileManager({ user, onLogout, initialPath, initialFile: 
                       : 'text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-800/50'
                   }`}
                 >
-                  {language === 'de' ? 'Favoriten' : 'Favorites'}
+                  {t('favorites')}
                   {favorites.size > 0 && (
                     <span className="absolute top-1 right-2 bg-blue-500 text-white text-xs rounded-full w-5 h-5 flex items-center justify-center">
                       {favorites.size}
@@ -3202,7 +3196,7 @@ export default function FileManager({ user, onLogout, initialPath, initialFile: 
                 <button
                   onClick={() => setSidebarCollapsed(!sidebarCollapsed)}
                   className="px-2 md:px-3 py-2 text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors flex-shrink-0"
-                  title={language === 'de' ? 'Sidebar ausblenden' : 'Hide sidebar'}
+                  title={t('hideSidebar')}
                 >
                   <svg 
                     className="w-5 h-5 transition-transform duration-300"
@@ -3416,7 +3410,7 @@ export default function FileManager({ user, onLogout, initialPath, initialFile: 
                     : 'text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-800/50'
                 }`}
               >
-                {language === 'de' ? 'Ordner' : 'Folders'}
+                {t('folders')}
               </button>
               <button
                 onClick={() => setSidebarTab('favorites')}
@@ -3426,7 +3420,7 @@ export default function FileManager({ user, onLogout, initialPath, initialFile: 
                     : 'text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-800/50'
                 }`}
               >
-                {language === 'de' ? 'Favoriten' : 'Favorites'}
+                {t('favorites')}
                 {favorites.size > 0 && (
                   <span className="absolute top-1 right-2 bg-blue-500 text-white text-xs rounded-full w-5 h-5 flex items-center justify-center">
                     {favorites.size}
@@ -3746,7 +3740,7 @@ export default function FileManager({ user, onLogout, initialPath, initialFile: 
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
                   </svg>
                   <div>
-                    <p className="font-semibold text-gray-900 dark:text-white">{language === 'de' ? 'Dateien hier ablegen' : 'Drop files here'}</p>
+                    <p className="font-semibold text-gray-900 dark:text-white">{t('dropFilesHere')}</p>
                     <p className="text-sm text-gray-600 dark:text-gray-400">
                       {externalDragTarget !== null && externalDragTarget !== currentPath
                         ? `In: ${externalDragTarget.split('/').pop() || 'Root'}`
@@ -3767,9 +3761,9 @@ export default function FileManager({ user, onLogout, initialPath, initialFile: 
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4" />
                   </svg>
                   <div>
-                    <p className="font-semibold text-gray-900 dark:text-white">{language === 'de' ? 'Hier ablegen zum Verschieben' : 'Drop here to move'}</p>
+                    <p className="font-semibold text-gray-900 dark:text-white">{t('dropHereToMove')}</p>
                     <p className="text-sm text-gray-600 dark:text-gray-400">
-                      {language === 'de' ? `In: ${currentPath.split('/').pop() || 'Root'}` : `Into: ${currentPath.split('/').pop() || 'Root'}`}
+                      {t('into')}: {currentPath.split('/').pop() || t('root')}
                     </p>
                   </div>
                 </div>
@@ -3787,7 +3781,7 @@ export default function FileManager({ user, onLogout, initialPath, initialFile: 
                   <button
                     onClick={() => setSidebarCollapsed(false)}
                     className="p-1.5 hover:bg-gray-200 dark:hover:bg-gray-700 rounded transition-colors border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800"
-                    title={language === 'de' ? 'Sidebar einblenden' : 'Show sidebar'}
+                    title={t('showSidebar')}
                   >
                     <svg 
                       className="w-5 h-5 text-blue-600 dark:text-blue-400"
@@ -3931,7 +3925,7 @@ export default function FileManager({ user, onLogout, initialPath, initialFile: 
                 <button
                   onClick={handleCreateDirectory}
                   className="hidden md:flex p-2 text-gray-600 hover:text-gray-900 dark:text-gray-400 dark:hover:text-gray-100 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors"
-                  title={language === 'de' ? 'Neu erstellen (Datei oder Ordner)' : 'Create new (file or folder)'}
+                  title={t('createNew')}
                 >
                   <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
@@ -4022,7 +4016,7 @@ export default function FileManager({ user, onLogout, initialPath, initialFile: 
               <div className="flex flex-col items-center justify-center h-full">
                 <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mb-4"></div>
                 <p className="text-gray-500 dark:text-gray-400">
-                  {searchLoading ? (language === 'de' ? 'Suche...' : 'Searching...') : t('loading')}
+                  {searchLoading ? t('searching') : t('loading')}
                 </p>
               </div>
             ) : sortedFiles.length === 0 && !creatingNewDirectory ? (
@@ -4195,7 +4189,7 @@ export default function FileManager({ user, onLogout, initialPath, initialFile: 
                             onChange={(e) => setNewDirectoryName(e.target.value)}
                             onBlur={confirmCreateDirectory}
                             onKeyDown={handleNewDirectoryKeyDown}
-                            placeholder={language === 'de' ? 'Name (mit Endung = Datei, ohne = Ordner)' : 'Name (with extension = file, without = folder)'}
+                            placeholder={t('nameWithExtension')}
                             className="w-full px-2 py-1 text-sm border border-blue-500 rounded focus:outline-none focus:ring-2 focus:ring-blue-500 dark:bg-gray-700 dark:text-white"
                             autoFocus
                           />
@@ -4324,7 +4318,7 @@ export default function FileManager({ user, onLogout, initialPath, initialFile: 
                               onChange={(e) => setNewDirectoryName(e.target.value)}
                               onKeyDown={handleNewDirectoryKeyDown}
                               onClick={(e) => e.stopPropagation()}
-                              placeholder={language === 'de' ? 'Name (mit Endung = Datei, ohne = Ordner)' : 'Name (with extension = file, without = folder)'}
+                              placeholder={t('nameWithExtension')}
                               className="w-full px-2 py-1 border border-blue-500 rounded text-sm font-medium text-gray-900 dark:text-white bg-white dark:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500"
                               autoFocus
                             />
@@ -4690,7 +4684,7 @@ export default function FileManager({ user, onLogout, initialPath, initialFile: 
               <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
               </svg>
-              <span className="text-xs">{language === 'de' ? 'Ordner' : 'Folders'}</span>
+              <span className="text-xs">{t('folders')}</span>
             </button>
             <button
               onClick={handleCreateDirectory}
@@ -4699,7 +4693,7 @@ export default function FileManager({ user, onLogout, initialPath, initialFile: 
               <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
               </svg>
-              <span className="text-xs">{language === 'de' ? 'Neu' : 'New'}</span>
+              <span className="text-xs">{t('new')}</span>
             </button>
             <FileUpload
               currentPath={currentPath}
@@ -4790,12 +4784,12 @@ export default function FileManager({ user, onLogout, initialPath, initialFile: 
                 {searchLoading ? (
                   <>
                     <div className="animate-spin rounded-full h-3 w-3 border-b-2 border-gray-400"></div>
-                    <span>{language === 'de' ? 'Suche...' : 'Searching...'}</span>
+                    <span>{t('searching')}</span>
                   </>
                 ) : (
                   <>
-                    {sortedFiles.length} {sortedFiles.length === 1 ? (language === 'de' ? 'Ergebnis' : 'result') : (language === 'de' ? 'Ergebnisse' : 'results')} {language === 'de' ? 'gefunden' : 'found'}
-                    {isGlobalSearch ? (language === 'de' ? ' (in allen Ordnern)' : ' (in all folders)') : files.length !== sortedFiles.length && ` (${language === 'de' ? 'von' : 'of'} ${files.length} ${files.length === 1 ? (language === 'de' ? 'Element' : 'item') : (language === 'de' ? 'Elementen' : 'items')})`}
+                    {sortedFiles.length} {sortedFiles.length === 1 ? t('resultSingular') : t('resultPlural')} {t('foundText')}
+                    {isGlobalSearch ? t('inAllFoldersText') : files.length !== sortedFiles.length && ` (${t('ofText')} ${files.length} ${files.length === 1 ? t('itemSingular') : t('itemPlural')})`}
                   </>
                 )}
               </div>
@@ -4837,18 +4831,37 @@ export default function FileManager({ user, onLogout, initialPath, initialFile: 
                   </div>
                 ) : !searchLoading ? (
                   <div className="text-center py-8 text-gray-500 dark:text-gray-400">
-                    {language === 'de' ? 'Keine Ergebnisse gefunden' : 'No results found'}
+                    {t('noResultsFound')}
                   </div>
                 ) : null
               ) : (
                 <div className="text-center py-8 text-gray-500 dark:text-gray-400">
-                  {language === 'de' ? 'Geben Sie einen Suchbegriff ein' : 'Enter a search term'}
+                  {t('enterSearchTerm')}
                 </div>
               )}
             </div>
           </div>
         </div>
       )}
+
+      {/* Settings Modal */}
+      <SettingsModal
+        isOpen={settingsOpen}
+        onClose={() => setSettingsOpen(false)}
+        user={user}
+        onUserUpdate={(updatedUser) => {
+          // Handle user update if needed
+        }}
+      />
+
+      {/* Share Modal */}
+      <ShareModal
+        isOpen={shareModal.isOpen}
+        onClose={() => setShareModal({ isOpen: false, itemName: '', itemPath: '', itemType: 'file' })}
+        itemName={shareModal.itemName}
+        itemPath={shareModal.itemPath}
+        itemType={shareModal.itemType}
+      />
 
       {/* Toast */}
       {toast && (

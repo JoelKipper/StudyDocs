@@ -150,7 +150,7 @@ export default function FavoritesList({ currentPath, onNavigate, userId, onFavor
               className={`opacity-0 group-hover:opacity-100 transition-opacity p-1 rounded hover:bg-gray-200 dark:hover:bg-gray-600 ${
                 isActive ? 'text-white hover:bg-blue-700' : 'text-gray-400'
               }`}
-              title={language === 'de' ? 'Aus Favoriten entfernen' : 'Remove from favorites'}
+              title={t('removeFromFavoritesTitle')}
             >
               <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
