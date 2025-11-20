@@ -491,19 +491,12 @@ export default function FileManager({ user, onLogout, initialPath, initialFile: 
     async function processUploadQueue() {
       // Prevent multiple simultaneous uploads
       if (uploadQueue.length === 0 || replaceModal.isOpen || isProcessingUpload) {
-        console.log('Skipping queue processing:', {
-          queueLength: uploadQueue.length,
-          replaceModalOpen: replaceModal.isOpen,
-          isProcessing: isProcessingUpload
-        });
         return;
       }
 
-      console.log('Processing upload queue, items:', uploadQueue.length);
       setIsProcessingUpload(true);
       const { file, targetPath, relativePath, folderName } = uploadQueue[0];
       const totalFiles = uploadQueue.length;
-      console.log('Processing file:', file.name, 'targetPath:', targetPath, 'relativePath:', relativePath);
       
       // Initialize progress for all uploads (single or multiple)
       if (!uploadProgress) {
@@ -526,7 +519,6 @@ export default function FileManager({ user, onLogout, initialPath, initialFile: 
           
           if (!checkRes.ok) {
             // Don't throw error, just continue with upload
-            console.warn('Fehler beim Prüfen der Datei, fahre mit Upload fort');
           } else {
             const checkData = await checkRes.json();
             
@@ -538,13 +530,11 @@ export default function FileManager({ user, onLogout, initialPath, initialFile: 
             }
           }
         } catch (error) {
-          console.error('Fehler beim Prüfen der Datei:', error);
           // Continue with upload even if check fails
         }
 
         // Validate file before upload
         if (!file || file.size === undefined) {
-          console.warn('Skipping invalid file (no file object or size):', file?.name || 'unknown');
           // Skip this file and continue with next
           setUploadQueue((queue) => queue.slice(1));
           setIsProcessingUpload(false);
@@ -554,7 +544,6 @@ export default function FileManager({ user, onLogout, initialPath, initialFile: 
         // Only skip files that are truly invalid (no name at all)
         // Allow files without extension or type - they might be valid text files or other formats
         if (!file.name || file.name.trim() === '') {
-          console.warn('Skipping invalid file (no name):', file.name || 'unknown');
           // Skip this file and continue with next
           setUploadQueue((queue) => queue.slice(1));
           setIsProcessingUpload(false);
@@ -570,7 +559,6 @@ export default function FileManager({ user, onLogout, initialPath, initialFile: 
         })();
         
         if (!hasExtension) {
-          console.log('File has no extension, creating folder instead:', file.name);
           // Create a folder with the file name
           try {
             const createRes = await fetch('/api/files', {
@@ -588,12 +576,8 @@ export default function FileManager({ user, onLogout, initialPath, initialFile: 
             if (!createRes.ok) {
               const errorMessage = createData.error || '';
               if (!errorMessage.includes('existiert bereits') && !errorMessage.includes('already exists')) {
-                console.error('Failed to create folder:', errorMessage);
                 throw new Error(errorMessage || 'Fehler beim Erstellen des Ordners');
               }
-              console.log('Folder already exists');
-            } else {
-              console.log('Folder created successfully:', file.name);
             }
             
             // Refresh file list and tree
@@ -605,7 +589,6 @@ export default function FileManager({ user, onLogout, initialPath, initialFile: 
             setIsProcessingUpload(false);
             return;
           } catch (err: any) {
-            console.error('Error creating folder:', err);
             // Remove this item from queue and continue with next
             setUploadQueue((queue) => queue.slice(1));
             setIsProcessingUpload(false);
@@ -617,18 +600,12 @@ export default function FileManager({ user, onLogout, initialPath, initialFile: 
         // Some browsers have issues with truly empty files in FormData
         let fileToUpload: File = file;
         if (file.size === 0) {
-          console.log('Converting 0-byte file to minimal blob for upload');
           // Create a new File object with a minimal content for 0-byte files
           // Use a single space character to ensure the file has content
           const emptyBlob = new Blob([' '], { type: file.type || 'text/plain' });
           fileToUpload = new File([emptyBlob], file.name, {
             type: file.type || 'text/plain',
             lastModified: file.lastModified || Date.now()
-          });
-          console.log('Created new file object:', {
-            name: fileToUpload.name,
-            size: fileToUpload.size,
-            type: fileToUpload.type
           });
         }
         
@@ -649,35 +626,10 @@ export default function FileManager({ user, onLogout, initialPath, initialFile: 
           uploadPath = targetPath ? `${targetPath}/${file.name}` : file.name;
         }
         
-        console.log('Upload path constructed:', {
-          fileName: file.name,
-          targetPath: targetPath,
-          relativePath: relativePath,
-          folderName: folderName,
-          uploadPath: uploadPath
-        });
-        
         // Validate and clean the path
         uploadPath = uploadPath.replace(/\/+/g, '/').replace(/^\/|\/$/g, '');
         
-        console.log('Uploading file:', {
-          fileName: file.name,
-          uploadPath,
-          relativePath,
-          folderName,
-          targetPath,
-          fileSize: file.size,
-          fileType: file.type
-        });
-        
         formData.append('path', uploadPath);
-
-        // Verify FormData was created correctly
-        console.log('FormData created, entries:', {
-          hasFile: formData.has('file'),
-          hasPath: formData.has('path'),
-          pathValue: uploadPath
-        });
 
         let res: Response;
         let timeoutId: NodeJS.Timeout | null = null;
@@ -685,11 +637,8 @@ export default function FileManager({ user, onLogout, initialPath, initialFile: 
           // Use a timeout to prevent hanging requests
           const controller = new AbortController();
           timeoutId = setTimeout(() => {
-            console.warn('Upload timeout, aborting...');
             controller.abort();
           }, 60000); // 60 second timeout
-          
-          console.log('Starting fetch request to /api/files/upload');
           
           res = await fetch('/api/files/upload', {
             method: 'POST',
@@ -699,21 +648,8 @@ export default function FileManager({ user, onLogout, initialPath, initialFile: 
           });
           
           if (timeoutId) clearTimeout(timeoutId);
-          console.log('Fetch request completed, status:', res.status);
         } catch (fetchError: any) {
           if (timeoutId) clearTimeout(timeoutId);
-          
-          // Network error (CORS, connection refused, etc.)
-          console.error('Network error during fetch:', fetchError);
-          console.error('Error type:', fetchError.constructor.name);
-          console.error('Error name:', fetchError.name);
-          console.error('Error message:', fetchError.message);
-          console.error('File details:', {
-            name: file.name,
-            size: file.size,
-            type: file.type,
-            uploadPath
-          });
           
           // Check if it's an abort (timeout)
           if (fetchError.name === 'AbortError' || fetchError instanceof DOMException) {
@@ -761,7 +697,6 @@ export default function FileManager({ user, onLogout, initialPath, initialFile: 
           });
         }
       } catch (error: any) {
-        console.error('Fehler beim Hochladen:', error);
         // Only show error for real errors, not temporary issues
         const errorMessage = error.message || 'Unbekannter Fehler';
         if (!errorMessage.includes('network') && !errorMessage.includes('timeout') && !errorMessage.includes('fetch')) {
@@ -770,34 +705,21 @@ export default function FileManager({ user, onLogout, initialPath, initialFile: 
       } finally {
         // Process next file in queue
         setUploadQueue((queue) => {
-          const remainingQueue = queue.slice(1);
-          console.log('File processed, remaining in queue:', remainingQueue.length);
-          return remainingQueue;
+          return queue.slice(1);
         });
         setIsProcessingUpload(false);
       }
     }
 
-    console.log('Upload queue useEffect triggered:', {
-      queueLength: uploadQueue.length,
-      replaceModalOpen: replaceModal.isOpen,
-      isProcessing: isProcessingUpload
-    });
-    
     if (uploadQueue.length > 0 && !replaceModal.isOpen && !isProcessingUpload) {
-      console.log('Conditions met, scheduling queue processing');
       // Add small delay to prevent race conditions
       const timeoutId = setTimeout(() => {
-        console.log('Timeout fired, calling processUploadQueue');
         processUploadQueue();
       }, 100);
       
       return () => {
-        console.log('Cleaning up timeout');
         clearTimeout(timeoutId);
       };
-    } else {
-      console.log('Conditions not met, skipping queue processing');
     }
   }, [uploadQueue, replaceModal.isOpen, isProcessingUpload, uploadProgress]);
 
@@ -824,15 +746,6 @@ export default function FileManager({ user, onLogout, initialPath, initialFile: 
 
   // Define handleFolderUpload first so it can be used by handleExternalFilesDrop
   const handleFolderUpload = useCallback(async (files: File[], targetPathOverride?: string) => {
-    console.log('=== handleFolderUpload CALLED ===');
-    console.log('handleFolderUpload called with', files.length, 'files');
-    console.log('Files:', files.map(f => ({
-      name: f.name,
-      size: f.size,
-      type: f.type,
-      webkitRelativePath: (f as any).webkitRelativePath
-    })));
-    
     let folderName: string;
     
     // If folder is empty (no files), we need to ask for folder name
@@ -842,25 +755,21 @@ export default function FileManager({ user, onLogout, initialPath, initialFile: 
       const userInput = prompt('Bitte geben Sie den Namen für den leeren Ordner ein (oder lassen Sie leer für Standard-Namen):');
       if (userInput === null) {
         // User cancelled
-        console.log('User cancelled folder creation');
         return;
       }
       if (userInput && userInput.trim()) {
         folderName = userInput.trim();
-        console.log('Empty folder detected, using user-provided folder name:', folderName);
       } else {
         // Use default name if user left it empty
         const now = new Date();
         const timestamp = now.toISOString().slice(0, 19).replace(/:/g, '-').replace('T', '_');
         folderName = `New Folder ${timestamp}`;
-        console.log('Empty folder detected, using default folder name:', folderName);
       }
     } else {
       // Filter out only truly invalid files (no name at all)
       const validFiles = files.filter(file => {
         // Only skip files without names
         if (!file.name || file.name.trim() === '') {
-          console.warn('Skipping invalid file (no name):', file.name || 'unnamed');
           return false;
         }
         return true;
@@ -871,7 +780,6 @@ export default function FileManager({ user, onLogout, initialPath, initialFile: 
         const now = new Date();
         const timestamp = now.toISOString().slice(0, 19).replace(/:/g, '-').replace('T', '_');
         folderName = `New Folder ${timestamp}`;
-        console.log('No valid files, using default folder name:', folderName);
       } else {
         // Extract folder name from first file's webkitRelativePath
         const firstFile = validFiles[0];
@@ -882,7 +790,6 @@ export default function FileManager({ user, onLogout, initialPath, initialFile: 
           const now = new Date();
           const timestamp = now.toISOString().slice(0, 19).replace(/:/g, '-').replace('T', '_');
           folderName = `Uploaded Folder ${timestamp}`;
-          console.log('No webkitRelativePath found, using default folder name:', folderName);
         } else {
           folderName = firstRelativePath.split('/')[0];
         }
@@ -892,14 +799,7 @@ export default function FileManager({ user, onLogout, initialPath, initialFile: 
     // Use targetPathOverride if provided (for drag-and-drop), otherwise use currentPath
     const uploadTargetPath = targetPathOverride !== undefined ? targetPathOverride : currentPath;
 
-    console.log('Folder upload:', {
-      totalFiles: files.length,
-      folderName: folderName,
-      currentPath: uploadTargetPath
-    });
-
     // First, create the folder with the same name
-    console.log('Creating folder:', folderName, 'in path:', uploadTargetPath);
     try {
       const createRes = await fetch('/api/files', {
         method: 'POST',
@@ -911,25 +811,17 @@ export default function FileManager({ user, onLogout, initialPath, initialFile: 
         }),
       });
 
-      console.log('Create folder response status:', createRes.status);
       const createData = await createRes.json();
-      console.log('Create folder response data:', createData);
 
       if (!createRes.ok) {
         // If folder already exists, that's okay - continue with upload
         const errorMessage = createData.error || '';
-        console.log('Create folder error:', errorMessage);
         if (!errorMessage.includes('existiert bereits') && !errorMessage.includes('already exists')) {
-          console.error('Failed to create folder:', errorMessage);
           showToast(errorMessage || t('errorDeleting'), 'error');
           return;
         }
-        console.log('Folder already exists, continuing with upload');
-      } else {
-        console.log('Folder created successfully:', folderName);
       }
     } catch (err) {
-      console.error('Error creating folder:', err);
       showToast(t('serverError'), 'error');
       return;
     }
@@ -939,33 +831,17 @@ export default function FileManager({ user, onLogout, initialPath, initialFile: 
 
     // If there are files to upload, upload them directly
     if (files.length > 0) {
-      console.log('=== FOLDER UPLOAD START ===');
-      console.log('Total files received:', files.length);
-      console.log('Folder name:', folderName);
-      console.log('Target folder path:', targetFolderPath);
-      console.log('All files:', files.map(f => ({
-        name: f.name,
-        size: f.size,
-        type: f.type,
-        webkitRelativePath: (f as any).webkitRelativePath
-      })));
-      
       // Filter out only truly invalid files (no name at all)
       const validFiles = files.filter(file => {
         if (!file.name || file.name.trim() === '') {
-          console.warn('Skipping invalid file (no name):', file.name || 'unnamed');
           return false;
         }
         return true;
       });
 
-      console.log('Valid files after filtering:', validFiles.length);
-
       if (validFiles.length > 0) {
         // Don't limit - upload ALL files
         const filesToUpload = validFiles;
-        
-        console.log('Starting direct upload of ALL', filesToUpload.length, 'files to folder:', targetFolderPath);
         
         // Show progress
         setUploadProgress({
@@ -1013,14 +889,6 @@ export default function FileManager({ user, onLogout, initialPath, initialFile: 
           // Clean up the path
           uploadPath = uploadPath.replace(/\/+/g, '/').replace(/^\/|\/$/g, '');
           
-          console.log(`[${i + 1}/${filesToUpload.length}] Uploading:`, {
-            fileName: file.name,
-            webkitRelativePath: fileRelativePath,
-            pathWithinFolder: pathWithinFolder,
-            uploadPath: uploadPath,
-            fileSize: file.size
-          });
-          
           // Update progress
           setUploadProgress(prev => prev ? {
             ...prev,
@@ -1033,32 +901,22 @@ export default function FileManager({ user, onLogout, initialPath, initialFile: 
             formData.append('file', file);
             formData.append('path', uploadPath);
             
-            console.log(`[${i + 1}/${filesToUpload.length}] Sending request to /api/files/upload`);
-            
             const res = await fetch('/api/files/upload', {
               method: 'POST',
               body: formData,
             });
             
-            console.log(`[${i + 1}/${filesToUpload.length}] Response status:`, res.status);
-            
             const data = await res.json();
             
             if (res.ok) {
               successCount++;
-              console.log(`[${i + 1}/${filesToUpload.length}] ✓ Uploaded successfully:`, file.name);
             } else {
               errorCount++;
-              console.error(`[${i + 1}/${filesToUpload.length}] ✗ Upload failed:`, data.error);
             }
           } catch (error: any) {
             errorCount++;
-            console.error(`[${i + 1}/${filesToUpload.length}] ✗ Upload error:`, error.message);
           }
         }
-        
-        console.log('=== FOLDER UPLOAD COMPLETE ===');
-        console.log('Success:', successCount, 'Errors:', errorCount);
         
         // Clear progress
         setUploadProgress(null);
@@ -1075,14 +933,12 @@ export default function FileManager({ user, onLogout, initialPath, initialFile: 
         setTreeRefreshKey((k) => k + 1);
       } else {
         // Folder created but no valid files to upload
-        console.log('No valid files to upload');
         showToast(`Ordner "${folderName}" wurde erstellt.`, 'success');
         await loadFiles();
         setTreeRefreshKey((k) => k + 1);
       }
     } else {
       // Empty folder was created
-      console.log('Empty folder created');
       showToast(`Ordner "${folderName}" wurde erstellt.`, 'success');
       await loadFiles();
       setTreeRefreshKey((k) => k + 1);
@@ -1102,7 +958,6 @@ export default function FileManager({ user, onLogout, initialPath, initialFile: 
     // and might be null/undefined if accessed incorrectly
     const dataTransfer = e.dataTransfer;
     if (!dataTransfer) {
-      console.warn('No dataTransfer in event');
       return files;
     }
     
@@ -1110,25 +965,7 @@ export default function FileManager({ user, onLogout, initialPath, initialFile: 
     // Check if items is available (it's a DataTransferItemList, not an array)
     const items = dataTransfer.items ? Array.from(dataTransfer.items) : [];
     
-    console.log('=== EXTRACT FILES WITH FOLDER STRUCTURE ===');
-    console.log('Event type:', e.type);
-    console.log('dataTransfer:', dataTransfer);
-    console.log('dataTransfer.items:', dataTransfer.items);
-    console.log('dataTransfer.items.length:', dataTransfer.items?.length);
-    console.log('Items count (Array.from):', items.length);
-    console.log('dataTransfer.files:', dataTransfer.files);
-    console.log('dataTransfer.files.length:', dataTransfer.files?.length);
-    
-    // Log each item
     if (items.length > 0) {
-      items.forEach((item, index) => {
-        console.log(`Item ${index}:`, { kind: item.kind, type: item.type });
-      });
-    }
-    
-    if (items.length > 0) {
-      console.log('Using DataTransferItem API to extract folder structure');
-      console.log('Items:', items.map(item => ({ kind: item.kind, type: item.type })));
       
       // Process items to preserve folder structure
       async function processItem(item: DataTransferItem, path: string = ''): Promise<void> {
@@ -1144,13 +981,10 @@ export default function FileManager({ user, onLogout, initialPath, initialFile: 
               const fileWithPath = new File([file], file.name, { type: file.type });
               (fileWithPath as any).webkitRelativePath = relativePath;
               files.push(fileWithPath);
-              console.log('Added file:', file.name, 'with path:', relativePath);
             } else if (entry.isDirectory) {
               const dirEntry = entry as FileSystemDirectoryEntry;
               const dirName = dirEntry.name;
               const newPath = path ? `${path}/${dirName}` : dirName;
-              
-              console.log('Processing directory:', dirName, 'at path:', newPath);
               
               // Read directory contents recursively
               await processDirectoryEntry(dirEntry, newPath);
@@ -1168,7 +1002,6 @@ export default function FileManager({ user, onLogout, initialPath, initialFile: 
                 resolve();
                 return;
               }
-              console.log(`Reading ${entries.length} entries from directory at path: ${path}`);
               const promises = entries.map((entry) => {
                 if (entry.isFile) {
                   return new Promise<void>((fileResolve) => {
@@ -1177,13 +1010,11 @@ export default function FileManager({ user, onLogout, initialPath, initialFile: 
                       const fileWithPath = new File([file], file.name, { type: file.type });
                       (fileWithPath as any).webkitRelativePath = relativePath;
                       files.push(fileWithPath);
-                      console.log('Added file from directory:', file.name, 'with path:', relativePath);
                       fileResolve();
                     });
                   });
                 } else if (entry.isDirectory) {
                   const newPath = `${path}/${entry.name}`;
-                  console.log('Found subdirectory:', entry.name, 'at path:', newPath);
                   return processDirectoryEntry(entry as FileSystemDirectoryEntry, newPath);
                 }
                 return Promise.resolve();
@@ -1199,20 +1030,13 @@ export default function FileManager({ user, onLogout, initialPath, initialFile: 
         for (const item of items) {
           await processItem(item);
         }
-        console.log('Extracted', files.length, 'files with folder structure');
-        console.log('Files with webkitRelativePath:', files.map(f => ({
-          name: f.name,
-          webkitRelativePath: (f as any).webkitRelativePath
-        })));
       } catch (error) {
-        console.error('Error extracting files with folder structure:', error);
         // Fallback to regular files on error
         const regularFiles = Array.from(e.dataTransfer?.files || []);
         files.push(...regularFiles);
       }
     } else {
       // Fallback to regular files if DataTransferItem API is not available
-      console.log('DataTransferItem API not available, using regular files');
       const regularFiles = Array.from(e.dataTransfer?.files || []);
       files.push(...regularFiles);
     }
@@ -1221,38 +1045,15 @@ export default function FileManager({ user, onLogout, initialPath, initialFile: 
   }, []);
 
   const handleExternalFilesDrop = useCallback(async (files: File[], targetPath: string) => {
-    console.log('=== handleExternalFilesDrop CALLED ===');
-    console.log('Files dropped:', files.length, 'files');
-    console.log('Target path:', targetPath);
-    
-    const filesWithDetails = files.map(f => ({
-      name: f.name,
-      size: f.size,
-      type: f.type,
-      webkitRelativePath: (f as any).webkitRelativePath
-    }));
-    console.log('Files:', filesWithDetails);
-    
     // Check if this is a folder upload (has webkitRelativePath)
     const filesWithRelativePath = files.filter(f => (f as any).webkitRelativePath);
     const hasRelativePaths = filesWithRelativePath.length > 0;
     
-    console.log('Folder upload check:', {
-      totalFiles: files.length,
-      filesWithRelativePath: filesWithRelativePath.length,
-      hasRelativePaths: hasRelativePaths,
-      relativePaths: filesWithRelativePath.map(f => (f as any).webkitRelativePath)
-    });
-    
     if (hasRelativePaths && files.length > 0) {
       // This is a folder upload, use handleFolderUpload logic
-      console.log('✓ Detected folder upload via drag-and-drop, using folder upload logic');
-      console.log('Calling handleFolderUpload with', files.length, 'files and targetPath:', targetPath);
-      // Call handleFolderUpload with the files and targetPath
       await handleFolderUpload(files, targetPath);
       return;
     } else {
-      console.log('✗ Not a folder upload (no webkitRelativePath), using regular file upload');
       // If user dragged a folder but webkitRelativePath is missing, show a helpful message
       if (files.length === 1 && files[0].name && !files[0].name.includes('.')) {
         // Single file without extension might be a folder
@@ -1277,15 +1078,8 @@ export default function FileManager({ user, onLogout, initialPath, initialFile: 
 
   // Wrapper function that accepts a DragEvent and extracts files with folder structure
   const handleExternalDropWithEvent = useCallback(async (e: React.DragEvent, targetPath: string) => {
-    console.log('=== handleExternalDropWithEvent CALLED ===');
-    console.log('Target path:', targetPath);
-    console.log('Event:', e);
-    console.log('dataTransfer.files.length:', e.dataTransfer?.files?.length);
-    
     try {
       const files = await extractFilesWithFolderStructure(e);
-      console.log('Extracted files count:', files.length);
-      console.log('Files with webkitRelativePath:', files.filter(f => (f as any).webkitRelativePath).length);
       
       if (files.length > 0) {
         await handleExternalFilesDrop(files, targetPath);
@@ -1293,20 +1087,14 @@ export default function FileManager({ user, onLogout, initialPath, initialFile: 
         // If no files were extracted but files exist in dataTransfer, try fallback
         const regularFiles = Array.from(e.dataTransfer?.files || []);
         if (regularFiles.length > 0) {
-          console.warn('No files extracted with folder structure, trying regular file upload');
-          console.warn('⚠️ Drag-and-Drop unterstützt keine Ordnerstruktur. Bitte verwenden Sie das Ordner-Icon (📁) in der Toolbar für Ordner-Uploads.');
           showToast('⚠️ Drag-and-Drop unterstützt keine Ordnerstruktur. Bitte verwenden Sie das Ordner-Icon (📁) in der Toolbar für Ordner-Uploads.', 'info');
           await handleExternalFilesDrop(regularFiles, targetPath);
-        } else {
-          console.warn('No files extracted from drag event');
         }
       }
     } catch (error) {
-      console.error('Error in handleExternalDropWithEvent:', error);
       // Fallback to regular files
       const regularFiles = Array.from(e.dataTransfer?.files || []);
       if (regularFiles.length > 0) {
-        console.warn('Error extracting files, trying regular file upload');
         await handleExternalFilesDrop(regularFiles, targetPath);
       }
     }
@@ -1621,29 +1409,6 @@ export default function FileManager({ user, onLogout, initialPath, initialFile: 
     };
   }, [externalDragTarget, currentPath, handleExternalFilesDrop]);
 
-  // Debug function to log folder contents
-  function logFolderContents() {
-    console.log('=== FOLDER CONTENTS DEBUG ===');
-    console.log('Current Path:', currentPath);
-    console.log('Files in current folder:', files.length);
-    console.log('Files:', files.map(f => ({
-      name: f.name,
-      path: f.path,
-      type: f.type,
-      size: f.size,
-      createdBy: f.metadata?.createdBy,
-      lastModifiedBy: f.metadata?.lastModifiedBy
-    })));
-    console.log('============================');
-  }
-  
-  // Make it available globally for debugging
-  useEffect(() => {
-    (window as any).logFolderContents = logFolderContents;
-    return () => {
-      delete (window as any).logFolderContents;
-    };
-  }, [currentPath, files]);
 
   async function loadFiles() {
     setLoading(true);
@@ -1651,18 +1416,6 @@ export default function FileManager({ user, onLogout, initialPath, initialFile: 
     try {
       const res = await fetch(`/api/files?path=${encodeURIComponent(currentPath)}`);
       const data = await res.json();
-      
-      // Debug: Log folder contents after loading
-      console.log('=== FOLDER LOADED ===');
-      console.log('Path:', currentPath);
-      console.log('Items loaded:', data.contents?.length || 0);
-      console.log('Items:', data.contents?.map((item: any) => ({
-        name: item.name,
-        path: item.path,
-        type: item.type,
-        size: item.size
-      })) || []);
-      console.log('====================');
       
       if (res.ok) {
         setFiles(data.contents || []);
@@ -1675,7 +1428,7 @@ export default function FileManager({ user, onLogout, initialPath, initialFile: 
         });
       }
     } catch (error) {
-      console.error('Fehler beim Laden der Dateien:', error);
+      // Error loading files
     } finally {
       setLoading(false);
     }
@@ -1763,7 +1516,6 @@ export default function FileManager({ user, onLogout, initialPath, initialFile: 
         setAllFiles([]);
       }
     } catch (error) {
-      console.error('Fehler bei der globalen Suche:', error);
       showToast(t('noResults'), 'error');
       setAllFiles([]);
     } finally {

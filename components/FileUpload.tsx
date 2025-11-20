@@ -36,7 +36,6 @@ export default function FileUpload({ currentPath, onUploaded, onFolderUpload, ch
       })();
       
       if (!hasExtension) {
-        console.log('File has no extension, creating folder instead:', file.name);
         // Create a folder with the file name
         try {
           const createRes = await fetch('/api/files', {
@@ -58,9 +57,6 @@ export default function FileUpload({ currentPath, onUploaded, onFolderUpload, ch
               setUploading(false);
               return;
             }
-            console.log('Folder already exists');
-          } else {
-            console.log('Folder created successfully:', file.name);
           }
           
           // Refresh file list
@@ -145,40 +141,22 @@ export default function FileUpload({ currentPath, onUploaded, onFolderUpload, ch
   }
 
   async function handleFolderSelect(e: React.ChangeEvent<HTMLInputElement>) {
-    console.log('=== handleFolderSelect CALLED ===');
-    console.log('Event target:', e.target);
-    console.log('Event target files:', e.target.files);
     const files = Array.from(e.target.files || []);
-    console.log('handleFolderSelect called with', files.length, 'files');
-    
-    const filesWithDetails = files.map(f => ({
-      name: f.name,
-      size: f.size,
-      type: f.type,
-      webkitRelativePath: (f as any).webkitRelativePath
-    }));
-    console.log('Files:', filesWithDetails);
-    console.log('Files with webkitRelativePath:', files.filter(f => (f as any).webkitRelativePath).length);
     
     // If onFolderUpload callback is provided, use it (for FileManager)
     // Even if files.length === 0 (empty folder), we still want to create the folder
     if (onFolderUpload) {
-      console.log('✓ Calling onFolderUpload with', files.length, 'files');
       onFolderUpload(files);
       if (folderInputRef.current) {
         folderInputRef.current.value = '';
       }
       return;
-    } else {
-      console.log('✗ onFolderUpload not provided');
     }
     
     if (files.length === 0) {
-      console.warn('No files selected in folder upload');
       return;
     }
 
-    console.log('onFolderUpload not provided, using fallback');
     // Otherwise, upload files one by one (fallback)
     for (const file of files) {
       await uploadFile(file);

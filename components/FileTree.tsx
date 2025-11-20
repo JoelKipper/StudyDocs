@@ -194,7 +194,7 @@ export default function FileTree({ currentPath, onNavigate, onRefresh, onExterna
         });
       });
     } catch (error) {
-      console.error('Fehler beim Laden des Baums:', error);
+      // Error loading tree
     } finally {
       setLoading(false);
     }
@@ -232,7 +232,7 @@ export default function FileTree({ currentPath, onNavigate, onRefresh, onExterna
         return [...dirNodes, ...fileNodes];
       }
     } catch (error) {
-      console.error('Fehler beim Laden:', error);
+      // Error loading directory
     }
     return [];
   }
@@ -316,7 +316,6 @@ export default function FileTree({ currentPath, onNavigate, onRefresh, onExterna
       const data = await res.json();
 
       if (!res.ok) {
-        console.error('Error creating directory:', data.error);
         return;
       }
       
@@ -329,7 +328,7 @@ export default function FileTree({ currentPath, onNavigate, onRefresh, onExterna
       // Also refresh the full tree to show the new directory
       loadFullTree();
     } catch (err) {
-      console.error('Fehler beim Erstellen des Ordners:', err);
+      // Error creating directory
     }
   }
 
@@ -508,11 +507,8 @@ export default function FileTree({ currentPath, onNavigate, onRefresh, onExterna
       } else {
         setRenamingItem(null);
         setRenameValue('');
-        // Show error - you might want to add a toast system here
-        console.error('Error renaming:', data.error);
       }
     } catch (error) {
-      console.error('Fehler beim Umbenennen:', error);
       setRenamingItem(null);
       setRenameValue('');
     }
@@ -606,7 +602,7 @@ export default function FileTree({ currentPath, onNavigate, onRefresh, onExterna
           onItemMoved(draggedPath, itemName);
         }
       } catch (error) {
-        console.error('Fehler beim Verschieben:', error);
+        // Error moving item
       } finally {
         setDraggedItem(null);
       }
@@ -986,7 +982,7 @@ function TreeNode({
           onItemMoved(draggedPath, newPath);
         }
       } catch (error) {
-        console.error('Fehler beim Verschieben:', error);
+        // Error moving item
       } finally {
         setDraggedItem(null);
         setDraggedItemType(null);
