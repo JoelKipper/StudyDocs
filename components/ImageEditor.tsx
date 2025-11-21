@@ -82,7 +82,7 @@ export default function ImageEditor({ file, verifiedPassword, onClose, onSave }:
         setOriginalImageSrc(blobUrl); // Store original image
         setLoading(false);
       } catch (err: any) {
-        setError(`Error loading image: ${err.message}`);
+        setError(`${t('errorLoadingImage')}: ${err.message}`);
         setLoading(false);
       }
     }
@@ -242,7 +242,7 @@ export default function ImageEditor({ file, verifiedPassword, onClose, onSave }:
   // Apply crop
   async function handleApplyCrop() {
     if (!imageSrc || !completedCrop) {
-      setError(language === 'de' ? 'Bitte wählen Sie einen Bereich aus' : 'Please select an area first');
+      setError(t('selectAreaFirst'));
       return;
     }
 
@@ -279,7 +279,7 @@ export default function ImageEditor({ file, verifiedPassword, onClose, onSave }:
       setHasChanges(true);
     } catch (err: any) {
       console.error('[ImageEditor] Error applying crop:', err);
-      setError(`Error cropping image: ${err.message}`);
+      setError(`${t('errorCroppingImage')}: ${err.message}`);
     }
   }
 
@@ -464,7 +464,7 @@ export default function ImageEditor({ file, verifiedPassword, onClose, onSave }:
       }, 'image/png', 1.0);
     } catch (err: any) {
       console.error('[ImageEditor] Error saving image:', err);
-      setError(`Error saving image: ${err.message}`);
+      setError(`${t('errorSavingImage')}: ${err.message}`);
     } finally {
       setSaving(false);
     }
@@ -504,28 +504,28 @@ export default function ImageEditor({ file, verifiedPassword, onClose, onSave }:
           <button
             onClick={() => handleRotate(-90)}
             className="px-3 py-2 bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 border border-gray-300 dark:border-gray-600"
-            title={language === 'de' ? '90° links drehen' : 'Rotate 90° left'}
+            title={t('rotateLeft')}
           >
             ↺
           </button>
           <button
             onClick={() => handleRotate(90)}
             className="px-3 py-2 bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 border border-gray-300 dark:border-gray-600"
-            title={language === 'de' ? '90° rechts drehen' : 'Rotate 90° right'}
+            title={t('rotateRight')}
           >
             ↻
           </button>
           <button
             onClick={() => handleFlip('horizontal')}
             className="px-3 py-2 bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 border border-gray-300 dark:border-gray-600"
-            title={language === 'de' ? 'Horizontal spiegeln' : 'Flip horizontal'}
+            title={t('flipHorizontal')}
           >
             ⇄
           </button>
           <button
             onClick={() => handleFlip('vertical')}
             className="px-3 py-2 bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 border border-gray-300 dark:border-gray-600"
-            title={language === 'de' ? 'Vertikal spiegeln' : 'Flip vertical'}
+            title={t('flipVertical')}
           >
             ⇅
           </button>
@@ -544,9 +544,9 @@ export default function ImageEditor({ file, verifiedPassword, onClose, onSave }:
                 ? 'bg-blue-600 text-white'
                 : 'bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700'
             }`}
-            title={language === 'de' ? 'Zuschneiden' : 'Crop'}
+            title={t('crop')}
           >
-            {cropMode ? (language === 'de' ? 'Anwenden' : 'Apply') : '✂️'}
+            {cropMode ? t('apply') : '✂️'}
           </button>
           {cropMode && (
             <>
@@ -564,7 +564,7 @@ export default function ImageEditor({ file, verifiedPassword, onClose, onSave }:
               </button>
               <div className="w-px h-6 bg-gray-300 dark:bg-gray-600"></div>
               <span className="text-sm text-gray-600 dark:text-gray-400 px-2">
-                {language === 'de' ? 'Format:' : 'Aspect:'}
+                {t('aspect')}
               </span>
               <button
                 onClick={() => {
@@ -576,9 +576,9 @@ export default function ImageEditor({ file, verifiedPassword, onClose, onSave }:
                     ? 'bg-blue-600 text-white'
                     : 'bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700'
                 }`}
-                title={language === 'de' ? 'Frei - Crop-Fenster frei skalierbar, keine Ziel-Auflösung' : 'Free - Crop window freely scalable, no target resolution'}
+                title={t('freeCropTooltip')}
               >
-                {language === 'de' ? 'Frei' : 'Free'}
+                {t('free')}
               </button>
               <button
                 onClick={() => {
@@ -661,15 +661,13 @@ export default function ImageEditor({ file, verifiedPassword, onClose, onSave }:
                     ? 'bg-blue-600 text-white'
                     : 'bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700'
                 }`}
-                title={language === 'de' ? 'Benutzerdefiniert (frei skalierbar)' : 'Custom (free scale)'}
+                title={t('customCropTooltip')}
               >
-                {language === 'de' ? 'Custom' : 'Custom'}
+                {t('custom')}
               </button>
               {useCustomResolution && (
                 <span className="text-xs text-gray-500 dark:text-gray-400 ml-2 px-2 py-1 bg-blue-50 dark:bg-blue-900/20 rounded">
-                  {language === 'de' 
-                    ? `Ziel: ${customWidth}×${customHeight} (beim Speichern)` 
-                    : `Target: ${customWidth}×${customHeight} (on save)`}
+                  {t('targetResolution')} {customWidth}×{customHeight} ({t('onSave')})
                 </span>
               )}
             </>
@@ -685,7 +683,7 @@ export default function ImageEditor({ file, verifiedPassword, onClose, onSave }:
                 ? 'bg-blue-600 text-white'
                 : 'bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700'
             }`}
-            title={language === 'de' ? 'Zeichnen' : 'Draw'}
+            title={t('draw')}
           >
             ✏️
           </button>
