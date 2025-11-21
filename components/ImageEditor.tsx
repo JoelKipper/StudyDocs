@@ -96,11 +96,6 @@ export default function ImageEditor({ file, verifiedPassword, onClose, onSave }:
     };
   }, [file?.path, verifiedPassword]);
 
-  // Apply crop
-  const onCropComplete = useCallback((croppedArea: Area, croppedAreaPixels: Area) => {
-    setCroppedAreaPixels(croppedAreaPixels);
-  }, []);
-
   // Get cropped image
   const getCroppedImg = async (
     imageSrc: string, 
