@@ -93,6 +93,12 @@ export default function ImageEditor({ file, onClose, onSave }: ImageEditorProps)
     }
 
     async function loadImage() {
+      if (!file) {
+        setError('No file provided');
+        setLoading(false);
+        return;
+      }
+      
       if (!fabricCanvasRef.current) {
         setError('Canvas not available');
         setLoading(false);
