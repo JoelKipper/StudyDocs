@@ -381,7 +381,7 @@ export default function ImageEditor({ file, onClose, onSave }: ImageEditorProps)
     const canvas = fabricCanvasRef.current;
     canvas.isDrawingMode = !canvas.isDrawingMode;
     
-    if (canvas.isDrawingMode) {
+    if (canvas.isDrawingMode && canvas.freeDrawingBrush) {
       canvas.freeDrawingBrush.width = 5;
       canvas.freeDrawingBrush.color = '#000000';
     }
