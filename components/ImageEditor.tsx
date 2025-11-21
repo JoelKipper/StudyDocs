@@ -174,19 +174,14 @@ export default function ImageEditor({ file, onClose, onSave }: ImageEditorProps)
             canvas.setHeight(Math.max(imgHeight * scale + 40, 300));
           }
           
-          canvas.setBackgroundImage(
-            img,
-            () => {
-              canvas.renderAll();
-              setLoading(false);
-            },
-            {
-              scaleX: scale,
-              scaleY: scale,
-              originX: 'center',
-              originY: 'center',
-            }
-          );
+          // Set background image directly (Fabric.js v6 API)
+          img.scaleX = scale;
+          img.scaleY = scale;
+          img.originX = 'center';
+          img.originY = 'center';
+          canvas.backgroundImage = img;
+          canvas.renderAll();
+          setLoading(false);
         } catch (err: any) {
           setError(`Error loading image: ${err.message}`);
           setLoading(false);
@@ -279,7 +274,7 @@ export default function ImageEditor({ file, onClose, onSave }: ImageEditorProps)
         
         // Use Image.fromURL with Promise-based API (Fabric.js v6)
         Image.fromURL(cropped).then((img) => {
-          canvas.setBackgroundImage(img, canvas.renderAll.bind(canvas));
+          canvas.backgroundImage = img;
           canvas.remove(activeObject);
           canvas.renderAll();
           setHasChanges(true);
@@ -640,15 +635,14 @@ export default function ImageEditor({ file, onClose, onSave }: ImageEditorProps)
                             (canvas.width! - 40) / imgWidth,
                             (canvas.height! - 40) / imgHeight
                           );
-                          canvas.setBackgroundImage(img, () => {
-                            canvas.renderAll();
-                            setLoading(false);
-                          }, {
-                            scaleX: scale,
-                            scaleY: scale,
-                            originX: 'center',
-                            originY: 'center',
-                          });
+                          // Set background image directly (Fabric.js v6 API)
+                          img.scaleX = scale;
+                          img.scaleY = scale;
+                          img.originX = 'center';
+                          img.originY = 'center';
+                          canvas.backgroundImage = img;
+                          canvas.renderAll();
+                          setLoading(false);
                         }
                       }).catch((err) => {
                         console.error('Error loading image:', err);
