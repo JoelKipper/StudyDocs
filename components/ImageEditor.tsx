@@ -6,7 +6,8 @@ import {
   Canvas, 
   FabricImage, 
   Rect, 
-  Textbox
+  Textbox,
+  Image
 } from 'fabric';
 
 interface ImageEditorProps {
@@ -133,68 +134,64 @@ export default function ImageEditor({ file, onClose, onSave }: ImageEditorProps)
         const url = URL.createObjectURL(blob);
         setImageUrl(url);
 
-        // Load image using FabricImage.fromURL with error handling
-        FabricImage.fromURL(
-          url,
-          (img) => {
-            if (!fabricCanvasRef.current) {
-              setError('Canvas was disposed during image load');
-              setLoading(false);
-              URL.revokeObjectURL(url);
-              return;
-            }
-            
-            if (!img) {
-              setError('Failed to create image object');
-              setLoading(false);
-              URL.revokeObjectURL(url);
-              return;
-            }
-            
-            try {
-              const canvas = fabricCanvasRef.current;
-              
-              // Get image dimensions
-              const imgWidth = img.width || 800;
-              const imgHeight = img.height || 600;
-              const canvasWidth = canvas.width || 800;
-              const canvasHeight = canvas.height || 600;
-              
-              // Scale image to fit canvas while maintaining aspect ratio
-              const scale = Math.min(
-                (canvasWidth - 40) / imgWidth,
-                (canvasHeight - 40) / imgHeight
-              );
-              
-              // Set canvas size to match image if image is smaller
-              if (imgWidth * scale < canvasWidth && imgHeight * scale < canvasHeight) {
-                canvas.setWidth(Math.max(imgWidth * scale + 40, 400));
-                canvas.setHeight(Math.max(imgHeight * scale + 40, 300));
-              }
-              
-              canvas.setBackgroundImage(
-                img,
-                () => {
-                  canvas.renderAll();
-                  setLoading(false);
-                },
-                {
-                  scaleX: scale,
-                  scaleY: scale,
-                  originX: 'center',
-                  originY: 'center',
-                }
-              );
-            } catch (err: any) {
-              setError(`Error setting background image: ${err.message}`);
-              setLoading(false);
-              URL.revokeObjectURL(url);
-            }
-          },
-          {
+        // Load image using Image.fromURL (Fabric.js v6 uses Image instead of FabricImage for fromURL)
+        try {
+          const img = await Image.fromURL(url, {
             crossOrigin: 'anonymous',
+          });
+          
+          if (!fabricCanvasRef.current) {
+            setError('Canvas was disposed during image load');
+            setLoading(false);
+            URL.revokeObjectURL(url);
+            return;
           }
-        );
+          
+          if (!img) {
+            setError('Failed to create image object');
+            setLoading(false);
+            URL.revokeObjectURL(url);
+            return;
+          }
+          
+          const canvas = fabricCanvasRef.current;
+          
+          // Get image dimensions
+          const imgWidth = img.width || 800;
+          const imgHeight = img.height || 600;
+          const canvasWidth = canvas.width || 800;
+          const canvasHeight = canvas.height || 600;
+          
+          // Scale image to fit canvas while maintaining aspect ratio
+          const scale = Math.min(
+            (canvasWidth - 40) / imgWidth,
+            (canvasHeight - 40) / imgHeight
+          );
+          
+          // Set canvas size to match image if image is smaller
+          if (imgWidth * scale < canvasWidth && imgHeight * scale < canvasHeight) {
+            canvas.setWidth(Math.max(imgWidth * scale + 40, 400));
+            canvas.setHeight(Math.max(imgHeight * scale + 40, 300));
+          }
+          
+          canvas.setBackgroundImage(
+            img,
+            () => {
+              canvas.renderAll();
+              setLoading(false);
+            },
+            {
+              scaleX: scale,
+              scaleY: scale,
+              originX: 'center',
+              originY: 'center',
+            }
+          );
+        } catch (err: any) {
+          setError(`Error loading image: ${err.message}`);
+          setLoading(false);
+          URL.revokeObjectURL(url);
+        }
       } catch (err: any) {
         setError(err.message || 'Error loading image');
         setLoading(false);
@@ -280,11 +277,14 @@ export default function ImageEditor({ file, onClose, onSave }: ImageEditorProps)
           height: height,
         });
         
-        FabricImage.fromURL(cropped, (img) => {
+        // Use Image.fromURL with Promise-based API (Fabric.js v6)
+        Image.fromURL(cropped).then((img) => {
           canvas.setBackgroundImage(img, canvas.renderAll.bind(canvas));
           canvas.remove(activeObject);
           canvas.renderAll();
           setHasChanges(true);
+        }).catch((err) => {
+          console.error('Error loading cropped image:', err);
         });
       }
     } else {
@@ -630,7 +630,8 @@ export default function ImageEditor({ file, onClose, onSave }: ImageEditorProps)
                   onLoad={() => {
                     // If image loads successfully, try to load it into canvas
                     if (fabricCanvasRef.current && imageUrl) {
-                      FabricImage.fromURL(imageUrl, (img) => {
+                      // Use Image.fromURL with Promise-based API (Fabric.js v6)
+                      Image.fromURL(imageUrl).then((img) => {
                         if (img && fabricCanvasRef.current) {
                           const canvas = fabricCanvasRef.current;
                           const imgWidth = img.width || 800;
@@ -649,6 +650,9 @@ export default function ImageEditor({ file, onClose, onSave }: ImageEditorProps)
                             originY: 'center',
                           });
                         }
+                      }).catch((err) => {
+                        console.error('Error loading image:', err);
+                        setLoading(false);
                       });
                     }
                   }}
