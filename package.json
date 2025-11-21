@@ -18,6 +18,7 @@
     "@types/react-syntax-highlighter": "^15.5.13",
     "archiver": "^7.0.1",
     "bcryptjs": "^2.4.3",
+    "fabric": "^6.9.0",
     "jsonwebtoken": "^9.0.2",
     "monaco-editor": "^0.55.1",
     "multer": "^1.4.5-lts.1",

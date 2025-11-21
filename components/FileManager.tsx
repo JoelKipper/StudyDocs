@@ -13,6 +13,7 @@ import ShareModal from './ShareModal';
 import PasswordModal from './PasswordModal';
 import FilePreview from './FilePreview';
 import FileEditor from './FileEditor';
+import ImageEditor from './ImageEditor';
 import FileIcon from './FileIcon';
 import StorageQuota from './StorageQuota';
 import FavoritesList from './FavoritesList';
@@ -198,6 +199,9 @@ export default function FileManager({ user, onLogout, initialPath, initialFile: 
   });
   const [previewFile, setPreviewFile] = useState<FileItem | null>(null);
   const [editFile, setEditFile] = useState<FileItem | null>(null);
+  const [verifiedPasswords, setVerifiedPasswords] = useState<Map<string, string>>(new Map());
+  const [passwordVerifiedTrigger, setPasswordVerifiedTrigger] = useState(0); // Trigger to re-run useEffect when password is verified
+  const passwordRequiredRef = useRef<Set<string>>(new Set()); // Track paths that require password
   const [sidebarTab, setSidebarTab] = useState<'tree' | 'favorites'>(() => {
     if (typeof window !== 'undefined') {
       const saved = localStorage.getItem(`studydocs-sidebar-tab-${user.id}`);
@@ -332,11 +336,17 @@ export default function FileManager({ user, onLogout, initialPath, initialFile: 
   }, [isResizingPreview, sidebarWidth]);
 
   useEffect(() => {
+    // Load files when path changes
+    // Only skip if password is required for this path AND not verified yet
+    const requiresPassword = passwordRequiredRef.current.has(currentPath);
+    const hasVerifiedPassword = verifiedPasswords.has(currentPath);
+    
+    // Always try to load - loadFiles will handle the password check
     loadFiles();
     // Reset visible range when path changes - will be updated when files load
     setVisibleRange({ start: 0, end: 100 });
     setFilesLoaded(false); // Reset animation trigger when path changes
-  }, [currentPath]);
+  }, [currentPath, passwordVerifiedTrigger]);
 
   // Update visible range when files change
   useEffect(() => {
@@ -1663,6 +1673,15 @@ export default function FileManager({ user, onLogout, initialPath, initialFile: 
   }
 
   async function loadFiles() {
+    // Only skip loading if password is required AND not verified yet
+    const requiresPassword = passwordRequiredRef.current.has(currentPath);
+    const hasVerifiedPassword = verifiedPasswords.has(currentPath);
+    
+    if (requiresPassword && !hasVerifiedPassword) {
+      // Password required but not verified yet - don't load
+      return;
+    }
+    
     setLoading(true);
     setFilesLoaded(false); // Reset animation trigger - items will be hidden
     
@@ -1681,7 +1700,10 @@ export default function FileManager({ user, onLogout, initialPath, initialFile: 
     
     // Always fetch fresh data in the background
     try {
-      const res = await fetch(`/api/files?path=${encodeURIComponent(currentPath)}`);
+      // Get verified password for current path if available
+      const password = verifiedPasswords.get(currentPath);
+      const url = `/api/files?path=${encodeURIComponent(currentPath)}${password ? `&password=${encodeURIComponent(password)}` : ''}`;
+      const res = await fetch(url);
       const data = await res.json();
       
       if (res.ok) {
@@ -1689,6 +1711,54 @@ export default function FileManager({ user, onLogout, initialPath, initialFile: 
         setFiles(freshFiles);
         setCachedFiles(currentPath, freshFiles);
         setFocusedIndex(null); // Reset focus when loading new directory
+        
+        // Success - remove from password required set if it was there (for normal folders)
+        passwordRequiredRef.current.delete(currentPath);
+        
+        // Trigger animation
+        if (!cachedFiles) {
+          requestAnimationFrame(() => {
+            requestAnimationFrame(() => {
+              setFilesLoaded(true);
+            });
+          });
+        }
+      } else if (res.status === 401 && data.requiresPassword) {
+        // Password required for this directory
+        // Mark this path as requiring password to prevent repeated calls
+        passwordRequiredRef.current.add(currentPath);
+        
+        // Don't show error, just keep current files (or empty if no cache)
+        if (!cachedFiles) {
+          setFiles([]);
+        }
+        
+        // Check if password modal is already open to avoid opening it multiple times
+        if (!passwordModal.isOpen || passwordModal.item?.path !== currentPath) {
+          // Try to find the folder in the parent directory's files
+          // If not found, create a temporary FileItem for the modal
+          const parentPath = currentPath.split('/').slice(0, -1).join('/');
+          const folderName = currentPath.split('/').pop() || currentPath;
+          
+          // Try to find in current files or parent files
+          let targetFile = files.find(f => f.path === currentPath);
+          if (!targetFile) {
+            // Create a temporary FileItem for the password modal
+            targetFile = {
+              name: folderName,
+              path: currentPath,
+              type: 'directory',
+              isPasswordProtected: true,
+            };
+          }
+          
+          // Open password modal
+          setPasswordModal({
+            isOpen: true,
+            item: targetFile,
+            mode: 'verify',
+          });
+        }
         
         // Trigger animation immediately after state update using requestAnimationFrame
         if (!cachedFiles) {
@@ -1710,6 +1780,28 @@ export default function FileManager({ user, onLogout, initialPath, initialFile: 
   }
 
   function navigateToPath(path: string) {
+    // Check if we already have a verified password for this path
+    if (verifiedPasswords.has(path)) {
+      // Password already verified, navigate directly
+      setCurrentPath(path);
+      setSelectedFile(null);
+      setPreviewFile(null);
+      return;
+    }
+    
+    // Check if the target path is password protected
+    const targetFile = files.find(f => f.path === path);
+    if (targetFile && targetFile.isPasswordProtected) {
+      // Password protected folder - open password modal
+      setPasswordModal({
+        isOpen: true,
+        item: targetFile,
+        mode: 'verify',
+      });
+      return;
+    }
+    
+    // Not password protected or password already verified, navigate
     setCurrentPath(path);
     setSelectedFile(null);
     setPreviewFile(null); // Close preview when navigating to a different folder
@@ -2949,11 +3041,31 @@ export default function FileManager({ user, onLogout, initialPath, initialFile: 
         return;
       }
 
-      // Password verified, open the file/folder
+      // Password verified, store it temporarily for preview/download
+      setVerifiedPasswords(prev => {
+        const newMap = new Map(prev);
+        newMap.set(item.path, password);
+        return newMap;
+      });
+      
+      // Password verified, close modal
       setPasswordModal({ isOpen: false, item: null, mode: 'verify' });
       
+      // Remove from password required set since password is now verified
+      passwordRequiredRef.current.delete(item.path);
+      
       if (item.type === 'directory') {
-        navigateToPath(item.path);
+        // Set path FIRST - this will trigger the useEffect which will load files
+        // The password is already in verifiedPasswords, so loadFiles will work
+        setCurrentPath(item.path);
+        setSelectedFile(null);
+        setPreviewFile(null);
+        
+        // Trigger reload after a short delay to ensure state is updated
+        // This ensures the useEffect runs with the new currentPath
+        setTimeout(() => {
+          setPasswordVerifiedTrigger(prev => prev + 1);
+        }, 100);
       } else {
         // Check if we're coming from edit mode or preview mode
         // If passwordModal was opened from edit, go to edit; otherwise preview
@@ -4786,22 +4898,40 @@ export default function FileManager({ user, onLogout, initialPath, initialFile: 
             )}
 
             {/* File Editor - Fullscreen (only shown when file is edited) */}
-            {editFile && (
-              <div 
-                className="relative flex-1 bg-gray-50 dark:bg-gray-900 flex flex-col overflow-hidden min-h-0"
-              >
-                <FileEditor
-                  file={editFile}
-                  onClose={() => setEditFile(null)}
-                  onSave={() => {
-                    loadFiles();
-                    invalidateCache(currentPath);
-                    setRefreshFolderPath(currentPath);
-                    setTimeout(() => setRefreshFolderPath(null), 100);
-                  }}
-                />
-              </div>
-            )}
+            {editFile && (() => {
+              const fileExtension = editFile.name.split('.').pop()?.toLowerCase() || '';
+              const isImage = ['jpg', 'jpeg', 'png', 'gif', 'webp', 'bmp'].includes(fileExtension);
+              
+              return (
+                <div 
+                  className="relative flex-1 bg-gray-50 dark:bg-gray-900 flex flex-col overflow-hidden min-h-0"
+                >
+                  {isImage ? (
+                    <ImageEditor
+                      file={editFile}
+                      onClose={() => setEditFile(null)}
+                      onSave={() => {
+                        loadFiles();
+                        invalidateCache(currentPath);
+                        setRefreshFolderPath(currentPath);
+                        setTimeout(() => setRefreshFolderPath(null), 100);
+                      }}
+                    />
+                  ) : (
+                    <FileEditor
+                      file={editFile}
+                      onClose={() => setEditFile(null)}
+                      onSave={() => {
+                        loadFiles();
+                        invalidateCache(currentPath);
+                        setRefreshFolderPath(currentPath);
+                        setTimeout(() => setRefreshFolderPath(null), 100);
+                      }}
+                    />
+                  )}
+                </div>
+              );
+            })()}
 
             {/* File Preview - Fullscreen (only shown when file is double-clicked) */}
             {!editFile && previewFile && (
@@ -4810,7 +4940,18 @@ export default function FileManager({ user, onLogout, initialPath, initialFile: 
               >
                 <FilePreview
                   file={previewFile}
-                  onClose={() => setPreviewFile(null)}
+                  verifiedPassword={previewFile ? verifiedPasswords.get(previewFile.path) : undefined}
+                  onClose={() => {
+                    setPreviewFile(null);
+                    // Clear verified password when closing preview
+                    if (previewFile) {
+                      setVerifiedPasswords(prev => {
+                        const newMap = new Map(prev);
+                        newMap.delete(previewFile.path);
+                        return newMap;
+                      });
+                    }
+                  }}
                   onFileUpdate={(updatedFile) => {
                     setPreviewFile(updatedFile);
                     // Also update the file in the files list

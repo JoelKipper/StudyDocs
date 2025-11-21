@@ -10,11 +10,12 @@ import { vscDarkPlus, vs } from 'react-syntax-highlighter/dist/esm/styles/prism'
 interface FilePreviewProps {
   file: { name: string; path: string; type: 'file' | 'directory'; isPasswordProtected?: boolean } | null;
   onClose: () => void;
+  verifiedPassword?: string;
   onFileUpdate?: (updatedFile: { name: string; path: string; type: 'file' | 'directory'; isPasswordProtected?: boolean }) => void;
   onEdit?: () => void;
 }
 
-export default function FilePreview({ file, onClose, onFileUpdate, onEdit }: FilePreviewProps) {
+export default function FilePreview({ file, onClose, verifiedPassword, onFileUpdate, onEdit }: FilePreviewProps) {
   const { t, language } = useLanguage();
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [previewType, setPreviewType] = useState<'pdf' | 'image' | 'text' | 'video' | 'audio' | 'office' | 'unsupported' | null>(null);
@@ -83,7 +84,7 @@ export default function FilePreview({ file, onClose, onFileUpdate, onEdit }: Fil
 
     // For PDFs, use direct URL (simpler approach)
     if (fileExtension === 'pdf') {
-      const url = `/api/files/preview?path=${encodeURIComponent(file.path)}`;
+      const url = `/api/files/preview?path=${encodeURIComponent(file.path)}${verifiedPassword ? `&password=${encodeURIComponent(verifiedPassword)}` : ''}`;
       setPreviewUrl(url);
       setLoading(true); // Will be set to false when object/iframe loads
       setError('');
@@ -98,12 +99,12 @@ export default function FilePreview({ file, onClose, onFileUpdate, onEdit }: Fil
       };
     } else if (['mp4', 'webm', 'ogg', 'mov', 'avi', 'mkv', 'flv', 'wmv', 'mp3', 'wav', 'ogg', 'flac', 'aac', 'm4a', 'wma'].includes(fileExtension)) {
       // For video and audio, use direct URL
-      const url = `/api/files/preview?path=${encodeURIComponent(file.path)}`;
+      const url = `/api/files/preview?path=${encodeURIComponent(file.path)}${verifiedPassword ? `&password=${encodeURIComponent(verifiedPassword)}` : ''}`;
       setPreviewUrl(url);
       setLoading(false);
     } else if (['doc', 'docx', 'xls', 'xlsx', 'ppt', 'pptx', 'odt', 'ods', 'odp'].includes(fileExtension)) {
       // For Office documents, use Microsoft Office Online Viewer
-      const url = `/api/files/preview?path=${encodeURIComponent(file.path)}`;
+      const url = `/api/files/preview?path=${encodeURIComponent(file.path)}${verifiedPassword ? `&password=${encodeURIComponent(verifiedPassword)}` : ''}`;
       setPreviewUrl(url);
       setLoading(true);
       
@@ -117,7 +118,7 @@ export default function FilePreview({ file, onClose, onFileUpdate, onEdit }: Fil
       };
     } else {
       // For other types (images, text), use direct URL
-      const url = `/api/files/preview?path=${encodeURIComponent(file.path)}`;
+      const url = `/api/files/preview?path=${encodeURIComponent(file.path)}${verifiedPassword ? `&password=${encodeURIComponent(verifiedPassword)}` : ''}`;
       setPreviewUrl(url);
       setLoading(false);
       

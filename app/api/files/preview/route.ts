@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getCurrentUser } from '@/lib/auth';
 import { getFile } from '@/lib/filesystem-supabase';
+import { supabaseServer } from '@/lib/supabase-server';
+import { decryptFile, verifyFilePassword } from '@/lib/encryption';
 import path from 'path';
 
 export async function GET(request: NextRequest) {
@@ -12,13 +14,44 @@ export async function GET(request: NextRequest) {
   try {
     const searchParams = request.nextUrl.searchParams;
     const filePath = searchParams.get('path');
+    const password = searchParams.get('password');
 
     if (!filePath) {
       return NextResponse.json({ error: 'Pfad ist erforderlich' }, { status: 400 });
     }
 
+    // Check if file is password protected
+    const { data: fileMetadata, error: fetchError } = await supabaseServer
+      .from('file_metadata')
+      .select('password_hash, type')
+      .eq('path', filePath)
+      .single();
+
+    if (fetchError || !fileMetadata) {
+      return NextResponse.json({ error: 'Datei nicht gefunden' }, { status: 404 });
+    }
+
+    // If file is password protected, require password
+    if (fileMetadata.password_hash) {
+      if (!password) {
+        return NextResponse.json({ error: 'Passwort ist erforderlich', requiresPassword: true }, { status: 401 });
+      }
+
+      // Verify password
+      const isValid = await verifyFilePassword(password, fileMetadata.password_hash);
+      if (!isValid) {
+        return NextResponse.json({ error: 'Falsches Passwort', requiresPassword: true }, { status: 401 });
+      }
+    }
+
     // Get file from Supabase Storage
     const fileBuffer = await getFile(filePath);
+    
+    // If file is password protected, decrypt it
+    let decryptedBuffer = fileBuffer;
+    if (fileMetadata.password_hash && password) {
+      decryptedBuffer = decryptFile(fileBuffer, password);
+    }
     const fileName = path.basename(filePath);
     const fileExtension = fileName.split('.').pop()?.toLowerCase() || '';
 
@@ -119,7 +152,7 @@ export async function GET(request: NextRequest) {
       headers['Content-Disposition'] = `inline; filename="${encodeURIComponent(fileName)}"`;
     }
 
-    return new NextResponse(new Uint8Array(fileBuffer), {
+    return new NextResponse(new Uint8Array(decryptedBuffer), {
       headers,
     });
   } catch (error: any) {

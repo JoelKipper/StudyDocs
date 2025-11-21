@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getCurrentUser } from '@/lib/auth';
 import { getDirectoryContents, createDirectory, deleteItem, renameItem, moveItem, copyItem } from '@/lib/filesystem-supabase';
+import { supabaseServer } from '@/lib/supabase-server';
+import { verifyFilePassword } from '@/lib/encryption';
 
 export async function GET(request: NextRequest) {
   const user = await getCurrentUser();
@@ -10,8 +12,37 @@ export async function GET(request: NextRequest) {
   
   const searchParams = request.nextUrl.searchParams;
   const dirPath = searchParams.get('path') || '';
+  const password = searchParams.get('password');
   
   try {
+    // Check if the directory itself is password protected
+    if (dirPath) {
+      const { data: dirMetadata, error: fetchError } = await supabaseServer
+        .from('file_metadata')
+        .select('password_hash, type')
+        .eq('path', dirPath)
+        .single();
+
+      if (!fetchError && dirMetadata && dirMetadata.password_hash) {
+        // Directory is password protected
+        if (!password) {
+          return NextResponse.json({ 
+            error: 'Passwort ist erforderlich', 
+            requiresPassword: true 
+          }, { status: 401 });
+        }
+
+        // Verify password
+        const isValid = await verifyFilePassword(password, dirMetadata.password_hash);
+        if (!isValid) {
+          return NextResponse.json({ 
+            error: 'Falsches Passwort', 
+            requiresPassword: true 
+          }, { status: 401 });
+        }
+      }
+    }
+    
     const contents = await getDirectoryContents(dirPath);
     return NextResponse.json({ contents });
   } catch (error) {
