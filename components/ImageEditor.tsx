@@ -214,6 +214,7 @@ export default function ImageEditor({ file, onClose, onSave }: ImageEditorProps)
 
       const canvas = fabricCanvasRef.current;
       const dataURL = canvas.toDataURL({
+        multiplier: 1,
         format: 'png',
         quality: 1,
       });
@@ -264,23 +265,46 @@ export default function ImageEditor({ file, onClose, onSave }: ImageEditorProps)
       // Get background image
       const bgImage = canvas.backgroundImage as FabricImage;
       if (bgImage) {
-        const cropped = bgImage.toDataURL({
-          format: 'png',
-          left: left,
-          top: top,
-          width: width,
-          height: height,
-        });
+        // Create a temporary canvas to crop the image
+        const tempCanvas = document.createElement('canvas');
+        tempCanvas.width = width;
+        tempCanvas.height = height;
+        const ctx = tempCanvas.getContext('2d');
         
-        // Use Image.fromURL with Promise-based API (Fabric.js v6)
-        Image.fromURL(cropped).then((img) => {
-          canvas.backgroundImage = img;
-          canvas.remove(activeObject);
-          canvas.renderAll();
-          setHasChanges(true);
-        }).catch((err) => {
-          console.error('Error loading cropped image:', err);
-        });
+        if (ctx && bgImage.getElement) {
+          const imgElement = bgImage.getElement();
+          if (imgElement) {
+            // Calculate source coordinates considering image scaling and position
+            const imgLeft = (bgImage.left || 0) - (bgImage.width || 0) * (bgImage.originX === 'center' ? 0.5 : 0);
+            const imgTop = (bgImage.top || 0) - (bgImage.height || 0) * (bgImage.originY === 'center' ? 0.5 : 0);
+            const sourceX = left - imgLeft;
+            const sourceY = top - imgTop;
+            
+            // Draw the cropped portion
+            ctx.drawImage(
+              imgElement,
+              sourceX, sourceY, width, height,
+              0, 0, width, height
+            );
+            
+            // Convert to data URL and load as new image
+            const cropped = tempCanvas.toDataURL('image/png');
+            
+            // Use Image.fromURL with Promise-based API (Fabric.js v6)
+            Image.fromURL(cropped).then((img) => {
+              img.originX = 'center';
+              img.originY = 'center';
+              img.left = canvas.width! / 2;
+              img.top = canvas.height! / 2;
+              canvas.backgroundImage = img;
+              canvas.remove(activeObject);
+              canvas.renderAll();
+              setHasChanges(true);
+            }).catch((err) => {
+              console.error('Error loading cropped image:', err);
+            });
+          }
+        }
       }
     } else {
       // Create crop rectangle
