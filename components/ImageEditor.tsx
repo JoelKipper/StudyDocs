@@ -1,14 +1,9 @@
 'use client';
 
-import { useEffect, useState, useRef } from 'react';
+import { useEffect, useState, useRef, useCallback } from 'react';
+import ReactCrop, { Crop, PixelCrop, makeAspectCrop, centerCrop } from 'react-image-crop';
+import 'react-image-crop/dist/ReactCrop.css';
 import { useLanguage } from '@/contexts/LanguageContext';
-import { 
-  Canvas, 
-  FabricImage, 
-  Rect, 
-  Textbox,
-  Image
-} from 'fabric';
 
 interface ImageEditorProps {
   file: {
@@ -17,69 +12,45 @@ interface ImageEditorProps {
     type: 'file' | 'directory';
     isPasswordProtected?: boolean;
   } | null;
+  verifiedPassword?: string;
   onClose: () => void;
   onSave?: () => void;
 }
 
-export default function ImageEditor({ file, onClose, onSave }: ImageEditorProps) {
+// No separate Area interface needed, using Crop from react-image-crop
+
+export default function ImageEditor({ file, verifiedPassword, onClose, onSave }: ImageEditorProps) {
   const { t, language } = useLanguage();
+  const imgRef = useRef<HTMLImageElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
-  const fabricCanvasRef = useRef<Canvas | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
-  const [imageUrl, setImageUrl] = useState<string | null>(null);
+  const [imageSrc, setImageSrc] = useState<string | null>(null);
+  const [originalImageSrc, setOriginalImageSrc] = useState<string | null>(null); // Keep original image
   const [hasChanges, setHasChanges] = useState(false);
-  const [canvasReady, setCanvasReady] = useState(false);
-
-  // Initialize Fabric.js canvas
-  useEffect(() => {
-    if (!canvasRef.current) return;
-
-    // Dispose existing canvas if it exists
-    if (fabricCanvasRef.current) {
-      fabricCanvasRef.current.dispose();
-      fabricCanvasRef.current = null;
-    }
-
-    try {
-      const canvas = new Canvas(canvasRef.current, {
-        width: 800,
-        height: 600,
-        backgroundColor: '#ffffff',
-      });
-
-      fabricCanvasRef.current = canvas;
-
-      // Track changes
-      canvas.on('object:modified', () => {
-        setHasChanges(true);
-      });
-      canvas.on('object:added', () => {
-        setHasChanges(true);
-      });
-      canvas.on('object:removed', () => {
-        setHasChanges(true);
-      });
-      canvas.on('path:created', () => {
-        setHasChanges(true);
-      });
-      
-      // Mark canvas as ready
-      setCanvasReady(true);
-    } catch (error: any) {
-      setError(`Failed to initialize canvas: ${error.message}`);
-      setCanvasReady(false);
-    }
-
-    return () => {
-      if (fabricCanvasRef.current) {
-        fabricCanvasRef.current.dispose();
-        fabricCanvasRef.current = null;
-      }
-      setCanvasReady(false);
-    };
-  }, []);
+  
+  // Transformations
+  const [rotation, setRotation] = useState(0);
+  const [flipHorizontal, setFlipHorizontal] = useState(false);
+  const [flipVertical, setFlipVertical] = useState(false);
+  
+  // Cropping
+  const [cropMode, setCropMode] = useState(false);
+  const [crop, setCrop] = useState<Crop>();
+  const [completedCrop, setCompletedCrop] = useState<PixelCrop>();
+  const [lastAppliedCrop, setLastAppliedCrop] = useState<PixelCrop | null>(null); // Store crop info even after applying
+  const [cropAspectRatio, setCropAspectRatio] = useState<number | undefined>(undefined); // undefined = free, number = aspect ratio
+  const [useCustomResolution, setUseCustomResolution] = useState(false);
+  const [customWidth, setCustomWidth] = useState<number>(1920);
+  const [customHeight, setCustomHeight] = useState<number>(1080);
+  
+  // Drawing
+  const [drawingMode, setDrawingMode] = useState(false);
+  const [brushSize, setBrushSize] = useState(5);
+  const [brushColor, setBrushColor] = useState('#000000');
+  const [isDrawing, setIsDrawing] = useState(false);
+  const lastPosRef = useRef<{ x: number; y: number } | null>(null);
 
   // Load image
   useEffect(() => {
@@ -88,601 +59,751 @@ export default function ImageEditor({ file, onClose, onSave }: ImageEditorProps)
       return;
     }
 
-    if (!canvasReady || !fabricCanvasRef.current) {
-      // Wait for canvas to be ready
-      return;
-    }
-
     async function loadImage() {
-      if (!file) {
-        setError('No file provided');
-        setLoading(false);
-        return;
-      }
-      
-      if (!fabricCanvasRef.current) {
-        setError('Canvas not available');
-        setLoading(false);
-        return;
-      }
-      
       try {
         setLoading(true);
         setError('');
         
-        const previewUrl = `/api/files/preview?path=${encodeURIComponent(file.path)}`;
-        const res = await fetch(previewUrl);
+        const previewUrl = `/api/files/preview?path=${encodeURIComponent(file.path)}${verifiedPassword ? `&password=${encodeURIComponent(verifiedPassword)}` : ''}`;
+        const response = await fetch(previewUrl);
         
-        if (!res.ok) {
-          const errorText = await res.text();
-          throw new Error(`Failed to load image: ${res.status} ${errorText}`);
+        if (!response.ok) {
+          throw new Error(`Failed to fetch image: ${response.statusText}`);
         }
         
-        const blob = await res.blob();
-        
-        // Check if blob is valid
-        if (!blob || blob.size === 0) {
-          throw new Error('Received empty image');
-        }
-        
-        // Check content type
-        const contentType = blob.type;
-        if (!contentType.startsWith('image/')) {
-          throw new Error(`Invalid image type: ${contentType}`);
-        }
-        
-        const url = URL.createObjectURL(blob);
-        setImageUrl(url);
-
-        // Load image using Image.fromURL (Fabric.js v6 uses Image instead of FabricImage for fromURL)
-        try {
-          const img = await Image.fromURL(url, {
-            crossOrigin: 'anonymous',
-          });
-          
-          if (!fabricCanvasRef.current) {
-            setError('Canvas was disposed during image load');
-            setLoading(false);
-            URL.revokeObjectURL(url);
-            return;
-          }
-          
-          if (!img) {
-            setError('Failed to create image object');
-            setLoading(false);
-            URL.revokeObjectURL(url);
-            return;
-          }
-          
-          const canvas = fabricCanvasRef.current;
-          
-          // Get image dimensions
-          const imgWidth = img.width || 800;
-          const imgHeight = img.height || 600;
-          const canvasWidth = canvas.width || 800;
-          const canvasHeight = canvas.height || 600;
-          
-          // Scale image to fit canvas while maintaining aspect ratio
-          const scale = Math.min(
-            (canvasWidth - 40) / imgWidth,
-            (canvasHeight - 40) / imgHeight
-          );
-          
-          // Set canvas size to match image if image is smaller
-          if (imgWidth * scale < canvasWidth && imgHeight * scale < canvasHeight) {
-            canvas.setWidth(Math.max(imgWidth * scale + 40, 400));
-            canvas.setHeight(Math.max(imgHeight * scale + 40, 300));
-          }
-          
-          // Set background image directly (Fabric.js v6 API)
-          img.scaleX = scale;
-          img.scaleY = scale;
-          img.originX = 'center';
-          img.originY = 'center';
-          canvas.backgroundImage = img;
-          canvas.renderAll();
-          setLoading(false);
-        } catch (err: any) {
-          setError(`Error loading image: ${err.message}`);
-          setLoading(false);
-          URL.revokeObjectURL(url);
-        }
-      } catch (err: any) {
-        setError(err.message || 'Error loading image');
+        const blob = await response.blob();
+        const blobUrl = URL.createObjectURL(blob);
+        setImageSrc(blobUrl);
+        setOriginalImageSrc(blobUrl); // Store original image
         setLoading(false);
-        if (imageUrl) {
-          URL.revokeObjectURL(imageUrl);
-        }
+      } catch (err: any) {
+        setError(`Error loading image: ${err.message}`);
+        setLoading(false);
       }
     }
 
     loadImage();
 
     return () => {
-      if (imageUrl) {
-        URL.revokeObjectURL(imageUrl);
+      if (imageSrc && imageSrc.startsWith('blob:')) {
+        URL.revokeObjectURL(imageSrc);
       }
     };
-  }, [file, canvasReady]);
+  }, [file?.path, verifiedPassword]);
 
+  // Apply crop
+  const onCropComplete = useCallback((croppedArea: Area, croppedAreaPixels: Area) => {
+    setCroppedAreaPixels(croppedAreaPixels);
+  }, []);
+
+  // Get cropped image
+  const getCroppedImg = async (
+    imageSrc: string, 
+    pixelCrop: PixelCrop,
+    useCustom: boolean = false,
+    customW: number = 0,
+    customH: number = 0
+  ): Promise<string> => {
+    const image = await createImage(imageSrc);
+    const canvas = document.createElement('canvas');
+    const ctx = canvas.getContext('2d');
+
+    if (!ctx) {
+      throw new Error('No 2d context');
+    }
+
+    // PixelCrop coordinates are already in pixels relative to the natural image size
+    // But we need to ensure they match the actual image dimensions
+    const displayImg = imgRef.current;
+    if (!displayImg || !displayImg.complete) {
+      throw new Error('Display image not ready');
+    }
+
+    // Get the actual image dimensions
+    const imageWidth = image.width;
+    const imageHeight = image.height;
+    const naturalWidth = displayImg.naturalWidth;
+    const naturalHeight = displayImg.naturalHeight;
+
+    console.log('[ImageEditor] Crop calculation', {
+      pixelCrop,
+      imageWidth,
+      imageHeight,
+      naturalWidth,
+      naturalHeight,
+      displayWidth: displayImg.width,
+      displayHeight: displayImg.height
+    });
+
+    // PixelCrop coordinates are already in pixels relative to naturalWidth/naturalHeight
+    // If image dimensions match natural dimensions, use crop directly
+    // Otherwise, scale if needed
+    let cropX = pixelCrop.x;
+    let cropY = pixelCrop.y;
+    let cropWidth = pixelCrop.width;
+    let cropHeight = pixelCrop.height;
+
+    // Only scale if image dimensions differ from natural dimensions
+    if (imageWidth !== naturalWidth || imageHeight !== naturalHeight) {
+      const scaleX = imageWidth / naturalWidth;
+      const scaleY = imageHeight / naturalHeight;
+      
+      cropX = Math.round(pixelCrop.x * scaleX);
+      cropY = Math.round(pixelCrop.y * scaleY);
+      cropWidth = Math.round(pixelCrop.width * scaleX);
+      cropHeight = Math.round(pixelCrop.height * scaleY);
+    }
+
+    // Ensure crop is within image bounds
+    const finalCropX = Math.max(0, Math.min(cropX, imageWidth - 1));
+    const finalCropY = Math.max(0, Math.min(cropY, imageHeight - 1));
+    const finalCropWidth = Math.max(1, Math.min(cropWidth, imageWidth - finalCropX));
+    const finalCropHeight = Math.max(1, Math.min(cropHeight, imageHeight - finalCropY));
+
+    // If custom resolution is enabled, use custom dimensions
+    let outputWidth = finalCropWidth;
+    let outputHeight = finalCropHeight;
+
+    if (useCustom && customW > 0 && customH > 0) {
+      outputWidth = customW;
+      outputHeight = customH;
+    }
+
+    // Set canvas size
+    canvas.width = outputWidth;
+    canvas.height = outputHeight;
+
+    // Clear with white background
+    ctx.fillStyle = '#FFFFFF';
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+    // Draw cropped image, scaled to output size
+    ctx.drawImage(
+      image,
+      finalCropX,
+      finalCropY,
+      finalCropWidth,
+      finalCropHeight,
+      0,
+      0,
+      outputWidth,
+      outputHeight
+    );
+
+    return new Promise((resolve, reject) => {
+      canvas.toBlob((blob) => {
+        if (!blob) {
+          reject(new Error('Canvas is empty'));
+          return;
+        }
+        resolve(URL.createObjectURL(blob));
+      }, 'image/png');
+    });
+  };
+
+  const createImage = (url: string): Promise<HTMLImageElement> => {
+    return new Promise((resolve, reject) => {
+      const image = new Image();
+      image.addEventListener('load', () => resolve(image));
+      image.addEventListener('error', (error) => reject(error));
+      image.src = url;
+    });
+  };
+
+  // Initialize crop when entering crop mode
+  useEffect(() => {
+    if (cropMode && imageSrc && imgRef.current && !crop) {
+      const img = imgRef.current;
+      if (img.complete && img.naturalWidth > 0) {
+        const imageWidth = img.naturalWidth;
+        const imageHeight = img.naturalHeight;
+        
+        // Create initial crop (centered, 80% of image)
+        const initialCrop = centerCrop(
+          makeAspectCrop(
+            {
+              unit: '%',
+              width: 80,
+              height: 80,
+            },
+            cropAspectRatio || imageWidth / imageHeight,
+            imageWidth,
+            imageHeight
+          ),
+          imageWidth,
+          imageHeight
+        );
+        
+        setCrop(initialCrop);
+      }
+    }
+  }, [cropMode, imageSrc, cropAspectRatio]);
+
+  // Apply crop
+  async function handleApplyCrop() {
+    if (!imageSrc || !completedCrop) {
+      setError(language === 'de' ? 'Bitte wählen Sie einen Bereich aus' : 'Please select an area first');
+      return;
+    }
+
+    try {
+      console.log('[ImageEditor] Applying crop', {
+        completedCrop,
+        imageSrc: imageSrc.substring(0, 50),
+        hasImgRef: !!imgRef.current,
+        imgNaturalWidth: imgRef.current?.naturalWidth,
+        imgNaturalHeight: imgRef.current?.naturalHeight,
+        imgWidth: imgRef.current?.width,
+        imgHeight: imgRef.current?.height
+      });
+
+      // Pass custom resolution values explicitly
+      const croppedImageUrl = await getCroppedImg(
+        imageSrc, 
+        completedCrop,
+        useCustomResolution,
+        customWidth,
+        customHeight
+      );
+      
+      // Revoke old URL (but keep original)
+      if (imageSrc && imageSrc.startsWith('blob:') && imageSrc !== originalImageSrc) {
+        URL.revokeObjectURL(imageSrc);
+      }
+      
+      setImageSrc(croppedImageUrl);
+      setLastAppliedCrop(completedCrop); // Save crop info for later use when saving
+      setCropMode(false);
+      setCrop(undefined);
+      setCompletedCrop(undefined);
+      setHasChanges(true);
+    } catch (err: any) {
+      console.error('[ImageEditor] Error applying crop:', err);
+      setError(`Error cropping image: ${err.message}`);
+    }
+  }
+
+  // Rotate image
+  function handleRotate(degrees: number) {
+    setRotation((prev) => (prev + degrees) % 360);
+    setHasChanges(true);
+  }
+
+  // Flip image
+  function handleFlip(axis: 'horizontal' | 'vertical') {
+    if (axis === 'horizontal') {
+      setFlipHorizontal((prev) => !prev);
+    } else {
+      setFlipVertical((prev) => !prev);
+    }
+    setHasChanges(true);
+  }
+
+  // Draw on canvas
+  function startDrawing(e: React.MouseEvent<HTMLCanvasElement>) {
+    if (!drawingMode || !canvasRef.current) return;
+    
+    const canvas = canvasRef.current;
+    const rect = canvas.getBoundingClientRect();
+    const x = e.clientX - rect.left;
+    const y = e.clientY - rect.top;
+    
+    setIsDrawing(true);
+    lastPosRef.current = { x, y };
+  }
+
+  function draw(e: React.MouseEvent<HTMLCanvasElement>) {
+    if (!isDrawing || !drawingMode || !canvasRef.current || !lastPosRef.current) return;
+    
+    const canvas = canvasRef.current;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+    
+    const rect = canvas.getBoundingClientRect();
+    const currentX = e.clientX - rect.left;
+    const currentY = e.clientY - rect.top;
+    
+    ctx.beginPath();
+    ctx.moveTo(lastPosRef.current.x, lastPosRef.current.y);
+    ctx.lineTo(currentX, currentY);
+    ctx.strokeStyle = brushColor;
+    ctx.lineWidth = brushSize;
+    ctx.lineCap = 'round';
+    ctx.stroke();
+    
+    lastPosRef.current = { x: currentX, y: currentY };
+    setHasChanges(true);
+  }
+
+  function stopDrawing() {
+    setIsDrawing(false);
+    lastPosRef.current = null;
+  }
+
+  // Initialize canvas for drawing
+  useEffect(() => {
+    if (drawingMode && imageSrc && canvasRef.current && imgRef.current) {
+      const canvas = canvasRef.current;
+      const img = imgRef.current;
+      
+      // Wait for image to load
+      if (!img.complete || img.naturalWidth === 0) {
+        return;
+      }
+      
+      const ctx = canvas.getContext('2d');
+      if (!ctx) return;
+      
+      // Set canvas size to match image
+      canvas.width = img.naturalWidth;
+      canvas.height = img.naturalHeight;
+      
+      // Draw image on canvas
+      ctx.drawImage(img, 0, 0);
+    }
+  }, [drawingMode, imageSrc]);
+
+  // Save image - use current imageSrc and apply rotation/flip, then drawing
   async function handleSave() {
-    if (!fabricCanvasRef.current || !file || !hasChanges) return;
+    if (!file || !imageSrc) return;
 
     try {
       setSaving(true);
       setError('');
 
-      const canvas = fabricCanvasRef.current;
-      const dataURL = canvas.toDataURL({
-        multiplier: 1,
-        format: 'png',
-        quality: 1,
-      });
+      // Use current imageSrc (already cropped if crop was applied)
+      const currentImg = await createImage(imageSrc);
+      
+      // Create canvas and apply rotation/flip
+      const radians = (rotation * Math.PI) / 180;
+      const cos = Math.abs(Math.cos(radians));
+      const sin = Math.abs(Math.sin(radians));
+      const rotatedWidth = currentImg.width * cos + currentImg.height * sin;
+      const rotatedHeight = currentImg.width * sin + currentImg.height * cos;
 
-      // Convert data URL to blob
-      const response = await fetch(dataURL);
-      const blob = await response.blob();
+      let workingCanvas = document.createElement('canvas');
+      let workingCtx = workingCanvas.getContext('2d');
+      if (!workingCtx) throw new Error('Could not get canvas context');
 
-      // Upload the edited image
-      const formData = new FormData();
-      formData.append('file', blob, file.name);
-      formData.append('path', file.path.split('/').slice(0, -1).join('/'));
+      workingCanvas.width = rotatedWidth;
+      workingCanvas.height = rotatedHeight;
 
-      const res = await fetch('/api/files/upload', {
-        method: 'POST',
-        body: formData,
-      });
+      // Clear with white background
+      workingCtx.fillStyle = '#FFFFFF';
+      workingCtx.fillRect(0, 0, workingCanvas.width, workingCanvas.height);
 
-      const data = await res.json();
+      // Apply rotation and flip
+      workingCtx.translate(workingCanvas.width / 2, workingCanvas.height / 2);
+      workingCtx.rotate((rotation * Math.PI) / 180);
+      workingCtx.scale(flipHorizontal ? -1 : 1, flipVertical ? -1 : 1);
+      workingCtx.drawImage(currentImg, -currentImg.width / 2, -currentImg.height / 2);
 
-      if (!res.ok) {
-        throw new Error(data.error || 'Error saving image');
+      // Apply drawing if there is any
+      if (drawingMode && canvasRef.current) {
+        const drawCanvas = canvasRef.current;
+        
+        // The drawing canvas has the same size as currentImg
+        // Apply the same transformation to the drawing
+        const finalCanvas = document.createElement('canvas');
+        const finalCtx = finalCanvas.getContext('2d');
+        if (!finalCtx) throw new Error('Could not get canvas context');
+
+        finalCanvas.width = workingCanvas.width;
+        finalCanvas.height = workingCanvas.height;
+
+        // Draw the transformed image
+        finalCtx.fillStyle = '#FFFFFF';
+        finalCtx.fillRect(0, 0, finalCanvas.width, finalCanvas.height);
+        finalCtx.drawImage(workingCanvas, 0, 0);
+        
+        // Apply the same transformation to the drawing
+        finalCtx.translate(finalCanvas.width / 2, finalCanvas.height / 2);
+        finalCtx.rotate((rotation * Math.PI) / 180);
+        finalCtx.scale(flipHorizontal ? -1 : 1, flipVertical ? -1 : 1);
+        
+        // Draw the drawing canvas
+        finalCtx.globalCompositeOperation = 'source-over';
+        finalCtx.drawImage(
+          drawCanvas, 
+          -currentImg.width / 2, 
+          -currentImg.height / 2,
+          currentImg.width,
+          currentImg.height
+        );
+
+        workingCanvas = finalCanvas;
+        workingCtx = finalCtx;
       }
 
-      setHasChanges(false);
-      if (onSave) {
-        onSave();
-      }
+      // Convert to blob and upload
+      workingCanvas.toBlob(async (blob) => {
+        if (!blob) {
+          throw new Error('Failed to create image blob');
+        }
+
+        const formData = new FormData();
+        formData.append('file', blob, file.name);
+        formData.append('path', file.path.split('/').slice(0, -1).join('/'));
+
+        const res = await fetch('/api/files/upload', {
+          method: 'POST',
+          body: formData,
+        });
+
+        const data = await res.json();
+
+        if (!res.ok) {
+          throw new Error(data.error || 'Error saving image');
+        }
+
+        setHasChanges(false);
+        if (onSave) {
+          onSave();
+        }
+        onClose();
+      }, 'image/png', 1.0);
     } catch (err: any) {
-      setError(err.message || 'Error saving image');
+      console.error('[ImageEditor] Error saving image:', err);
+      setError(`Error saving image: ${err.message}`);
     } finally {
       setSaving(false);
     }
   }
 
-  function handleCrop() {
-    if (!fabricCanvasRef.current) return;
-    const canvas = fabricCanvasRef.current;
-    const activeObject = canvas.getActiveObject();
-    
-    if (activeObject && activeObject.type === 'rect') {
-      const rect = activeObject as Rect;
-      const left = rect.left! - rect.width! / 2;
-      const top = rect.top! - rect.height! / 2;
-      const width = rect.width!;
-      const height = rect.height!;
-      
-      // Get background image
-      const bgImage = canvas.backgroundImage as FabricImage;
-      if (bgImage) {
-        // Create a temporary canvas to crop the image
-        const tempCanvas = document.createElement('canvas');
-        tempCanvas.width = width;
-        tempCanvas.height = height;
-        const ctx = tempCanvas.getContext('2d');
-        
-        if (ctx && bgImage.getElement) {
-          const imgElement = bgImage.getElement();
-          if (imgElement) {
-            // Calculate source coordinates considering image scaling and position
-            const imgLeft = (bgImage.left || 0) - (bgImage.width || 0) * (bgImage.originX === 'center' ? 0.5 : 0);
-            const imgTop = (bgImage.top || 0) - (bgImage.height || 0) * (bgImage.originY === 'center' ? 0.5 : 0);
-            const sourceX = left - imgLeft;
-            const sourceY = top - imgTop;
-            
-            // Draw the cropped portion
-            ctx.drawImage(
-              imgElement,
-              sourceX, sourceY, width, height,
-              0, 0, width, height
-            );
-            
-            // Convert to data URL and load as new image
-            const cropped = tempCanvas.toDataURL('image/png');
-            
-            // Use Image.fromURL with Promise-based API (Fabric.js v6)
-            Image.fromURL(cropped).then((img) => {
-              img.originX = 'center';
-              img.originY = 'center';
-              img.left = canvas.width! / 2;
-              img.top = canvas.height! / 2;
-              canvas.backgroundImage = img;
-              canvas.remove(activeObject);
-              canvas.renderAll();
-              setHasChanges(true);
-            }).catch((err) => {
-              console.error('Error loading cropped image:', err);
-            });
-          }
-        }
-      }
-    } else {
-      // Create crop rectangle
-      const rect = new Rect({
-        left: canvas.width! / 2,
-        top: canvas.height! / 2,
-        width: 200,
-        height: 200,
-        fill: 'transparent',
-        stroke: '#3b82f6',
-        strokeWidth: 2,
-        strokeDashArray: [10, 10],
-        originX: 'center',
-        originY: 'center',
-      });
-      
-      canvas.add(rect);
-      canvas.setActiveObject(rect);
-      canvas.renderAll();
-    }
-  }
-
-  function handleRotate(degrees: number) {
-    if (!fabricCanvasRef.current) return;
-    const canvas = fabricCanvasRef.current;
-    const bgImage = canvas.backgroundImage as FabricImage;
-    
-    if (bgImage) {
-      bgImage.rotate((bgImage.angle || 0) + degrees);
-      canvas.renderAll();
-      setHasChanges(true);
-    }
-  }
-
-  function handleFlip(axis: 'horizontal' | 'vertical') {
-    if (!fabricCanvasRef.current) return;
-    const canvas = fabricCanvasRef.current;
-    const bgImage = canvas.backgroundImage as FabricImage;
-    
-    if (bgImage) {
-      if (axis === 'horizontal') {
-        bgImage.set('flipX', !bgImage.flipX);
-      } else {
-        bgImage.set('flipY', !bgImage.flipY);
-      }
-      canvas.renderAll();
-      setHasChanges(true);
-    }
-  }
-
-  function handleAddText() {
-    if (!fabricCanvasRef.current) return;
-    const canvas = fabricCanvasRef.current;
-    
-    const text = new Textbox(language === 'de' ? 'Text eingeben' : 'Enter text', {
-      left: canvas.width! / 2,
-      top: canvas.height! / 2,
-      width: 200,
-      fontSize: 20,
-      fontFamily: 'Arial',
-      fill: '#000000',
-      originX: 'center',
-      originY: 'center',
-    });
-    
-    canvas.add(text);
-    canvas.setActiveObject(text);
-    canvas.renderAll();
-    setHasChanges(true);
-  }
-
-  function handleDraw() {
-    if (!fabricCanvasRef.current) return;
-    const canvas = fabricCanvasRef.current;
-    canvas.isDrawingMode = !canvas.isDrawingMode;
-    
-    if (canvas.isDrawingMode && canvas.freeDrawingBrush) {
-      canvas.freeDrawingBrush.width = 5;
-      canvas.freeDrawingBrush.color = '#000000';
-    }
-  }
-
-  function handleFilter(filterName: string) {
-    if (!fabricCanvasRef.current) return;
-    const canvas = fabricCanvasRef.current;
-    const bgImage = canvas.backgroundImage as FabricImage;
-    
-    if (!bgImage) return;
-    
-    // Remove existing filters
-    bgImage.filters = [];
-    
-    // In Fabric.js v6, filters need to be imported from 'fabric/filter-*' modules
-    // For now, we'll disable filters until we can properly import them
-    // TODO: Implement proper filter imports for Fabric.js v6
-    
-    bgImage.applyFilters();
-    canvas.renderAll();
-    setHasChanges(true);
-  }
-
-  function handleBrightness(value: number) {
-    if (!fabricCanvasRef.current) return;
-    const canvas = fabricCanvasRef.current;
-    const bgImage = canvas.backgroundImage as FabricImage;
-    
-    if (!bgImage) return;
-    
-    // In Fabric.js v6, brightness adjustment needs to be done differently
-    // For now, we'll use a simple approach with canvas manipulation
-    // TODO: Implement proper brightness filter for Fabric.js v6
-    
-    bgImage.applyFilters();
-    canvas.renderAll();
-    setHasChanges(true);
-  }
-
-  function handleContrast(value: number) {
-    if (!fabricCanvasRef.current) return;
-    const canvas = fabricCanvasRef.current;
-    const bgImage = canvas.backgroundImage as FabricImage;
-    
-    if (!bgImage) return;
-    
-    // In Fabric.js v6, contrast adjustment needs to be done differently
-    // For now, we'll use a simple approach with canvas manipulation
-    // TODO: Implement proper contrast filter for Fabric.js v6
-    
-    bgImage.applyFilters();
-    canvas.renderAll();
-    setHasChanges(true);
-  }
-
   if (!file) {
-    return (
-      <div className="w-full h-full flex items-center justify-center bg-gray-50 dark:bg-gray-900 border-l border-gray-200 dark:border-gray-700">
-        <div className="text-center">
-          <div className="w-16 h-16 bg-gray-100 dark:bg-gray-700 rounded-full flex items-center justify-center mx-auto mb-4">
-            <svg className="w-8 h-8 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
-            </svg>
-          </div>
-          <p className="text-gray-500 dark:text-gray-400">
-            {language === 'de' ? 'Kein Bild zum Bearbeiten ausgewählt' : 'No image selected for editing'}
-          </p>
-        </div>
-      </div>
-    );
+    return null;
   }
 
   return (
-    <div className="w-full h-full flex flex-col bg-white dark:bg-gray-800 border-l border-gray-200 dark:border-gray-700 overflow-hidden">
-      {/* Header */}
-      <div className="flex items-center justify-between p-3 border-b border-gray-200 dark:border-gray-700 flex-shrink-0">
-        <div className="flex items-center gap-3 flex-1 min-w-0">
-          <div className="w-8 h-8 bg-blue-100 dark:bg-blue-900/20 rounded-lg flex items-center justify-center flex-shrink-0">
-            <svg className="w-5 h-5 text-blue-600 dark:text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
-            </svg>
-          </div>
-          <h3 className="text-sm font-semibold text-gray-900 dark:text-white truncate flex items-center gap-2">
-            {file.name}
-            {hasChanges && (
-              <span className="text-xs text-orange-600 dark:text-orange-400">
-                {language === 'de' ? '(Geändert)' : '(Modified)'}
-              </span>
-            )}
-          </h3>
-        </div>
-        <div className="flex items-center gap-2">
-          {hasChanges && (
+    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+      <div className="bg-white dark:bg-gray-800 rounded-lg shadow-xl w-full h-full max-w-7xl max-h-[90vh] flex flex-col">
+        {/* Header */}
+        <div className="flex items-center justify-between p-4 border-b border-gray-200 dark:border-gray-700">
+          <h2 className="text-xl font-semibold text-gray-900 dark:text-white">
+            {t('editImage')} - {file.name}
+          </h2>
+          <div className="flex gap-2">
+            <button
+              onClick={onClose}
+              className="px-4 py-2 text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg"
+            >
+              {t('cancel')}
+            </button>
             <button
               onClick={handleSave}
-              disabled={saving}
-              className="px-3 py-1.5 text-sm font-medium bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+              disabled={saving || !hasChanges}
+              className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
             >
-              {saving ? (
-                <>
-                  <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
-                  {language === 'de' ? 'Speichern...' : 'Saving...'}
-                </>
-              ) : (
-                <>
-                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                  </svg>
-                  {language === 'de' ? 'Speichern' : 'Save'}
-                </>
-              )}
+              {saving ? t('saving') : t('save')}
             </button>
-          )}
+          </div>
+        </div>
+
+        {/* Toolbar */}
+        <div className="flex items-center gap-2 p-4 border-b border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900 flex-wrap">
           <button
-            onClick={onClose}
-            className="p-1.5 text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors"
-            title={t('close')}
+            onClick={() => handleRotate(-90)}
+            className="px-3 py-2 bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 border border-gray-300 dark:border-gray-600"
+            title={language === 'de' ? '90° links drehen' : 'Rotate 90° left'}
           >
-            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-            </svg>
+            ↺
           </button>
+          <button
+            onClick={() => handleRotate(90)}
+            className="px-3 py-2 bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 border border-gray-300 dark:border-gray-600"
+            title={language === 'de' ? '90° rechts drehen' : 'Rotate 90° right'}
+          >
+            ↻
+          </button>
+          <button
+            onClick={() => handleFlip('horizontal')}
+            className="px-3 py-2 bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 border border-gray-300 dark:border-gray-600"
+            title={language === 'de' ? 'Horizontal spiegeln' : 'Flip horizontal'}
+          >
+            ⇄
+          </button>
+          <button
+            onClick={() => handleFlip('vertical')}
+            className="px-3 py-2 bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 border border-gray-300 dark:border-gray-600"
+            title={language === 'de' ? 'Vertikal spiegeln' : 'Flip vertical'}
+          >
+            ⇅
+          </button>
+          <div className="w-px h-6 bg-gray-300 dark:bg-gray-600"></div>
+          <button
+            onClick={() => {
+              if (cropMode) {
+                handleApplyCrop();
+              } else {
+                setCropMode(true);
+                setDrawingMode(false);
+              }
+            }}
+            className={`px-3 py-2 rounded-lg border border-gray-300 dark:border-gray-600 ${
+              cropMode
+                ? 'bg-blue-600 text-white'
+                : 'bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700'
+            }`}
+            title={language === 'de' ? 'Zuschneiden' : 'Crop'}
+          >
+            {cropMode ? (language === 'de' ? 'Anwenden' : 'Apply') : '✂️'}
+          </button>
+          {cropMode && (
+            <>
+              <button
+                onClick={() => {
+                  setCropMode(false);
+                  setCrop(undefined);
+                  setCompletedCrop(undefined);
+                  setCropAspectRatio(undefined);
+                  setUseCustomResolution(false);
+                }}
+                className="px-3 py-2 bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 border border-gray-300 dark:border-gray-600"
+              >
+                {t('cancel')}
+              </button>
+              <div className="w-px h-6 bg-gray-300 dark:bg-gray-600"></div>
+              <span className="text-sm text-gray-600 dark:text-gray-400 px-2">
+                {language === 'de' ? 'Format:' : 'Aspect:'}
+              </span>
+              <button
+                onClick={() => {
+                  setCropAspectRatio(undefined);
+                  setUseCustomResolution(false);
+                }}
+                className={`px-3 py-2 rounded-lg border border-gray-300 dark:border-gray-600 text-sm ${
+                  cropAspectRatio === undefined && !useCustomResolution
+                    ? 'bg-blue-600 text-white'
+                    : 'bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700'
+                }`}
+                title={language === 'de' ? 'Frei - Crop-Fenster frei skalierbar, keine Ziel-Auflösung' : 'Free - Crop window freely scalable, no target resolution'}
+              >
+                {language === 'de' ? 'Frei' : 'Free'}
+              </button>
+              <button
+                onClick={() => {
+                  setCropAspectRatio(1);
+                  setUseCustomResolution(false);
+                }}
+                className={`px-3 py-2 rounded-lg border border-gray-300 dark:border-gray-600 text-sm ${
+                  cropAspectRatio === 1
+                    ? 'bg-blue-600 text-white'
+                    : 'bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700'
+                }`}
+                title="1:1"
+              >
+                1:1
+              </button>
+              <button
+                onClick={() => {
+                  setCropAspectRatio(16 / 9);
+                  setUseCustomResolution(false);
+                }}
+                className={`px-3 py-2 rounded-lg border border-gray-300 dark:border-gray-600 text-sm ${
+                  cropAspectRatio === 16 / 9
+                    ? 'bg-blue-600 text-white'
+                    : 'bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700'
+                }`}
+                title="16:9"
+              >
+                16:9
+              </button>
+              <button
+                onClick={() => {
+                  setCropAspectRatio(4 / 3);
+                  setUseCustomResolution(false);
+                }}
+                className={`px-3 py-2 rounded-lg border border-gray-300 dark:border-gray-600 text-sm ${
+                  cropAspectRatio === 4 / 3
+                    ? 'bg-blue-600 text-white'
+                    : 'bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700'
+                }`}
+                title="4:3"
+              >
+                4:3
+              </button>
+              <button
+                onClick={() => {
+                  setCropAspectRatio(3 / 2);
+                  setUseCustomResolution(false);
+                }}
+                className={`px-3 py-2 rounded-lg border border-gray-300 dark:border-gray-600 text-sm ${
+                  cropAspectRatio === 3 / 2
+                    ? 'bg-blue-600 text-white'
+                    : 'bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700'
+                }`}
+                title="3:2"
+              >
+                3:2
+              </button>
+              <button
+                onClick={() => {
+                  setCropAspectRatio(9 / 16);
+                  setUseCustomResolution(false);
+                }}
+                className={`px-3 py-2 rounded-lg border border-gray-300 dark:border-gray-600 text-sm ${
+                  cropAspectRatio === 9 / 16
+                    ? 'bg-blue-600 text-white'
+                    : 'bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700'
+                }`}
+                title="9:16 (Portrait)"
+              >
+                9:16
+              </button>
+              <button
+                onClick={() => {
+                  setUseCustomResolution(true);
+                  // Bei Custom: freies Cropping (kein festes Aspect Ratio)
+                  setCropAspectRatio(undefined);
+                }}
+                className={`px-3 py-2 rounded-lg border border-gray-300 dark:border-gray-600 text-sm ${
+                  useCustomResolution
+                    ? 'bg-blue-600 text-white'
+                    : 'bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700'
+                }`}
+                title={language === 'de' ? 'Benutzerdefiniert (frei skalierbar)' : 'Custom (free scale)'}
+              >
+                {language === 'de' ? 'Custom' : 'Custom'}
+              </button>
+              {useCustomResolution && (
+                <span className="text-xs text-gray-500 dark:text-gray-400 ml-2 px-2 py-1 bg-blue-50 dark:bg-blue-900/20 rounded">
+                  {language === 'de' 
+                    ? `Ziel: ${customWidth}×${customHeight} (beim Speichern)` 
+                    : `Target: ${customWidth}×${customHeight} (on save)`}
+                </span>
+              )}
+            </>
+          )}
+          <div className="w-px h-6 bg-gray-300 dark:bg-gray-600"></div>
+          <button
+            onClick={() => {
+              setDrawingMode(!drawingMode);
+              setCropMode(false);
+            }}
+            className={`px-3 py-2 rounded-lg border border-gray-300 dark:border-gray-600 ${
+              drawingMode
+                ? 'bg-blue-600 text-white'
+                : 'bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700'
+            }`}
+            title={language === 'de' ? 'Zeichnen' : 'Draw'}
+          >
+            ✏️
+          </button>
+          {drawingMode && (
+            <>
+              <input
+                type="range"
+                min="1"
+                max="50"
+                value={brushSize}
+                onChange={(e) => setBrushSize(Number(e.target.value))}
+                className="w-24"
+              />
+              <input
+                type="color"
+                value={brushColor}
+                onChange={(e) => setBrushColor(e.target.value)}
+                className="w-10 h-10 rounded border border-gray-300 dark:border-gray-600"
+              />
+            </>
+          )}
         </div>
-      </div>
 
-      {/* Error Message */}
-      {error && (
-        <div className="px-4 py-2 bg-red-50 dark:bg-red-900/20 border-b border-red-200 dark:border-red-800">
-          <p className="text-sm text-red-600 dark:text-red-400">{error}</p>
-        </div>
-      )}
-
-      {/* Toolbar */}
-      <div className="flex items-center gap-2 p-2 border-b border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900 flex-wrap overflow-x-auto">
-        <button
-          onClick={handleCrop}
-          className="px-3 py-1.5 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-700 rounded-lg transition-colors flex items-center gap-2"
-          title={language === 'de' ? 'Zuschneiden' : 'Crop'}
-        >
-          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5l-5-5m5 5v-4m0 4h-4" />
-          </svg>
-          {language === 'de' ? 'Zuschneiden' : 'Crop'}
-        </button>
-        
-        <button
-          onClick={() => handleRotate(90)}
-          className="px-3 py-1.5 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-700 rounded-lg transition-colors flex items-center gap-2"
-          title={language === 'de' ? 'Drehen' : 'Rotate'}
-        >
-          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-          </svg>
-          {language === 'de' ? 'Drehen' : 'Rotate'}
-        </button>
-        
-        <button
-          onClick={() => handleFlip('horizontal')}
-          className="px-3 py-1.5 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-700 rounded-lg transition-colors flex items-center gap-2"
-          title={language === 'de' ? 'Horizontal spiegeln' : 'Flip Horizontal'}
-        >
-          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16V4m0 0L3 8m4-4l4 4m6 0v12m0 0l4-4m-4 4l-4-4" />
-          </svg>
-          {language === 'de' ? 'Spiegeln H' : 'Flip H'}
-        </button>
-        
-        <button
-          onClick={() => handleFlip('vertical')}
-          className="px-3 py-1.5 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-700 rounded-lg transition-colors flex items-center gap-2"
-          title={language === 'de' ? 'Vertikal spiegeln' : 'Flip Vertical'}
-        >
-          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16V4m0 0L3 8m4-4l4 4m6 0v12m0 0l4-4m-4 4l-4-4" />
-          </svg>
-          {language === 'de' ? 'Spiegeln V' : 'Flip V'}
-        </button>
-        
-        <div className="w-px h-6 bg-gray-300 dark:bg-gray-600"></div>
-        
-        <button
-          onClick={handleAddText}
-          className="px-3 py-1.5 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-700 rounded-lg transition-colors flex items-center gap-2"
-          title={language === 'de' ? 'Text hinzufügen' : 'Add Text'}
-        >
-          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 8h10M7 12h4m1 8l-4-4H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-3l-4 4z" />
-          </svg>
-          {language === 'de' ? 'Text' : 'Text'}
-        </button>
-        
-        <button
-          onClick={handleDraw}
-          className="px-3 py-1.5 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-700 rounded-lg transition-colors flex items-center gap-2"
-          title={language === 'de' ? 'Zeichnen' : 'Draw'}
-        >
-          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
-          </svg>
-          {language === 'de' ? 'Zeichnen' : 'Draw'}
-        </button>
-        
-        <div className="w-px h-6 bg-gray-300 dark:bg-gray-600"></div>
-        
-        <div className="flex items-center gap-2">
-          <label className="text-sm text-gray-700 dark:text-gray-300">
-            {language === 'de' ? 'Helligkeit' : 'Brightness'}:
-          </label>
-          <input
-            type="range"
-            min="-100"
-            max="100"
-            defaultValue="0"
-            onChange={(e) => handleBrightness(Number(e.target.value))}
-            className="w-24"
-          />
-        </div>
-        
-        <div className="flex items-center gap-2">
-          <label className="text-sm text-gray-700 dark:text-gray-300">
-            {language === 'de' ? 'Kontrast' : 'Contrast'}:
-          </label>
-          <input
-            type="range"
-            min="-100"
-            max="100"
-            defaultValue="0"
-            onChange={(e) => handleContrast(Number(e.target.value))}
-            className="w-24"
-          />
-        </div>
-        
-        <div className="w-px h-6 bg-gray-300 dark:bg-gray-600"></div>
-        
-        <select
-          onChange={(e) => handleFilter(e.target.value)}
-          className="px-3 py-1.5 text-sm text-gray-700 dark:text-gray-300 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-lg"
-        >
-          <option value="remove">{language === 'de' ? 'Kein Filter' : 'No Filter'}</option>
-          <option value="grayscale">{language === 'de' ? 'Graustufen' : 'Grayscale'}</option>
-          <option value="sepia">{language === 'de' ? 'Sepia' : 'Sepia'}</option>
-          <option value="vintage">{language === 'de' ? 'Vintage' : 'Vintage'}</option>
-        </select>
-      </div>
-
-      {/* Canvas */}
-      <div className="flex-1 overflow-auto bg-gray-100 dark:bg-gray-900 p-4 flex items-center justify-center">
-        {loading ? (
-          <div className="flex items-center justify-center">
+        {/* Image Display */}
+        <div className="flex-1 overflow-auto bg-gray-100 dark:bg-gray-900 p-4 flex items-center justify-center relative">
+          {loading && (
             <div className="text-center">
               <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
               <p className="text-gray-600 dark:text-gray-400">{t('loading')}</p>
             </div>
-          </div>
-        ) : error ? (
-          <div className="flex items-center justify-center">
-            <div className="text-center">
-              <p className="text-red-600 dark:text-red-400 mb-4">{error}</p>
-              {imageUrl && (
-                <img 
-                  src={imageUrl} 
-                  alt={file.name}
-                  className="max-w-full max-h-96 border border-gray-300 dark:border-gray-600 shadow-lg"
-                  onLoad={() => {
-                    // If image loads successfully, try to load it into canvas
-                    if (fabricCanvasRef.current && imageUrl) {
-                      // Use Image.fromURL with Promise-based API (Fabric.js v6)
-                      Image.fromURL(imageUrl).then((img) => {
-                        if (img && fabricCanvasRef.current) {
-                          const canvas = fabricCanvasRef.current;
-                          const imgWidth = img.width || 800;
-                          const imgHeight = img.height || 600;
-                          const scale = Math.min(
-                            (canvas.width! - 40) / imgWidth,
-                            (canvas.height! - 40) / imgHeight
-                          );
-                          // Set background image directly (Fabric.js v6 API)
-                          img.scaleX = scale;
-                          img.scaleY = scale;
-                          img.originX = 'center';
-                          img.originY = 'center';
-                          canvas.backgroundImage = img;
-                          canvas.renderAll();
-                          setLoading(false);
-                        }
-                      }).catch((err) => {
-                        console.error('Error loading image:', err);
-                        setLoading(false);
-                      });
-                    }
-                  }}
-                />
-              )}
+          )}
+
+          {error && (
+            <div className="text-center text-red-600 dark:text-red-400 p-4">
+              {error}
             </div>
-          </div>
-        ) : (
-          <canvas ref={canvasRef} className="border border-gray-300 dark:border-gray-600 shadow-lg bg-white" />
-        )}
+          )}
+
+          {!loading && !error && imageSrc && (
+            <>
+              {cropMode ? (
+                <div className="relative w-full h-full flex items-center justify-center p-4">
+                  <ReactCrop
+                    crop={crop}
+                    onChange={(newCrop) => setCrop(newCrop)}
+                    onComplete={(c) => setCompletedCrop(c)}
+                    aspect={cropAspectRatio}
+                    minWidth={10}
+                    minHeight={10}
+                  >
+                    <img
+                      ref={imgRef}
+                      src={imageSrc}
+                      alt={file.name}
+                      className="max-w-full max-h-full"
+                      style={{
+                        maxHeight: '80vh',
+                      }}
+                      onLoad={(e) => {
+                        const img = e.currentTarget;
+                        if (!crop && img.complete && img.naturalWidth > 0) {
+                          const imageWidth = img.naturalWidth;
+                          const imageHeight = img.naturalHeight;
+                          
+                          const initialCrop = centerCrop(
+                            makeAspectCrop(
+                              {
+                                unit: '%',
+                                width: 80,
+                                height: 80,
+                              },
+                              cropAspectRatio || imageWidth / imageHeight,
+                              imageWidth,
+                              imageHeight
+                            ),
+                            imageWidth,
+                            imageHeight
+                          );
+                          
+                          setCrop(initialCrop);
+                        }
+                      }}
+                      crossOrigin="anonymous"
+                    />
+                  </ReactCrop>
+                </div>
+              ) : (
+                <div className="relative">
+                  <img
+                    ref={imgRef}
+                    src={imageSrc}
+                    alt={file.name}
+                    className="max-w-full max-h-full object-contain border border-gray-300 dark:border-gray-600 shadow-lg"
+                    style={{
+                      transform: `rotate(${rotation}deg) scaleX(${flipHorizontal ? -1 : 1}) scaleY(${flipVertical ? -1 : 1})`,
+                    }}
+                    crossOrigin="anonymous"
+                  />
+                  {drawingMode && (
+                    <canvas
+                      ref={canvasRef}
+                      className="absolute top-0 left-0 border border-gray-300 dark:border-gray-600"
+                      style={{
+                        cursor: 'crosshair',
+                        pointerEvents: 'auto',
+                      }}
+                      onMouseDown={startDrawing}
+                      onMouseMove={draw}
+                      onMouseUp={stopDrawing}
+                      onMouseLeave={stopDrawing}
+                    />
+                  )}
+                </div>
+              )}
+            </>
+          )}
+        </div>
       </div>
     </div>
   );
 }
-

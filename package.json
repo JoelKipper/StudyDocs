@@ -25,6 +25,8 @@
     "next": "14.2.5",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
+    "react-easy-crop": "^5.5.5",
+    "react-image-crop": "^11.0.10",
     "react-syntax-highlighter": "^16.1.0"
   },
   "devDependencies": {

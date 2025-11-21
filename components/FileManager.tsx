@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useRef, useCallback } from 'react';
+import { useState, useEffect, useRef, useCallback, Component, ReactNode } from 'react';
 import FileTree from './FileTree';
 import FileUpload from './FileUpload';
 import ContextMenu from './ContextMenu';
@@ -19,6 +19,63 @@ import StorageQuota from './StorageQuota';
 import FavoritesList from './FavoritesList';
 import InfoModal from './InfoModal';
 import { useLanguage } from '@/contexts/LanguageContext';
+
+// Error Boundary for ImageEditor to catch removeChild errors
+class ImageEditorErrorBoundary extends Component<
+  { children: ReactNode },
+  { hasError: boolean }
+> {
+  constructor(props: { children: ReactNode }) {
+    super(props);
+    this.state = { hasError: false };
+  }
+
+  static getDerivedStateFromError(error: any) {
+    // Only catch removeChild errors, let others through
+    if (
+      error?.message?.includes('removeChild') ||
+      error?.message?.includes('not a child') ||
+      error?.name === 'NotFoundError'
+    ) {
+      // Silently recover from these errors
+      return { hasError: false };
+    }
+    return { hasError: true };
+  }
+
+  componentDidCatch(error: any, errorInfo: any) {
+    // Only log non-removeChild errors
+    if (
+      !error?.message?.includes('removeChild') &&
+      !error?.message?.includes('not a child') &&
+      error?.name !== 'NotFoundError'
+    ) {
+      console.error('ImageEditor error:', error, errorInfo);
+    }
+  }
+
+  render() {
+    if (this.state.hasError) {
+      return (
+        <div className="w-full h-full flex items-center justify-center bg-gray-50 dark:bg-gray-900">
+          <div className="text-center">
+            <p className="text-red-600 dark:text-red-400 mb-4">
+              An error occurred in the image editor
+            </p>
+            <button
+              onClick={() => this.setState({ hasError: false })}
+              className="px-4 py-2 bg-blue-600 text-white rounded-lg"
+            >
+              Try Again
+            </button>
+          </div>
+        </div>
+      );
+    }
+
+    return this.props.children;
+  }
+}
 
 interface FileMetadata {
   createdBy: { id: string; name: string; email: string };
@@ -4899,24 +4956,29 @@ export default function FileManager({ user, onLogout, initialPath, initialFile: 
 
             {/* File Editor - Fullscreen (only shown when file is edited) */}
             {editFile && (() => {
+              console.log('[FileManager] Rendering editor for editFile', { path: editFile.path, name: editFile.name });
               const fileExtension = editFile.name.split('.').pop()?.toLowerCase() || '';
               const isImage = ['jpg', 'jpeg', 'png', 'gif', 'webp', 'bmp'].includes(fileExtension);
+              console.log('[FileManager] Editor type:', { isImage, fileExtension });
               
               return (
                 <div 
                   className="relative flex-1 bg-gray-50 dark:bg-gray-900 flex flex-col overflow-hidden min-h-0"
                 >
                   {isImage ? (
-                    <ImageEditor
-                      file={editFile}
-                      onClose={() => setEditFile(null)}
-                      onSave={() => {
-                        loadFiles();
-                        invalidateCache(currentPath);
-                        setRefreshFolderPath(currentPath);
-                        setTimeout(() => setRefreshFolderPath(null), 100);
-                      }}
-                    />
+                    <ImageEditorErrorBoundary>
+                      <ImageEditor
+                        file={editFile}
+                        verifiedPassword={editFile?.isPasswordProtected ? verifiedPasswords.get(editFile.path) : undefined}
+                        onClose={() => setEditFile(null)}
+                        onSave={() => {
+                          loadFiles();
+                          invalidateCache(currentPath);
+                          setRefreshFolderPath(currentPath);
+                          setTimeout(() => setRefreshFolderPath(null), 100);
+                        }}
+                      />
+                    </ImageEditorErrorBoundary>
                   ) : (
                     <FileEditor
                       file={editFile}
@@ -4974,6 +5036,7 @@ export default function FileManager({ user, onLogout, initialPath, initialFile: 
                       return;
                     }
                     // Switch to edit mode
+                    console.log('[FileManager] Switching from preview to edit mode', { file: previewFile?.path });
                     setEditFile(previewFile);
                     setPreviewFile(null);
                   }}
@@ -5032,6 +5095,7 @@ export default function FileManager({ user, onLogout, initialPath, initialFile: 
               });
               return;
             }
+            console.log('[FileManager] Setting editFile from context menu', { item: contextMenu.item?.path, isImage: ['jpg', 'jpeg', 'png', 'gif', 'webp', 'bmp'].includes(contextMenu.item?.name.split('.').pop()?.toLowerCase() || '') });
             setEditFile(contextMenu.item);
           } : undefined}
           onInfo={contextMenu.item ? () => {

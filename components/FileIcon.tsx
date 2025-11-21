@@ -89,12 +89,12 @@ export default function FileIcon({ fileName, isDirectory, className = 'w-5 h-5' 
     );
   }
 
-  // Images - Green
+  // Images - Use photo/image icon
   if (['jpg', 'jpeg', 'png', 'gif', 'webp', 'svg', 'bmp', 'ico', 'tiff'].includes(extension)) {
     return (
-      <div className={`${className} text-green-600 dark:text-green-400`}>
-        <svg className="w-full h-full" fill="currentColor" viewBox="0 0 24 24">
-          <path d="M9,2V8H11V11H5C3.89,11 3,11.89 3,13V18A1,1 0 0,0 4,19H5V21A1,1 0 0,0 6,22H18A1,1 0 0,0 19,21V19H20A1,1 0 0,0 21,18V13A1,1 0 0,0 20,12H14V8H16V2H9M7,13H17V17H7V13Z" />
+      <div className={`${className} text-blue-500 dark:text-blue-400`}>
+        <svg className="w-full h-full" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
         </svg>
       </div>
     );
