@@ -60,6 +60,11 @@ export default function ImageEditor({ file, verifiedPassword, onClose, onSave }:
     }
 
     async function loadImage() {
+      if (!file) {
+        setLoading(false);
+        return;
+      }
+
       try {
         setLoading(true);
         setError('');
