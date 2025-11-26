@@ -47,7 +47,7 @@ const nextConfig = {
               "img-src 'self' data: https:",
               "font-src 'self' data:",
               "connect-src 'self' https://*.supabase.co https://*.supabase.in https://www.google.com https://www.gstatic.com https://vercel.live", // reCAPTCHA API-Aufrufe + Vercel Live
-              "frame-src 'self' https://www.google.com https://www.gstatic.com", // reCAPTCHA Frames (falls benötigt)
+              "frame-src 'self' https://www.google.com https://www.gstatic.com https://vercel.live", // reCAPTCHA Frames + Vercel Live Feedback
               "frame-ancestors 'self'",
               "base-uri 'self'",
               "form-action 'self'",
