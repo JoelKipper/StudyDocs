@@ -1,9 +1,16 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { registerUser, createToken } from '@/lib/auth';
+import { getSystemSettingBoolean } from '@/lib/system-settings';
 import { cookies } from 'next/headers';
 
 export async function POST(request: NextRequest) {
   try {
+    // Check if registration is enabled
+    const allowRegistration = await getSystemSettingBoolean('allow_registration', true);
+    if (!allowRegistration) {
+      return NextResponse.json({ error: 'Registrierung ist derzeit deaktiviert' }, { status: 403 });
+    }
+
     const { email, password, name } = await request.json();
     
     if (!email || !password || !name) {

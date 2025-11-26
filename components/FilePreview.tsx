@@ -4,6 +4,7 @@ import { useEffect, useState, useRef } from 'react';
 import { useLanguage } from '@/contexts/LanguageContext';
 import ShareModal from './ShareModal';
 import PasswordModal from './PasswordModal';
+import AlertModal from './AlertModal';
 import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
 import { vscDarkPlus, vs } from 'react-syntax-highlighter/dist/esm/styles/prism';
 
@@ -41,6 +42,16 @@ export default function FilePreview({ file, onClose, verifiedPassword, onFileUpd
   }>({
     isOpen: false,
     mode: 'remove',
+  });
+  const [alertModal, setAlertModal] = useState<{
+    isOpen: boolean;
+    title: string;
+    message: string;
+    type?: 'error' | 'warning' | 'info' | 'success';
+  }>({
+    isOpen: false,
+    title: '',
+    message: '',
   });
 
   useEffect(() => {
@@ -246,7 +257,12 @@ export default function FilePreview({ file, onClose, verifiedPassword, onFileUpd
                           mode: 'remove',
                         });
                       } else {
-                        alert(data.error || (language === 'de' ? 'Fehler beim Entfernen des Passworts' : 'Error removing password'));
+                        setAlertModal({
+                          isOpen: true,
+                          title: language === 'de' ? 'Fehler' : 'Error',
+                          message: data.error || (language === 'de' ? 'Fehler beim Entfernen des Passworts' : 'Error removing password'),
+                          type: 'error',
+                        });
                       }
                       return;
                     }
@@ -589,6 +605,15 @@ export default function FilePreview({ file, onClose, verifiedPassword, onFileUpd
           error={passwordModal.error}
         />
       )}
+
+      {/* Alert Modal */}
+      <AlertModal
+        isOpen={alertModal.isOpen}
+        onClose={() => setAlertModal({ ...alertModal, isOpen: false })}
+        title={alertModal.title}
+        message={alertModal.message}
+        type={alertModal.type}
+      />
     </div>
   );
 }

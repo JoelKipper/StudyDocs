@@ -10,6 +10,7 @@ export interface User {
   id: string;
   email: string;
   name: string;
+  isAdmin?: boolean;
 }
 
 export async function hashPassword(password: string): Promise<string> {
@@ -31,7 +32,7 @@ export async function verifyToken(token: string): Promise<User | null> {
     // Get user from Supabase
     const { data, error } = await supabase
       .from('users')
-      .select('id, email, name')
+      .select('id, email, name, is_admin, is_active')
       .eq('id', decoded.userId)
       .single();
     
@@ -39,7 +40,17 @@ export async function verifyToken(token: string): Promise<User | null> {
       return null;
     }
     
-    return { id: data.id, email: data.email, name: data.name };
+    // Check if user is active
+    if (data.is_active === false) {
+      return null;
+    }
+    
+    return { 
+      id: data.id, 
+      email: data.email, 
+      name: data.name,
+      isAdmin: data.is_admin || false
+    };
   } catch {
     return null;
   }
@@ -101,15 +112,25 @@ export async function registerUser(email: string, password: string, name: string
   return { id: data.id, email: data.email, name: data.name };
 }
 
-export async function loginUser(email: string, password: string): Promise<User | null> {
+export async function loginUser(
+  email: string, 
+  password: string, 
+  ipAddress?: string,
+  userAgent?: string
+): Promise<User | null> {
   // Get user from Supabase
-  const { data: user, error } = await supabase
+  const { data: user, error } = await supabaseServer
     .from('users')
-    .select('id, email, name, password')
+    .select('id, email, name, password, is_admin, is_active')
     .eq('email', email.toLowerCase())
     .single();
   
   if (error || !user) {
+    return null;
+  }
+  
+  // Check if user is active
+  if (user.is_active === false) {
     return null;
   }
   
@@ -119,7 +140,73 @@ export async function loginUser(email: string, password: string): Promise<User |
     return null;
   }
   
-  return { id: user.id, email: user.email, name: user.name };
+  // Update last login
+  await supabaseServer
+    .from('users')
+    .update({ 
+      last_login: new Date().toISOString(),
+      last_login_ip: ipAddress || null
+    })
+    .eq('id', user.id);
+  
+  // Log activity
+  if (ipAddress) {
+    await supabaseServer
+      .from('activity_logs')
+      .insert({
+        user_id: user.id,
+        action: 'login',
+        ip_address: ipAddress,
+        user_agent: userAgent || null,
+        details: { email: user.email }
+      });
+  }
+  
+  return { 
+    id: user.id, 
+    email: user.email, 
+    name: user.name,
+    isAdmin: user.is_admin || false
+  };
+}
+
+export async function isAdmin(userId: string): Promise<boolean> {
+  const { data, error } = await supabaseServer
+    .from('users')
+    .select('is_admin')
+    .eq('id', userId)
+    .single();
+  
+  if (error || !data) {
+    return false;
+  }
+  
+  return data.is_admin || false;
+}
+
+export async function isIpBlocked(ipAddress: string): Promise<boolean> {
+  const { data, error } = await supabaseServer
+    .from('blocked_ips')
+    .select('id, expires_at')
+    .eq('ip_address', ipAddress)
+    .eq('is_active', true)
+    .maybeSingle();
+  
+  if (error || !data) {
+    return false;
+  }
+  
+  // Check if block has expired
+  if (data.expires_at && new Date(data.expires_at) < new Date()) {
+    // Deactivate expired block
+    await supabaseServer
+      .from('blocked_ips')
+      .update({ is_active: false })
+      .eq('id', data.id);
+    return false;
+  }
+  
+  return true;
 }
 
 export async function updateUserProfile(

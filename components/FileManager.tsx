@@ -18,6 +18,7 @@ import FileIcon from './FileIcon';
 import StorageQuota from './StorageQuota';
 import FavoritesList from './FavoritesList';
 import InfoModal from './InfoModal';
+import AdminDashboard from './AdminDashboard';
 import { useLanguage } from '@/contexts/LanguageContext';
 
 // Error Boundary for ImageEditor to catch removeChild errors
@@ -100,7 +101,7 @@ type SortField = 'name' | 'size' | 'type' | 'modified';
 type SortDirection = 'asc' | 'desc';
 
 interface FileManagerProps {
-  user: { id: string; name: string; email: string };
+  user: { id: string; name: string; email: string; isAdmin?: boolean };
   onLogout: () => void;
   initialPath?: string;
   initialFile?: string;
@@ -190,6 +191,7 @@ export default function FileManager({ user, onLogout, initialPath, initialFile: 
   const [focusedIndex, setFocusedIndex] = useState<number | null>(null);
   const [actionHistory, setActionHistory] = useState<Array<{ type: string; data: any }>>([]);
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [adminDashboardOpen, setAdminDashboardOpen] = useState(false);
   const fileListRef = useRef<HTMLDivElement>(null);
   const [sidebarWidth, setSidebarWidth] = useState(() => {
     if (typeof window !== 'undefined') {
@@ -3478,6 +3480,17 @@ export default function FileManager({ user, onLogout, initialPath, initialFile: 
               </div>
             </div>
             <div className="flex items-center gap-2">
+              {user.isAdmin && (
+                <button
+                  onClick={() => setAdminDashboardOpen(true)}
+                  className="p-2 text-red-500 hover:text-red-700 dark:text-red-400 dark:hover:text-red-200 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg transition-colors"
+                  title={language === 'de' ? 'Admin Dashboard' : 'Admin Dashboard'}
+                >
+                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
+                  </svg>
+                </button>
+              )}
               <button
                 onClick={() => setSettingsOpen(true)}
                 className="p-2 text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors"
@@ -5337,6 +5350,14 @@ export default function FileManager({ user, onLogout, initialPath, initialFile: 
         onClose={() => setSettingsOpen(false)}
         user={user}
       />
+
+      {/* Admin Dashboard */}
+      {user.isAdmin && adminDashboardOpen && (
+        <AdminDashboard
+          user={user}
+          onClose={() => setAdminDashboardOpen(false)}
+        />
+      )}
 
       {/* Share Modal */}
       <ShareModal
