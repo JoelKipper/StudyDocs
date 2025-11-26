@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getCurrentUser } from '@/lib/auth';
 import crypto from 'crypto';
 import { supabaseServer } from '@/lib/supabase-server';
+import { sanitizePath } from '@/lib/validation';
 
 export async function POST(request: NextRequest) {
   const user = await getCurrentUser();
@@ -10,10 +11,18 @@ export async function POST(request: NextRequest) {
   }
 
   try {
-    const { path: itemPath } = await request.json();
+    const body = await request.json();
+    const rawItemPath = body.path;
 
-    if (!itemPath) {
+    if (!rawItemPath) {
       return NextResponse.json({ error: 'Pfad ist erforderlich' }, { status: 400 });
+    }
+    
+    // Sanitize path
+    const itemPath = sanitizePath(rawItemPath);
+    
+    if (!itemPath) {
+      return NextResponse.json({ error: 'Ungültiger Pfad' }, { status: 400 });
     }
 
     // Verify that the item exists (check in file_metadata table)
@@ -55,11 +64,18 @@ export async function POST(request: NextRequest) {
 
 export async function GET(request: NextRequest) {
   const searchParams = request.nextUrl.searchParams;
-  const token = searchParams.get('token');
-
-  if (!token) {
+  const rawToken = searchParams.get('token');
+  
+  if (!rawToken) {
     return NextResponse.json({ error: 'Token ist erforderlich' }, { status: 400 });
   }
+  
+  // Validate token format (should be hex string)
+  if (!/^[a-f0-9]+$/i.test(rawToken) || rawToken.length !== 64) {
+    return NextResponse.json({ error: 'Ungültiger Token' }, { status: 400 });
+  }
+  
+  const token = rawToken;
 
   try {
     // Get share data from Supabase

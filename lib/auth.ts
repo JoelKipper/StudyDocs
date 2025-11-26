@@ -4,7 +4,10 @@ import bcrypt from 'bcryptjs';
 import { supabase } from './supabase';
 import { supabaseServer } from './supabase-server';
 
-const JWT_SECRET = process.env.JWT_SECRET || 'your-secret-key-change-in-production';
+const JWT_SECRET: string = process.env.JWT_SECRET || '';
+if (!JWT_SECRET || JWT_SECRET === 'your-secret-key-change-in-production') {
+  throw new Error('JWT_SECRET environment variable is required and must be set to a secure value');
+}
 
 export interface User {
   id: string;
@@ -64,11 +67,27 @@ export async function getCurrentUser(): Promise<User | null> {
 }
 
 export async function registerUser(email: string, password: string, name: string): Promise<User> {
+  // Additional server-side validation (client-side validation should already be done)
+  if (!email || typeof email !== 'string' || email.trim().length === 0) {
+    throw new Error('E-Mail ist erforderlich');
+  }
+  
+  if (!password || typeof password !== 'string' || password.length < 8) {
+    throw new Error('Passwort muss mindestens 8 Zeichen lang sein');
+  }
+  
+  if (!name || typeof name !== 'string' || name.trim().length < 2) {
+    throw new Error('Name muss mindestens 2 Zeichen lang sein');
+  }
+  
+  // Normalize email
+  const normalizedEmail = email.trim().toLowerCase();
+  
   // Check if user with this email already exists
   const { data: existingUser, error: checkError } = await supabase
     .from('users')
     .select('id')
-    .eq('email', email.toLowerCase())
+    .eq('email', normalizedEmail)
     .maybeSingle();
   
   // If we got data (not null), user exists
@@ -89,9 +108,9 @@ export async function registerUser(email: string, password: string, name: string
   const { data, error } = await supabase
     .from('users')
     .insert({
-      email: email.toLowerCase(),
+      email: normalizedEmail,
       password: hashedPassword,
-      name: name,
+      name: name.trim(),
     })
     .select('id, email, name')
     .single();

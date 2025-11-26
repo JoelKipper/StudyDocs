@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from 'next/server';
 import { loginUser, createToken, isIpBlocked } from '@/lib/auth';
 import { getSystemSettingBoolean } from '@/lib/system-settings';
 import { cookies } from 'next/headers';
+import { checkRateLimit, recordFailedAttempt } from '@/lib/rate-limit';
+import { validateEmail, sanitizeString } from '@/lib/validation';
 
 function getClientIp(request: NextRequest): string {
   const forwarded = request.headers.get('x-forwarded-for');
@@ -26,10 +28,18 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Login ist derzeit deaktiviert' }, { status: 403 });
     }
 
-    const { email, password } = await request.json();
+    const body = await request.json();
+    const email = sanitizeString(body.email, 254);
+    const password = body.password;
     
-    if (!email || !password) {
-      return NextResponse.json({ error: 'Email und Passwort sind erforderlich' }, { status: 400 });
+    // Validate email
+    const emailValidation = validateEmail(email);
+    if (!emailValidation.valid) {
+      return NextResponse.json({ error: emailValidation.error }, { status: 400 });
+    }
+    
+    if (!password || typeof password !== 'string') {
+      return NextResponse.json({ error: 'Passwort ist erforderlich' }, { status: 400 });
     }
     
     // Check if IP is blocked
@@ -41,9 +51,46 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Ihre IP-Adresse wurde gesperrt' }, { status: 403 });
     }
     
+    // Check rate limit
+    const rateLimit = await checkRateLimit(ipAddress, 'login');
+    if (!rateLimit.allowed) {
+      const resetSeconds = Math.ceil((rateLimit.resetAt.getTime() - Date.now()) / 1000);
+      return NextResponse.json(
+        { 
+          error: `Zu viele Login-Versuche. Bitte versuchen Sie es in ${Math.ceil(resetSeconds / 60)} Minuten erneut.`,
+          retryAfter: resetSeconds
+        },
+        { 
+          status: 429,
+          headers: {
+            'Retry-After': resetSeconds.toString(),
+            'X-RateLimit-Limit': '5',
+            'X-RateLimit-Remaining': rateLimit.remaining.toString(),
+            'X-RateLimit-Reset': rateLimit.resetAt.toISOString(),
+          }
+        }
+      );
+    }
+    
     const user = await loginUser(email, password, ipAddress, userAgent);
     if (!user) {
-      return NextResponse.json({ error: 'Ungültige Anmeldedaten' }, { status: 401 });
+      // Record failed attempt for rate limiting
+      await recordFailedAttempt(ipAddress, 'login');
+      
+      // Re-check rate limit after recording failure
+      const updatedRateLimit = await checkRateLimit(ipAddress, 'login');
+      
+      return NextResponse.json(
+        { error: 'Ungültige Anmeldedaten' },
+        { 
+          status: 401,
+          headers: {
+            'X-RateLimit-Limit': '5',
+            'X-RateLimit-Remaining': updatedRateLimit.remaining.toString(),
+            'X-RateLimit-Reset': updatedRateLimit.resetAt.toISOString(),
+          }
+        }
+      );
     }
     
     const token = await createToken(user);
@@ -55,7 +102,16 @@ export async function POST(request: NextRequest) {
       maxAge: 60 * 60 * 24 * 7, // 7 Tage
     });
     
-    return NextResponse.json({ user, success: true });
+    return NextResponse.json(
+      { user, success: true },
+      {
+        headers: {
+          'X-RateLimit-Limit': '5',
+          'X-RateLimit-Remaining': rateLimit.remaining.toString(),
+          'X-RateLimit-Reset': rateLimit.resetAt.toISOString(),
+        }
+      }
+    );
   } catch (error) {
     return NextResponse.json({ error: 'Serverfehler' }, { status: 500 });
   }

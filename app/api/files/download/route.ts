@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getCurrentUser } from '@/lib/auth';
 import { getFile } from '@/lib/filesystem-supabase';
+import { sanitizePath } from '@/lib/validation';
 
 export async function GET(request: NextRequest) {
   const user = await getCurrentUser();
@@ -9,10 +10,17 @@ export async function GET(request: NextRequest) {
   }
   
   const searchParams = request.nextUrl.searchParams;
-  const filePath = searchParams.get('path');
+  const rawFilePath = searchParams.get('path');
+  
+  if (!rawFilePath) {
+    return NextResponse.json({ error: 'Dateipfad erforderlich' }, { status: 400 });
+  }
+  
+  // Sanitize file path
+  const filePath = sanitizePath(rawFilePath);
   
   if (!filePath) {
-    return NextResponse.json({ error: 'Dateipfad erforderlich' }, { status: 400 });
+    return NextResponse.json({ error: 'Ungültiger Pfad' }, { status: 400 });
   }
   
   try {

@@ -40,6 +40,8 @@ async function getAllFilesRecursive(
   return allFiles;
 }
 
+import { sanitizeString } from '@/lib/validation';
+
 export async function GET(request: NextRequest) {
   const user = await getCurrentUser();
   if (!user) {
@@ -48,9 +50,11 @@ export async function GET(request: NextRequest) {
 
   try {
     const { searchParams } = new URL(request.url);
-    const query = searchParams.get('q') || '';
+    const rawQuery = searchParams.get('q') || '';
+    const query = sanitizeString(rawQuery, 500);
     const fileType = searchParams.get('type') || 'all';
-    const extensions = searchParams.get('extensions');
+    const rawExtensions = searchParams.get('extensions');
+    const extensions = rawExtensions ? sanitizeString(rawExtensions, 100) : null;
     const minSize = searchParams.get('minSize');
     const maxSize = searchParams.get('maxSize');
     const dateFrom = searchParams.get('dateFrom');

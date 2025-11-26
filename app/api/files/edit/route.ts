@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getCurrentUser } from '@/lib/auth';
 import { saveFile, getFile } from '@/lib/filesystem-supabase';
+import { sanitizePath, sanitizeString } from '@/lib/validation';
 
 // Save edited file content
 export async function POST(request: NextRequest) {
@@ -10,18 +11,42 @@ export async function POST(request: NextRequest) {
   }
 
   try {
-    const { path, content } = await request.json();
+    const body = await request.json();
+    const rawPath = body.path;
+    const content = body.content;
 
-    if (!path) {
+    if (!rawPath) {
       return NextResponse.json({ error: 'Pfad ist erforderlich' }, { status: 400 });
     }
-
-    if (content === undefined) {
-      return NextResponse.json({ error: 'Inhalt ist erforderlich' }, { status: 400 });
+    
+    // Sanitize path
+    const path = sanitizePath(rawPath);
+    
+    if (!path) {
+      return NextResponse.json({ error: 'Ungültiger Pfad' }, { status: 400 });
     }
 
+    if (content === undefined || content === null) {
+      return NextResponse.json({ error: 'Inhalt ist erforderlich' }, { status: 400 });
+    }
+    
+    // Validate content type and size
+    if (typeof content !== 'string') {
+      return NextResponse.json({ error: 'Inhalt muss ein String sein' }, { status: 400 });
+    }
+    
+    // Limit content size (max 10MB)
+    const maxContentSize = 10 * 1024 * 1024; // 10MB
+    const contentSize = Buffer.byteLength(content, 'utf-8');
+    if (contentSize > maxContentSize) {
+      return NextResponse.json({ error: 'Inhalt ist zu groß (max. 10MB)' }, { status: 400 });
+    }
+
+    // Sanitize content (remove null bytes and control characters)
+    const sanitizedContent = sanitizeString(content, maxContentSize);
+
     // Convert content to buffer
-    const buffer = Buffer.from(content, 'utf-8');
+    const buffer = Buffer.from(sanitizedContent, 'utf-8');
 
     // Save file
     await saveFile(path, buffer, user);
@@ -41,10 +66,17 @@ export async function GET(request: NextRequest) {
 
   try {
     const { searchParams } = new URL(request.url);
-    const path = searchParams.get('path');
+    const rawPath = searchParams.get('path');
 
-    if (!path) {
+    if (!rawPath) {
       return NextResponse.json({ error: 'Pfad ist erforderlich' }, { status: 400 });
+    }
+    
+    // Sanitize path
+    const path = sanitizePath(rawPath);
+    
+    if (!path) {
+      return NextResponse.json({ error: 'Ungültiger Pfad' }, { status: 400 });
     }
 
     // Get file content

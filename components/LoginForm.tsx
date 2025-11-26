@@ -90,6 +90,7 @@ export default function LoginForm({ onLogin }: LoginFormProps) {
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               required
+              autoComplete="email"
               className="w-full px-4 py-3 border border-gray-300 dark:border-gray-600 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white text-gray-900 dark:bg-gray-700 dark:text-white transition-all duration-200 shadow-sm hover:shadow-md"
               placeholder="ihre@email.de"
             />
@@ -105,6 +106,7 @@ export default function LoginForm({ onLogin }: LoginFormProps) {
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 required
+                autoComplete={isLogin ? 'current-password' : 'new-password'}
                 className="w-full px-4 py-3 pr-12 border border-gray-300 dark:border-gray-600 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white text-gray-900 dark:bg-gray-700 dark:text-white transition-all duration-200 shadow-sm hover:shadow-md"
                 placeholder="••••••••"
               />

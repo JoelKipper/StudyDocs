@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getCurrentUser } from '@/lib/auth';
 import { saveFile, createDirectory } from '@/lib/filesystem-supabase';
+import { sanitizePath, sanitizeString } from '@/lib/validation';
 
 // Helper function to ensure all directories in a path exist
 async function ensureDirectoriesExist(dirPath: string, user: { id: string; name: string; email: string }): Promise<void> {
@@ -38,14 +39,28 @@ export async function POST(request: NextRequest) {
   try {
     const formData = await request.formData();
     const file = formData.get('file') as File;
-    const path = formData.get('path') as string || '';
+    const rawPath = formData.get('path') as string || '';
     
     if (!file) {
       return NextResponse.json({ error: 'Keine Datei hochgeladen' }, { status: 400 });
     }
     
+    // Validate file size (max 100MB)
+    const maxFileSize = 100 * 1024 * 1024; // 100MB
+    if (file.size > maxFileSize) {
+      return NextResponse.json({ error: 'Datei ist zu groß (max. 100MB)' }, { status: 400 });
+    }
+    
+    // Sanitize inputs
+    const path = sanitizePath(rawPath);
+    const fileName = sanitizeString(file.name, 255);
+    
+    if (!fileName) {
+      return NextResponse.json({ error: 'Ungültiger Dateiname' }, { status: 400 });
+    }
+    
     console.log('Upload request received:', {
-      fileName: file.name,
+      fileName: fileName,
       fileSize: file.size,
       path: path
     });
@@ -54,26 +69,21 @@ export async function POST(request: NextRequest) {
     
     // Check if path already ends with the filename (for folder uploads with relative paths)
     let filePath: string;
-    const pathEndsWithFilename = path && (path.endsWith(`/${file.name}`) || path === file.name);
-    
-    console.log('Path processing:', {
-      path: path,
-      fileName: file.name,
-      pathEndsWithFilename: pathEndsWithFilename,
-      pathEndsWithSlashFilename: path?.endsWith(`/${file.name}`),
-      pathEqualsFilename: path === file.name
-    });
+    const pathEndsWithFilename = path && (path.endsWith(`/${fileName}`) || path === fileName);
     
     if (pathEndsWithFilename) {
       // Path already includes the filename, use it as is
       filePath = path;
     } else if (path) {
       // Path is just the directory, append filename
-      filePath = `${path}/${file.name}`;
+      filePath = `${path}/${fileName}`;
     } else {
       // No path, use filename only
-      filePath = file.name;
+      filePath = fileName;
     }
+    
+    // Sanitize final file path
+    filePath = sanitizePath(filePath);
     
     console.log('Final filePath:', filePath);
     
@@ -82,13 +92,10 @@ export async function POST(request: NextRequest) {
       ? filePath.substring(0, filePath.lastIndexOf('/'))
       : '';
     
-    console.log('Parent path to ensure exists:', parentPath);
     if (parentPath) {
       await ensureDirectoriesExist(parentPath, user);
-      console.log('Directories ensured for path:', parentPath);
     }
     
-    console.log('Saving file to path:', filePath);
     await saveFile(filePath, buffer, user);
     console.log('File saved successfully:', filePath);
     

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getCurrentUser } from '@/lib/auth';
 import { getFile, getDirectoryContents } from '@/lib/filesystem-supabase';
+import { sanitizePath } from '@/lib/validation';
 import archiver from 'archiver';
 
 async function getAllFilesInDirectory(
@@ -78,10 +79,18 @@ export async function POST(request: NextRequest) {
   }
 
   try {
-    const { paths } = await request.json();
+    const body = await request.json();
+    const rawPaths = body.paths;
 
-    if (!paths || !Array.isArray(paths) || paths.length === 0) {
+    if (!rawPaths || !Array.isArray(rawPaths) || rawPaths.length === 0) {
       return NextResponse.json({ error: 'Mindestens ein Pfad ist erforderlich' }, { status: 400 });
+    }
+    
+    // Sanitize all paths
+    const paths = rawPaths.map((p: string) => sanitizePath(p)).filter((p: string) => p.length > 0);
+    
+    if (paths.length === 0) {
+      return NextResponse.json({ error: 'Keine gültigen Pfade gefunden' }, { status: 400 });
     }
 
     console.log('Download-ZIP: Empfangene Pfade:', paths);

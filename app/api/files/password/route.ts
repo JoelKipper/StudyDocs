@@ -3,6 +3,7 @@ import { getCurrentUser } from '@/lib/auth';
 import { supabaseServer } from '@/lib/supabase-server';
 import { hashFilePassword, verifyFilePassword, encryptFile, decryptFile } from '@/lib/encryption';
 import { getFile, saveFile } from '@/lib/filesystem-supabase';
+import { sanitizePath } from '@/lib/validation';
 
 // Set password protection for a file or directory
 export async function POST(request: NextRequest) {
@@ -12,10 +13,20 @@ export async function POST(request: NextRequest) {
   }
 
   try {
-    const { path, password, action } = await request.json();
+    const body = await request.json();
+    const rawPath = body.path;
+    const password = body.password;
+    const action = body.action;
 
-    if (!path) {
+    if (!rawPath) {
       return NextResponse.json({ error: 'Pfad ist erforderlich' }, { status: 400 });
+    }
+    
+    // Sanitize path
+    const path = sanitizePath(rawPath);
+    
+    if (!path) {
+      return NextResponse.json({ error: 'Ungültiger Pfad' }, { status: 400 });
     }
 
     if (action === 'set') {
@@ -153,7 +164,19 @@ export async function GET(request: NextRequest) {
 
   try {
     const searchParams = request.nextUrl.searchParams;
-    const path = searchParams.get('path');
+    const rawPath = searchParams.get('path');
+    
+    if (!rawPath) {
+      return NextResponse.json({ error: 'Pfad ist erforderlich' }, { status: 400 });
+    }
+    
+    // Sanitize path
+    const path = sanitizePath(rawPath);
+    
+    if (!path) {
+      return NextResponse.json({ error: 'Ungültiger Pfad' }, { status: 400 });
+    }
+    
     const password = searchParams.get('password');
 
     if (!path) {

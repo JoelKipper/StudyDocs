@@ -3,6 +3,7 @@ import { getCurrentUser } from '@/lib/auth';
 import { getFile } from '@/lib/filesystem-supabase';
 import { supabaseServer } from '@/lib/supabase-server';
 import { decryptFile, verifyFilePassword } from '@/lib/encryption';
+import { sanitizePath } from '@/lib/validation';
 import path from 'path';
 
 export async function GET(request: NextRequest) {
@@ -13,11 +14,18 @@ export async function GET(request: NextRequest) {
 
   try {
     const searchParams = request.nextUrl.searchParams;
-    const filePath = searchParams.get('path');
+    const rawFilePath = searchParams.get('path');
     const password = searchParams.get('password');
 
-    if (!filePath) {
+    if (!rawFilePath) {
       return NextResponse.json({ error: 'Pfad ist erforderlich' }, { status: 400 });
+    }
+    
+    // Sanitize file path
+    const filePath = sanitizePath(rawFilePath);
+    
+    if (!filePath) {
+      return NextResponse.json({ error: 'Ungültiger Pfad' }, { status: 400 });
     }
 
     // Check if file is password protected

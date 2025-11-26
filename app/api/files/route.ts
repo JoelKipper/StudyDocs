@@ -3,6 +3,7 @@ import { getCurrentUser } from '@/lib/auth';
 import { getDirectoryContents, createDirectory, deleteItem, renameItem, moveItem, copyItem } from '@/lib/filesystem-supabase';
 import { supabaseServer } from '@/lib/supabase-server';
 import { verifyFilePassword } from '@/lib/encryption';
+import { sanitizePath, sanitizeString } from '@/lib/validation';
 
 export async function GET(request: NextRequest) {
   const user = await getCurrentUser();
@@ -11,7 +12,7 @@ export async function GET(request: NextRequest) {
   }
   
   const searchParams = request.nextUrl.searchParams;
-  const dirPath = searchParams.get('path') || '';
+  const dirPath = sanitizePath(searchParams.get('path') || '');
   const password = searchParams.get('password');
   
   try {
@@ -59,38 +60,63 @@ export async function POST(request: NextRequest) {
   try {
     const { action, path, name, newName, targetPath } = await request.json();
     
+    // Validate and sanitize inputs
+    if (!action || typeof action !== 'string') {
+      return NextResponse.json({ error: 'Ungültige Aktion' }, { status: 400 });
+    }
+    
+    const sanitizedPath = path ? sanitizePath(path) : '';
+    const sanitizedName = name ? sanitizeString(name, 255) : '';
+    const sanitizedNewName = newName ? sanitizeString(newName, 255) : '';
+    const sanitizedTargetPath = targetPath !== undefined ? sanitizePath(targetPath) : '';
+    
     if (action === 'create-directory') {
-      const dirPath = path ? `${path}/${name}` : name;
+      if (!sanitizedName) {
+        return NextResponse.json({ error: 'Name ist erforderlich' }, { status: 400 });
+      }
+      const dirPath = sanitizedPath ? `${sanitizedPath}/${sanitizedName}` : sanitizedName;
       await createDirectory(dirPath, user);
       return NextResponse.json({ success: true });
     }
     
     if (action === 'delete') {
-      await deleteItem(path);
+      if (!sanitizedPath) {
+        return NextResponse.json({ error: 'Pfad ist erforderlich' }, { status: 400 });
+      }
+      await deleteItem(sanitizedPath);
       return NextResponse.json({ success: true });
     }
     
     if (action === 'rename') {
-      if (!newName || !newName.trim()) {
+      if (!sanitizedPath) {
+        return NextResponse.json({ error: 'Pfad ist erforderlich' }, { status: 400 });
+      }
+      if (!sanitizedNewName || !sanitizedNewName.trim()) {
         return NextResponse.json({ error: 'Neuer Name ist erforderlich' }, { status: 400 });
       }
-      await renameItem(path, newName.trim(), user);
+      await renameItem(sanitizedPath, sanitizedNewName.trim(), user);
       return NextResponse.json({ success: true });
     }
     
     if (action === 'move') {
-      if (!targetPath && targetPath !== '') {
+      if (!sanitizedPath) {
+        return NextResponse.json({ error: 'Pfad ist erforderlich' }, { status: 400 });
+      }
+      if (sanitizedTargetPath === undefined) {
         return NextResponse.json({ error: 'Zielverzeichnis ist erforderlich' }, { status: 400 });
       }
-      await moveItem(path, targetPath);
+      await moveItem(sanitizedPath, sanitizedTargetPath);
       return NextResponse.json({ success: true });
     }
     
     if (action === 'copy') {
-      if (!targetPath && targetPath !== '') {
+      if (!sanitizedPath) {
+        return NextResponse.json({ error: 'Pfad ist erforderlich' }, { status: 400 });
+      }
+      if (sanitizedTargetPath === undefined) {
         return NextResponse.json({ error: 'Zielverzeichnis ist erforderlich' }, { status: 400 });
       }
-      await copyItem(path, targetPath, user);
+      await copyItem(sanitizedPath, sanitizedTargetPath, user);
       return NextResponse.json({ success: true });
     }
     
