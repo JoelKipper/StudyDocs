@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import "./globals.css";
 import ThemeProvider from "@/components/ThemeProvider";
 import { LanguageProvider } from "@/contexts/LanguageContext";
+import ReCaptchaProvider from "@/components/ReCaptchaProvider";
 
 export const metadata: Metadata = {
   title: "StudyDocs - Student File Manager",
@@ -66,7 +67,11 @@ export default function RootLayout({
       </head>
       <body className="bg-gray-50 dark:bg-gray-900">
         <ThemeProvider>
-          <LanguageProvider>{children}</LanguageProvider>
+          <LanguageProvider>
+            <ReCaptchaProvider>
+              {children}
+            </ReCaptchaProvider>
+          </LanguageProvider>
         </ThemeProvider>
       </body>
     </html>

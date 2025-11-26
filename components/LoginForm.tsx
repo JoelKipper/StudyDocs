@@ -1,12 +1,16 @@
 'use client';
 
 import { useState } from 'react';
+import { useLanguage } from '@/contexts/LanguageContext';
+import { useGoogleReCaptcha } from 'react-google-recaptcha-v3';
 
 interface LoginFormProps {
   onLogin: (user: any) => void;
 }
 
 export default function LoginForm({ onLogin }: LoginFormProps) {
+  const { language } = useLanguage();
+  const { executeRecaptcha } = useGoogleReCaptcha();
   const [isLogin, setIsLogin] = useState(true);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -21,10 +25,25 @@ export default function LoginForm({ onLogin }: LoginFormProps) {
     setLoading(true);
 
     try {
+      // Get reCAPTCHA token
+      let recaptchaToken = '';
+      if (executeRecaptcha) {
+        try {
+          recaptchaToken = await executeRecaptcha('login');
+        } catch (err) {
+          console.error('reCAPTCHA error:', err);
+          setError(language === 'de' 
+            ? 'Sicherheitsprüfung fehlgeschlagen. Bitte versuchen Sie es erneut.' 
+            : 'Security check failed. Please try again.');
+          setLoading(false);
+          return;
+        }
+      }
+
       const endpoint = isLogin ? '/api/auth/login' : '/api/auth/register';
       const body = isLogin 
-        ? { email, password }
-        : { email, password, name };
+        ? { email, password, recaptchaToken }
+        : { email, password, name, recaptchaToken };
 
       const res = await fetch(endpoint, {
         method: 'POST',

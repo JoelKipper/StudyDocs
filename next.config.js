@@ -42,11 +42,12 @@ const nextConfig = {
             key: 'Content-Security-Policy',
             value: [
               "default-src 'self'",
-              "script-src 'self' 'unsafe-inline' 'unsafe-eval'", // unsafe-inline/unsafe-eval für Next.js notwendig, aber sollte minimiert werden
+              "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://www.google.com https://www.gstatic.com", // reCAPTCHA v3 benötigt Google-Domains
               "style-src 'self' 'unsafe-inline'", // unsafe-inline für Tailwind CSS notwendig
               "img-src 'self' data: https:",
               "font-src 'self' data:",
-              "connect-src 'self' https://*.supabase.co https://*.supabase.in",
+              "connect-src 'self' https://*.supabase.co https://*.supabase.in https://www.google.com https://www.gstatic.com", // reCAPTCHA API-Aufrufe
+              "frame-src 'self' https://www.google.com https://www.gstatic.com", // reCAPTCHA Frames (falls benötigt)
               "frame-ancestors 'self'",
               "base-uri 'self'",
               "form-action 'self'",

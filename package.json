@@ -26,6 +26,7 @@
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
     "react-easy-crop": "^5.5.5",
+    "react-google-recaptcha-v3": "^1.11.0",
     "react-image-crop": "^11.0.10",
     "react-syntax-highlighter": "^16.1.0"
   },

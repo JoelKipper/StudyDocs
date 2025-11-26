@@ -4,6 +4,7 @@ import { getSystemSettingBoolean } from '@/lib/system-settings';
 import { cookies } from 'next/headers';
 import { checkRateLimit, recordFailedAttempt } from '@/lib/rate-limit';
 import { validateEmail, sanitizeString } from '@/lib/validation';
+import { verifyRecaptcha } from '@/lib/captcha';
 
 function getClientIp(request: NextRequest): string {
   const forwarded = request.headers.get('x-forwarded-for');
@@ -31,6 +32,26 @@ export async function POST(request: NextRequest) {
     const body = await request.json();
     const email = sanitizeString(body.email, 254);
     const password = body.password;
+    const recaptchaToken = body.recaptchaToken;
+    
+    // Verify reCAPTCHA if token is provided
+    if (recaptchaToken && process.env.RECAPTCHA_SECRET_KEY) {
+      const recaptchaResult = await verifyRecaptcha(recaptchaToken, process.env.RECAPTCHA_SECRET_KEY);
+      if (!recaptchaResult.success) {
+        return NextResponse.json(
+          { error: 'Sicherheitsprüfung fehlgeschlagen. Bitte versuchen Sie es erneut.' },
+          { status: 400 }
+        );
+      }
+      // Optional: Check score threshold (0.0 = bot, 1.0 = human)
+      // Typically scores above 0.5 are considered human
+      if (recaptchaResult.score !== undefined && recaptchaResult.score < 0.5) {
+        return NextResponse.json(
+          { error: 'Sicherheitsprüfung fehlgeschlagen. Bitte versuchen Sie es erneut.' },
+          { status: 400 }
+        );
+      }
+    }
     
     // Validate email
     const emailValidation = validateEmail(email);
