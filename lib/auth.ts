@@ -1,6 +1,7 @@
 import { cookies } from 'next/headers';
 import jwt from 'jsonwebtoken';
 import bcrypt from 'bcryptjs';
+import * as nodeCrypto from 'crypto';
 import { supabase } from './supabase';
 import { supabaseServer } from './supabase-server';
 
@@ -25,7 +26,18 @@ export async function verifyPassword(password: string, hashedPassword: string): 
 }
 
 export async function createToken(user: User): Promise<string> {
-  return jwt.sign({ userId: user.id, email: user.email }, JWT_SECRET, { expiresIn: '7d' });
+  // Include jti (JWT ID) for token rotation and session management
+  const jti = nodeCrypto.randomBytes(16).toString('hex');
+  return jwt.sign(
+    { 
+      userId: user.id, 
+      email: user.email,
+      jti: jti, // JWT ID for session management
+      iat: Math.floor(Date.now() / 1000) // Issued at time
+    }, 
+    JWT_SECRET, 
+    { expiresIn: '7d' }
+  );
 }
 
 export async function verifyToken(token: string): Promise<User | null> {

@@ -108,8 +108,14 @@ export async function POST(request: NextRequest) {
         }
       );
     }
+    // Create new token (session regeneration for security)
     const token = await createToken(user);
     const cookieStore = await cookies();
+    
+    // Delete old token if exists (session regeneration - prevents session fixation)
+    cookieStore.delete('auth-token');
+    
+    // Set new token
     cookieStore.set('auth-token', token, {
       httpOnly: true,
       secure: process.env.NODE_ENV === 'production',

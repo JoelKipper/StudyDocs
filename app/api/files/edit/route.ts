@@ -53,7 +53,12 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json({ success: true, path });
   } catch (error: any) {
-    return NextResponse.json({ error: error.message || 'Fehler beim Speichern der Datei' }, { status: 500 });
+    // Don't expose error details in production
+    const errorMessage = process.env.NODE_ENV === 'production' 
+      ? 'Fehler beim Speichern der Datei' 
+      : (error.message || 'Fehler beim Speichern der Datei');
+    console.error('Error saving file:', error);
+    return NextResponse.json({ error: errorMessage }, { status: 500 });
   }
 }
 

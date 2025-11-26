@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getCurrentUser } from '@/lib/auth';
 import { saveFile, createDirectory } from '@/lib/filesystem-supabase';
 import { sanitizePath, sanitizeString } from '@/lib/validation';
+import { validateFile, sanitizeFilename } from '@/lib/file-validation';
 
 // Helper function to ensure all directories in a path exist
 async function ensureDirectoriesExist(dirPath: string, user: { id: string; name: string; email: string }): Promise<void> {
@@ -51,21 +52,32 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Datei ist zu groß (max. 100MB)' }, { status: 400 });
     }
     
+    // Get file buffer for validation
+    const buffer = Buffer.from(await file.arrayBuffer());
+    
+    // Validate file type, extension, and content
+    const fileValidation = validateFile(file, buffer);
+    if (!fileValidation.valid) {
+      return NextResponse.json({ error: fileValidation.error }, { status: 400 });
+    }
+    
     // Sanitize inputs
     const path = sanitizePath(rawPath);
-    const fileName = sanitizeString(file.name, 255);
+    const rawFileName = file.name;
+    const sanitizedFileName = sanitizeFilename(rawFileName);
+    const fileName = sanitizeString(sanitizedFileName, 255);
     
     if (!fileName) {
       return NextResponse.json({ error: 'Ungültiger Dateiname' }, { status: 400 });
     }
     
+    // Log upload (without sensitive data)
     console.log('Upload request received:', {
       fileName: fileName,
       fileSize: file.size,
+      mimeType: file.type,
       path: path
     });
-    
-    const buffer = Buffer.from(await file.arrayBuffer());
     
     // Check if path already ends with the filename (for folder uploads with relative paths)
     let filePath: string;
@@ -101,8 +113,12 @@ export async function POST(request: NextRequest) {
     
     return NextResponse.json({ success: true, fileName: file.name, filePath: filePath });
   } catch (error: any) {
+    // Don't expose error details in production
+    const errorMessage = process.env.NODE_ENV === 'production' 
+      ? 'Fehler beim Hochladen der Datei' 
+      : (error.message || 'Fehler beim Hochladen der Datei');
     console.error('Upload error:', error);
-    return NextResponse.json({ error: error.message || 'Fehler beim Hochladen der Datei' }, { status: 500 });
+    return NextResponse.json({ error: errorMessage }, { status: 500 });
   }
 }
 
