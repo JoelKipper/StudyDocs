@@ -43,6 +43,11 @@ export default function Home() {
     }
   }
 
+  // Refresh user data (e.g., after email verification)
+  async function refreshUser() {
+    await checkAuth();
+  }
+
   async function handleLogin(userData: any) {
     setUser(userData);
     

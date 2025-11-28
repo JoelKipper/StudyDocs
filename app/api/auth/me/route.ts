@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getCurrentUser, isIpBlocked } from '@/lib/auth';
+import { supabaseServer } from '@/lib/supabase-server';
 
 function getClientIp(request: NextRequest): string {
   const forwarded = request.headers.get('x-forwarded-for');
@@ -29,6 +30,19 @@ export async function GET(request: NextRequest) {
   if (!user) {
     return NextResponse.json({ error: 'Nicht authentifiziert' }, { status: 401 });
   }
-  return NextResponse.json({ user });
+  
+  // Get email_verified status
+  const { data: userData } = await supabaseServer
+    .from('users')
+    .select('email_verified')
+    .eq('id', user.id)
+    .single();
+  
+  return NextResponse.json({ 
+    user: {
+      ...user,
+      emailVerified: userData?.email_verified || false
+    }
+  });
 }
 

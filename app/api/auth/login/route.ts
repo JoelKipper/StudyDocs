@@ -34,22 +34,34 @@ export async function POST(request: NextRequest) {
     const password = body.password;
     const recaptchaToken = body.recaptchaToken;
     
-    // Verify reCAPTCHA if token is provided
-    if (recaptchaToken && process.env.RECAPTCHA_SECRET_KEY) {
-      const recaptchaResult = await verifyRecaptcha(recaptchaToken, process.env.RECAPTCHA_SECRET_KEY);
-      if (!recaptchaResult.success) {
+    // Check if reCAPTCHA is enabled
+    const enableRecaptcha = await getSystemSettingBoolean('enable_recaptcha', true);
+    
+    // Verify reCAPTCHA if enabled and token is provided
+    if (enableRecaptcha) {
+      if (!recaptchaToken) {
         return NextResponse.json(
-          { error: 'Sicherheitsprüfung fehlgeschlagen. Bitte versuchen Sie es erneut.' },
+          { error: 'Sicherheitsprüfung erforderlich. Bitte versuchen Sie es erneut.' },
           { status: 400 }
         );
       }
-      // Optional: Check score threshold (0.0 = bot, 1.0 = human)
-      // Typically scores above 0.5 are considered human
-      if (recaptchaResult.score !== undefined && recaptchaResult.score < 0.5) {
-        return NextResponse.json(
-          { error: 'Sicherheitsprüfung fehlgeschlagen. Bitte versuchen Sie es erneut.' },
-          { status: 400 }
-        );
+      
+      if (process.env.RECAPTCHA_SECRET_KEY) {
+        const recaptchaResult = await verifyRecaptcha(recaptchaToken, process.env.RECAPTCHA_SECRET_KEY);
+        if (!recaptchaResult.success) {
+          return NextResponse.json(
+            { error: 'Sicherheitsprüfung fehlgeschlagen. Bitte versuchen Sie es erneut.' },
+            { status: 400 }
+          );
+        }
+        // Optional: Check score threshold (0.0 = bot, 1.0 = human)
+        // Typically scores above 0.5 are considered human
+        if (recaptchaResult.score !== undefined && recaptchaResult.score < 0.5) {
+          return NextResponse.json(
+            { error: 'Sicherheitsprüfung fehlgeschlagen. Bitte versuchen Sie es erneut.' },
+            { status: 400 }
+          );
+        }
       }
     }
     

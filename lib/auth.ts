@@ -47,7 +47,7 @@ export async function verifyToken(token: string): Promise<User | null> {
     // Get user from Supabase
     const { data, error } = await supabase
       .from('users')
-      .select('id, email, name, is_admin, is_active')
+      .select('id, email, name, is_admin, is_active, email_verified')
       .eq('id', decoded.userId)
       .single();
     
@@ -117,12 +117,14 @@ export async function registerUser(email: string, password: string, name: string
   const hashedPassword = await hashPassword(password);
   
   // Insert user into Supabase (id will be auto-generated as UUID)
+  // email_verified defaults to false
   const { data, error } = await supabase
     .from('users')
     .insert({
       email: normalizedEmail,
       password: hashedPassword,
       name: name.trim(),
+      email_verified: false, // New users need to verify their email
     })
     .select('id, email, name')
     .single();
@@ -152,7 +154,7 @@ export async function loginUser(
   // Get user from Supabase
   const { data: user, error } = await supabaseServer
     .from('users')
-    .select('id, email, name, password, is_admin, is_active')
+    .select('id, email, name, password, is_admin, is_active, email_verified')
     .eq('email', email.toLowerCase())
     .single();
   
@@ -170,6 +172,13 @@ export async function loginUser(
   if (!isValid) {
     return null;
   }
+  
+  // Note: We don't block login if email is not verified
+  // This allows users to login and see a banner to verify their email
+  // If you want to block login, uncomment the following:
+  // if (!user.email_verified) {
+  //   throw new Error('Bitte verifizieren Sie zuerst Ihre E-Mail-Adresse');
+  // }
   
   // Update last login
   await supabaseServer

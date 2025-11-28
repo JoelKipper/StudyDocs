@@ -1661,6 +1661,55 @@ export default function AdminDashboard({ user, onClose }: AdminDashboardProps) {
                         </label>
                       </div>
                     </div>
+
+                    {/* Enable reCAPTCHA */}
+                    <div className="bg-white dark:bg-gray-800 p-6 rounded-xl border border-gray-200 dark:border-gray-700 shadow-lg">
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-start gap-4">
+                          <div className="w-12 h-12 bg-purple-100 dark:bg-purple-900/30 rounded-lg flex items-center justify-center flex-shrink-0">
+                            <svg className="w-6 h-6 text-purple-600 dark:text-purple-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
+                            </svg>
+                          </div>
+                          <div>
+                            <h4 className="font-semibold text-gray-900 dark:text-white mb-1">
+                              {language === 'de' ? 'reCAPTCHA aktivieren' : 'Enable reCAPTCHA'}
+                            </h4>
+                            <p className="text-sm text-gray-600 dark:text-gray-400">
+                              {language === 'de' 
+                                ? 'Aktiviert Human Captcha (reCAPTCHA v3) für Login und Registrierung' 
+                                : 'Enables Human Captcha (reCAPTCHA v3) for login and registration'}
+                            </p>
+                          </div>
+                        </div>
+                        <label className="relative inline-flex items-center cursor-pointer">
+                          <input
+                            type="checkbox"
+                            checked={systemSettings.enable_recaptcha === 'true'}
+                            onChange={async (e) => {
+                              const newValue = e.target.checked ? 'true' : 'false';
+                              try {
+                                setSettingsLoading(true);
+                                const res = await fetch('/api/admin/settings', {
+                                  method: 'PATCH',
+                                  headers: { 'Content-Type': 'application/json' },
+                                  body: JSON.stringify({ key: 'enable_recaptcha', value: newValue }),
+                                });
+                                if (!res.ok) throw new Error('Failed to update setting');
+                                setSystemSettings({ ...systemSettings, enable_recaptcha: newValue });
+                              } catch (err: any) {
+                                setError(err.message);
+                              } finally {
+                                setSettingsLoading(false);
+                              }
+                            }}
+                            className="sr-only peer"
+                            disabled={settingsLoading}
+                          />
+                          <div className="w-14 h-7 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-300 dark:peer-focus:ring-blue-800 rounded-full peer dark:bg-gray-600 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-6 after:w-6 after:transition-all dark:border-gray-600 peer-checked:bg-blue-600"></div>
+                        </label>
+                      </div>
+                    </div>
                   </div>
                 </div>
               )}

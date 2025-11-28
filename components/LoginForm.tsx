@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useLanguage } from '@/contexts/LanguageContext';
 import { useGoogleReCaptcha } from 'react-google-recaptcha-v3';
 
@@ -18,6 +18,28 @@ export default function LoginForm({ onLogin }: LoginFormProps) {
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
+  const [recaptchaEnabled, setRecaptchaEnabled] = useState(true); // Default to true
+
+  // Check if reCAPTCHA is enabled
+  useEffect(() => {
+    async function checkRecaptchaSetting() {
+      try {
+        const res = await fetch('/api/auth/recaptcha-enabled');
+        if (res.ok) {
+          const data = await res.json();
+          setRecaptchaEnabled(data.enabled === true);
+        } else {
+          // Default to enabled if check fails
+          setRecaptchaEnabled(true);
+        }
+      } catch (err) {
+        console.error('Error checking reCAPTCHA setting:', err);
+        // Default to enabled if check fails
+        setRecaptchaEnabled(true);
+      }
+    }
+    checkRecaptchaSetting();
+  }, []);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -25,9 +47,9 @@ export default function LoginForm({ onLogin }: LoginFormProps) {
     setLoading(true);
 
     try {
-      // Get reCAPTCHA token
+      // Get reCAPTCHA token only if enabled
       let recaptchaToken = '';
-      if (executeRecaptcha) {
+      if (recaptchaEnabled && executeRecaptcha) {
         try {
           recaptchaToken = await executeRecaptcha('login');
         } catch (err) {

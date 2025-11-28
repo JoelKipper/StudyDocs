@@ -19,6 +19,7 @@ import StorageQuota from './StorageQuota';
 import FavoritesList from './FavoritesList';
 import InfoModal from './InfoModal';
 import AdminDashboard from './AdminDashboard';
+import EmailVerificationBanner from './EmailVerificationBanner';
 import { useLanguage } from '@/contexts/LanguageContext';
 
 // Error Boundary for ImageEditor to catch removeChild errors
@@ -101,13 +102,14 @@ type SortField = 'name' | 'size' | 'type' | 'modified';
 type SortDirection = 'asc' | 'desc';
 
 interface FileManagerProps {
-  user: { id: string; name: string; email: string; isAdmin?: boolean };
+  user: { id: string; name: string; email: string; isAdmin?: boolean; emailVerified?: boolean };
   onLogout: () => void;
   initialPath?: string;
   initialFile?: string;
+  onUserUpdate?: () => void;
 }
 
-export default function FileManager({ user, onLogout, initialPath, initialFile: initialFileProp }: FileManagerProps) {
+export default function FileManager({ user, onLogout, initialPath, initialFile: initialFileProp, onUserUpdate }: FileManagerProps) {
   const { t, formatSize, language } = useLanguage();
   const storageKey = `studydocs-path-${user.id}`;
   
@@ -3460,6 +3462,21 @@ export default function FileManager({ user, onLogout, initialPath, initialFile: 
 
   return (
     <div className="h-screen bg-gray-50 dark:bg-gray-900 flex flex-col overflow-hidden">
+      {/* Email Verification Banner */}
+      {!user.emailVerified && (
+        <div className="px-4 pt-4">
+          <EmailVerificationBanner 
+            user={user} 
+            onVerificationSent={async () => {
+              // Refresh user data after verification email is sent
+              if (onUserUpdate) {
+                onUserUpdate();
+              }
+            }}
+          />
+        </div>
+      )}
+
       {/* Header */}
       <header className="bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 shadow-sm">
         <div className="px-4 sm:px-6 lg:px-8 py-3">

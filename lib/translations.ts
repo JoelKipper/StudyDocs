@@ -315,6 +315,8 @@ export const translations = {
     allowRegistrationDesc: 'Ermöglicht neuen Benutzern die Registrierung',
     allowLogin: 'Login erlauben',
     allowLoginDesc: 'Ermöglicht Benutzern sich anzumelden',
+    enableRecaptcha: 'reCAPTCHA aktivieren',
+    enableRecaptchaDesc: 'Aktiviert Human Captcha (reCAPTCHA v3) für Login und Registrierung',
     // Additional Admin Dashboard translations
     userManagement: 'Benutzer-Verwaltung',
     searchByNameOrEmail: 'Suche nach Name oder E-Mail...',
@@ -371,6 +373,15 @@ export const translations = {
     recentActivities: 'Letzte Aktivitäten',
     last10Activities: 'Letzte 10 Aktivitäten',
     noFilesFound: 'Keine Dateien gefunden',
+    
+    // Email Verification
+    emailNotVerified: 'E-Mail-Adresse nicht verifiziert',
+    emailVerificationRequired: 'Bitte verifizieren Sie Ihre E-Mail-Adresse, um alle Funktionen nutzen zu können.',
+    resendVerificationEmail: 'E-Mail erneut senden',
+    verificationEmailSent: 'Verifizierungs-E-Mail wurde gesendet. Bitte prüfen Sie Ihr Postfach.',
+    emailVerified: 'E-Mail-Adresse wurde erfolgreich verifiziert',
+    emailVerificationFailed: 'E-Mail-Verifizierung fehlgeschlagen',
+    verificationTokenInvalid: 'Ungültiger oder abgelaufener Verifizierungs-Token',
   },
   en: {
     // General
@@ -686,6 +697,8 @@ export const translations = {
     allowRegistrationDesc: 'Allows new users to register',
     allowLogin: 'Allow Login',
     allowLoginDesc: 'Allows users to log in',
+    enableRecaptcha: 'Enable reCAPTCHA',
+    enableRecaptchaDesc: 'Enables Human Captcha (reCAPTCHA v3) for login and registration',
     // Additional Admin Dashboard translations
     userManagement: 'User Management',
     searchByNameOrEmail: 'Search by name or email...',
@@ -742,6 +755,15 @@ export const translations = {
     recentActivities: 'Recent Activities',
     last10Activities: 'Last 10 activities',
     noFilesFound: 'No files found',
+    
+    // Email Verification
+    emailNotVerified: 'Email address not verified',
+    emailVerificationRequired: 'Please verify your email address to access all features.',
+    resendVerificationEmail: 'Resend Email',
+    verificationEmailSent: 'Verification email has been sent. Please check your inbox.',
+    emailVerified: 'Email address has been successfully verified',
+    emailVerificationFailed: 'Email verification failed',
+    verificationTokenInvalid: 'Invalid or expired verification token',
   },
 } as const;
 
