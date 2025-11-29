@@ -7,12 +7,12 @@ import { getSystemSettingBoolean } from '@/lib/system-settings';
  */
 export async function GET(request: NextRequest) {
   try {
-    const enableRecaptcha = await getSystemSettingBoolean('enable_recaptcha', true);
+    const enableRecaptcha = await getSystemSettingBoolean('enable_recaptcha', false);
     return NextResponse.json({ enabled: enableRecaptcha });
   } catch (error: any) {
     console.error('Error checking reCAPTCHA setting:', error);
-    // Default to enabled on error
-    return NextResponse.json({ enabled: true });
+    // Default to disabled on error
+    return NextResponse.json({ enabled: false });
   }
 }
 

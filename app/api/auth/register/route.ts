@@ -123,18 +123,12 @@ export async function POST(request: NextRequest) {
     const recaptchaToken = body.recaptchaToken;
     
     // Check if reCAPTCHA is enabled
-    const enableRecaptcha = await getSystemSettingBoolean('enable_recaptcha', true);
+    const enableRecaptcha = await getSystemSettingBoolean('enable_recaptcha', false);
     
     // Verify reCAPTCHA if enabled and token is provided
     if (enableRecaptcha) {
-      if (!recaptchaToken) {
-        return NextResponse.json(
-          { error: 'Sicherheitsprüfung erforderlich. Bitte versuchen Sie es erneut.' },
-          { status: 400 }
-        );
-      }
-      
-      if (process.env.RECAPTCHA_SECRET_KEY) {
+      // If token is provided, verify it
+      if (recaptchaToken && process.env.RECAPTCHA_SECRET_KEY) {
         const recaptchaResult = await verifyRecaptcha(recaptchaToken, process.env.RECAPTCHA_SECRET_KEY);
         if (!recaptchaResult.success) {
           return NextResponse.json(
@@ -150,6 +144,22 @@ export async function POST(request: NextRequest) {
             { status: 400 }
           );
         }
+      } else if (!recaptchaToken) {
+        // Token is missing but reCAPTCHA is enabled
+        // On localhost, we might allow this if reCAPTCHA is not configured for localhost
+        // But in production, we should require it
+        const isLocalhost = request.headers.get('host')?.includes('localhost') || 
+                           request.headers.get('host')?.includes('127.0.0.1');
+        
+        if (!isLocalhost) {
+          // In production, require reCAPTCHA token
+          return NextResponse.json(
+            { error: 'Sicherheitsprüfung erforderlich. Bitte versuchen Sie es erneut.' },
+            { status: 400 }
+          );
+        }
+        // On localhost, allow without token (for development)
+        // This allows testing even if localhost is not registered in reCAPTCHA
       }
     }
     

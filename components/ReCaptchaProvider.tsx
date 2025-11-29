@@ -16,16 +16,27 @@ export default function ReCaptchaProvider({ children }: ReCaptchaProviderProps) 
     return <>{children}</>;
   }
 
+  // Determine language based on browser or default to 'de'
+  const getLanguage = () => {
+    if (typeof window !== 'undefined') {
+      const browserLang = navigator.language || (navigator as any).userLanguage;
+      if (browserLang.startsWith('de')) return 'de';
+      if (browserLang.startsWith('en')) return 'en';
+    }
+    return 'de'; // Default
+  };
+
   return (
     <GoogleReCaptchaProvider
       reCaptchaKey={siteKey}
-      language="de"
+      language={getLanguage()}
       scriptProps={{
         async: false,
         defer: false,
         appendTo: 'head',
         nonce: undefined,
       }}
+      useRecaptchaNet={false} // Use www.google.com instead of www.recaptcha.net
     >
       {children}
     </GoogleReCaptchaProvider>

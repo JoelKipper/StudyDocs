@@ -19,7 +19,6 @@ import StorageQuota from './StorageQuota';
 import FavoritesList from './FavoritesList';
 import InfoModal from './InfoModal';
 import AdminDashboard from './AdminDashboard';
-import EmailVerificationBanner from './EmailVerificationBanner';
 import { useLanguage } from '@/contexts/LanguageContext';
 
 // Error Boundary for ImageEditor to catch removeChild errors
@@ -169,11 +168,11 @@ export default function FileManager({ user, onLogout, initialPath, initialFile: 
   const [newDirectoryName, setNewDirectoryName] = useState('');
   const newDirectoryInputRef = useRef<HTMLInputElement>(null);
   const [pendingRenameDirectory, setPendingRenameDirectory] = useState<string | null>(null);
-  const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' | 'info'; id: number } | null>(null);
+  const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' | 'info' | 'warning'; id: number } | null>(null);
   const toastIdCounter = useRef(0);
   
   // Helper function to show toast with auto-incrementing ID
-  const showToast = useCallback((message: string, type: 'success' | 'error' | 'info' = 'info') => {
+  const showToast = useCallback((message: string, type: 'success' | 'error' | 'info' | 'warning' = 'info') => {
     setToast({ message, type, id: ++toastIdCounter.current });
   }, []);
   
@@ -3460,22 +3459,20 @@ export default function FileManager({ user, onLogout, initialPath, initialFile: 
     }
   }, [currentPath, isMobile]);
 
+  // Show email verification toast when email is not verified
+  const emailVerificationShown = useRef(false);
+  useEffect(() => {
+    if (!user.emailVerified && !emailVerificationShown.current) {
+      emailVerificationShown.current = true;
+      const message = language === 'de' 
+        ? 'E-Mail-Adresse nicht verifiziert. Bitte verifizieren Sie Ihre E-Mail-Adresse, um alle Funktionen nutzen zu können.'
+        : 'Email address not verified. Please verify your email address to access all features.';
+      showToast(message, 'warning');
+    }
+  }, [user.emailVerified, language, showToast]);
+
   return (
     <div className="h-screen bg-gray-50 dark:bg-gray-900 flex flex-col overflow-hidden">
-      {/* Email Verification Banner */}
-      {!user.emailVerified && (
-        <div className="px-4 pt-4">
-          <EmailVerificationBanner 
-            user={user} 
-            onVerificationSent={async () => {
-              // Refresh user data after verification email is sent
-              if (onUserUpdate) {
-                onUserUpdate();
-              }
-            }}
-          />
-        </div>
-      )}
 
       {/* Header */}
       <header className="bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 shadow-sm">
@@ -5425,7 +5422,7 @@ export default function FileManager({ user, onLogout, initialPath, initialFile: 
           message={toast.message}
           type={toast.type}
           onClose={() => setToast(null)}
-          duration={2000}
+          duration={toast.type === 'info' || toast.type === 'warning' ? 5000 : 2000}
         />
       )}
     </div>

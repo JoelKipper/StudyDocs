@@ -44,13 +44,23 @@ reCAPTCHA v3 sollte jetzt funktionieren!
 
 ### 3. Domains in Google reCAPTCHA konfigurieren
 
-Stellen Sie sicher, dass folgende Domains in Ihrem Google reCAPTCHA v3 Dashboard registriert sind:
+**WICHTIG:** Fügen Sie localhost zu Ihren erlaubten Domains hinzu:
 
-- ✅ `localhost` (für lokale Entwicklung)
-- ✅ `study-docs-beryl.vercel.app` (für Vercel Deployment)
-- ✅ Ihre eigene Domain (falls vorhanden)
+1. Gehen Sie zu: https://www.google.com/recaptcha/admin
+2. Wählen Sie Ihre reCAPTCHA v3 Site aus
+3. Klicken Sie auf **Settings** (Einstellungen)
+4. Scrollen Sie zu **Domains**
+5. Fügen Sie folgende Domains hinzu:
+   - ✅ `localhost` (für lokale Entwicklung)
+   - ✅ `127.0.0.1` (alternative localhost-Adresse)
+   - ✅ `study-docs-beryl.vercel.app` (für Vercel Deployment)
+   - ✅ Ihre eigene Domain (falls vorhanden)
+6. Klicken Sie auf **Save** (Speichern)
 
-**Hinweis:** Wenn eine Domain nicht registriert ist, funktioniert reCAPTCHA auf dieser Domain nicht.
+**Hinweis:** 
+- Ohne `localhost` in den erlaubten Domains funktioniert reCAPTCHA auf localhost **nicht**
+- Es kann bis zu 5 Minuten dauern, bis Änderungen wirksam werden
+- Für lokale Entwicklung ist `localhost` ausreichend
 
 ## ✅ Funktionsweise
 

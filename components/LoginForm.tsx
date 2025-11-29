@@ -18,7 +18,7 @@ export default function LoginForm({ onLogin }: LoginFormProps) {
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
-  const [recaptchaEnabled, setRecaptchaEnabled] = useState(true); // Default to true
+  const [recaptchaEnabled, setRecaptchaEnabled] = useState(false); // Default to false
 
   // Check if reCAPTCHA is enabled
   useEffect(() => {
@@ -29,13 +29,13 @@ export default function LoginForm({ onLogin }: LoginFormProps) {
           const data = await res.json();
           setRecaptchaEnabled(data.enabled === true);
         } else {
-          // Default to enabled if check fails
-          setRecaptchaEnabled(true);
+          // Default to disabled if check fails
+          setRecaptchaEnabled(false);
         }
       } catch (err) {
         console.error('Error checking reCAPTCHA setting:', err);
-        // Default to enabled if check fails
-        setRecaptchaEnabled(true);
+        // Default to disabled if check fails
+        setRecaptchaEnabled(false);
       }
     }
     checkRecaptchaSetting();
@@ -51,14 +51,30 @@ export default function LoginForm({ onLogin }: LoginFormProps) {
       let recaptchaToken = '';
       if (recaptchaEnabled && executeRecaptcha) {
         try {
+          // Try to execute reCAPTCHA
+          // This will work on localhost if localhost is registered in Google reCAPTCHA dashboard
           recaptchaToken = await executeRecaptcha('login');
-        } catch (err) {
+        } catch (err: any) {
           console.error('reCAPTCHA error:', err);
-          setError(language === 'de' 
-            ? 'Sicherheitsprüfung fehlgeschlagen. Bitte versuchen Sie es erneut.' 
-            : 'Security check failed. Please try again.');
-          setLoading(false);
-          return;
+          
+          // Check if we're on localhost and reCAPTCHA failed
+          const isLocalhost = typeof window !== 'undefined' && 
+            (window.location.hostname === 'localhost' || 
+             window.location.hostname === '127.0.0.1');
+          
+          if (isLocalhost) {
+            // On localhost, if reCAPTCHA fails, it might not be configured for localhost
+            // Allow the request to proceed without token - server will handle it
+            console.warn('reCAPTCHA failed on localhost. Make sure localhost is registered in Google reCAPTCHA dashboard.');
+            // Continue without token - server will check if reCAPTCHA is required
+          } else {
+            // On production, reCAPTCHA is required
+            setError(language === 'de' 
+              ? 'Sicherheitsprüfung fehlgeschlagen. Bitte versuchen Sie es erneut.' 
+              : 'Security check failed. Please try again.');
+            setLoading(false);
+            return;
+          }
         }
       }
 
