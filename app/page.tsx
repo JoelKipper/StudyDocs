@@ -73,7 +73,13 @@ export default function Home() {
   }
 
   if (!user) {
-    return <LoginForm onLogin={handleLogin} />;
+    // Redirect to login page if not authenticated
+    router.push('/login');
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <div className="text-lg">Weiterleitung...</div>
+      </div>
+    );
   }
 
   return <FileManager user={user} onLogout={handleLogout} initialPath={initialPath} initialFile={initialFile} />;

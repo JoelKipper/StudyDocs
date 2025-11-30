@@ -1,17 +1,20 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import { useRouter } from 'next/navigation';
 import { useLanguage } from '@/contexts/LanguageContext';
 import { useGoogleReCaptcha } from 'react-google-recaptcha-v3';
 
 interface LoginFormProps {
   onLogin: (user: any) => void;
+  isLoginMode?: boolean; // If true, show login; if false, show register
 }
 
-export default function LoginForm({ onLogin }: LoginFormProps) {
+export default function LoginForm({ onLogin, isLoginMode = true }: LoginFormProps) {
   const { language } = useLanguage();
+  const router = useRouter();
   const { executeRecaptcha } = useGoogleReCaptcha();
-  const [isLogin, setIsLogin] = useState(true);
+  const [isLogin, setIsLogin] = useState(isLoginMode);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [name, setName] = useState('');
@@ -40,6 +43,11 @@ export default function LoginForm({ onLogin }: LoginFormProps) {
     }
     checkRecaptchaSetting();
   }, []);
+
+  // Update isLogin when isLoginMode prop changes
+  useEffect(() => {
+    setIsLogin(isLoginMode);
+  }, [isLoginMode]);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -228,10 +236,25 @@ export default function LoginForm({ onLogin }: LoginFormProps) {
           </button>
         </form>
 
-        <div className="mt-6 text-center">
+        <div className="mt-6 space-y-3 text-center">
+          {isLogin && (
+            <div>
+              <button
+                type="button"
+                onClick={() => router.push('/forgot-password')}
+                className="text-blue-600 hover:text-blue-700 dark:text-blue-400 dark:hover:text-blue-300 text-sm font-medium transition-colors duration-200"
+              >
+                {language === 'de' ? 'Passwort vergessen?' : 'Forgot password?'}
+              </button>
+            </div>
+          )}
           <button
             onClick={() => {
-              setIsLogin(!isLogin);
+              if (isLogin) {
+                router.push('/register');
+              } else {
+                router.push('/login');
+              }
               setError('');
             }}
             className="text-blue-600 hover:text-blue-700 dark:text-blue-400 dark:hover:text-blue-300 text-sm font-medium transition-colors duration-200"

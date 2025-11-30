@@ -382,6 +382,17 @@ export const translations = {
     emailVerified: 'E-Mail-Adresse wurde erfolgreich verifiziert',
     emailVerificationFailed: 'E-Mail-Verifizierung fehlgeschlagen',
     verificationTokenInvalid: 'Ungültiger oder abgelaufener Verifizierungs-Token',
+    
+    // Password Reset
+    forgotPassword: 'Passwort vergessen?',
+    resetPassword: 'Passwort zurücksetzen',
+    resetPasswordTitle: 'Passwort zurücksetzen',
+    resetPasswordDescription: 'Geben Sie Ihre E-Mail-Adresse ein. Wir senden Ihnen einen Link zum Zurücksetzen Ihres Passworts.',
+    sendResetLink: 'Link senden',
+    passwordResetSuccess: 'Passwort wurde erfolgreich zurückgesetzt',
+    passwordResetError: 'Fehler beim Zurücksetzen des Passworts',
+    invalidResetToken: 'Ungültiger oder abgelaufener Reset-Link',
+    resetLinkSent: 'Falls ein Konto mit dieser E-Mail existiert, wurde ein Reset-Link gesendet.',
   },
   en: {
     // General
@@ -764,6 +775,17 @@ export const translations = {
     emailVerified: 'Email address has been successfully verified',
     emailVerificationFailed: 'Email verification failed',
     verificationTokenInvalid: 'Invalid or expired verification token',
+    
+    // Password Reset
+    forgotPassword: 'Forgot password?',
+    resetPassword: 'Reset Password',
+    resetPasswordTitle: 'Reset Password',
+    resetPasswordDescription: 'Enter your email address. We will send you a link to reset your password.',
+    sendResetLink: 'Send Link',
+    passwordResetSuccess: 'Password has been successfully reset',
+    passwordResetError: 'Error resetting password',
+    invalidResetToken: 'Invalid or expired reset link',
+    resetLinkSent: 'If an account with this email exists, a reset link has been sent.',
   },
 } as const;
 

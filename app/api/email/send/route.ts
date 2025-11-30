@@ -1,17 +1,26 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { supabaseServer } from '@/lib/supabase-server';
+import nodemailer from 'nodemailer';
 
 /**
- * Send email using Supabase's built-in email service
+ * Send email using nodemailer with SMTP
  * 
- * NOTE: Supabase's built-in email service has limitations:
- * - Only works for development/testing
- * - Limited to project members (users in your Supabase organization)
- * - Has rate limits
- * - Not guaranteed for production use
+ * This uses the same SMTP settings configured in Supabase Dashboard.
+ * IMPORTANT: Copy the SMTP settings from Supabase Dashboard to Environment Variables:
+ * - Supabase Dashboard → Settings → Auth → SMTP Settings
+ * - Copy: SMTP Host, Port, User, Password, Sender Email, Sender Name
+ * - Paste into Environment Variables (see docs/EMAIL_SETUP.md)
  * 
- * For production, you should configure custom SMTP in Supabase Dashboard:
- * Settings → Auth → SMTP Settings
+ * Configuration:
+ * - In development: Logs emails to console if SMTP not configured
+ * - In production: Sends emails via SMTP using Supabase-configured settings
+ * 
+ * Environment Variables (use same values as in Supabase Dashboard):
+ * - SMTP_HOST: SMTP server host (from Supabase Dashboard)
+ * - SMTP_PORT: SMTP port (from Supabase Dashboard)
+ * - SMTP_USER: SMTP username/email (from Supabase Dashboard)
+ * - SMTP_PASSWORD: SMTP password (from Supabase Dashboard)
+ * - SMTP_FROM: Sender email address (from Supabase Dashboard)
+ * - SMTP_FROM_NAME: Sender name (from Supabase Dashboard, optional, defaults to "StudyDocs")
  */
 export async function POST(request: NextRequest) {
   try {
@@ -25,68 +34,78 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Try to use Supabase's auth.admin API to send email
-    // This uses Supabase's built-in email service (if configured)
-    // or the custom SMTP configured in Supabase Dashboard
-    
-    try {
-      // Use Supabase Admin API to send email
-      // This requires the service role key and uses Supabase's email infrastructure
-      const { data, error } = await supabaseServer.auth.admin.generateLink({
-        type: 'invite',
-        email: to,
-      });
-
-      // Note: Supabase's generateLink is for auth flows, not custom emails
-      // For custom emails, we need to use Supabase Edge Functions or
-      // configure SMTP in Supabase Dashboard
+    // In development, log email to console
+    if (process.env.NODE_ENV === 'development' || !process.env.SMTP_HOST) {
+      console.log('📧 Email (Development Mode / SMTP not configured):');
+      console.log('To:', to);
+      console.log('Subject:', subject);
+      console.log('---');
+      console.log('HTML Content:');
+      console.log(html);
+      console.log('---');
       
-      // For now, we'll log the email in development
-      // In production with Supabase SMTP configured, this would work differently
-      
-      if (process.env.NODE_ENV === 'development') {
-        console.log('📧 Email would be sent (Development Mode):');
-        console.log('To:', to);
-        console.log('Subject:', subject);
-        console.log('---');
-        console.log('HTML Content:', html);
-        console.log('---');
-        console.log('⚠️  In production, configure SMTP in Supabase Dashboard:');
-        console.log('   Settings → Auth → SMTP Settings');
-        
-        return NextResponse.json({ 
-          success: true,
-          message: 'Email logged (development mode). Configure SMTP in Supabase Dashboard for production.',
-          development: true
-        });
-      } else {
-        // In production, we need SMTP configured in Supabase
-        return NextResponse.json(
-          { 
-            error: 'Email service not configured. Please configure SMTP in Supabase Dashboard (Settings → Auth → SMTP Settings)',
-            hint: 'Supabase built-in email service is limited. For production, configure custom SMTP.'
-          },
-          { status: 500 }
-        );
+      if (!process.env.SMTP_HOST) {
+        console.log('⚠️  To send real emails, copy SMTP settings from Supabase Dashboard:');
+        console.log('   1. Go to Supabase Dashboard → Settings → Auth → SMTP Settings');
+        console.log('   2. Copy the SMTP settings to Environment Variables:');
+        console.log('      SMTP_HOST, SMTP_PORT, SMTP_USER, SMTP_PASSWORD, SMTP_FROM, SMTP_FROM_NAME');
+        console.log('   3. See docs/EMAIL_SETUP.md for detailed instructions');
       }
-    } catch (supabaseError: any) {
-      console.error('Supabase email error:', supabaseError);
       
-      // Fallback: Log email details
-      console.log('📧 Email details:', { to, subject });
-      
+      return NextResponse.json({ 
+        success: true,
+        message: process.env.NODE_ENV === 'development' 
+          ? 'Email logged to console (development mode)'
+          : 'Email logged. Configure SMTP environment variables to send real emails.',
+        development: true
+      });
+    }
+
+    // In production with SMTP configured, send real email
+    // Use the same SMTP settings as configured in Supabase Dashboard
+    if (!process.env.SMTP_HOST || !process.env.SMTP_USER || !process.env.SMTP_PASSWORD || !process.env.SMTP_FROM) {
       return NextResponse.json(
         { 
-          error: 'Failed to send email via Supabase. Please configure SMTP in Supabase Dashboard.',
-          details: process.env.NODE_ENV === 'development' ? supabaseError.message : undefined
+          error: 'SMTP not configured. Please copy SMTP settings from Supabase Dashboard to Environment Variables. See docs/EMAIL_SETUP.md for instructions.',
+          hint: 'Go to Supabase Dashboard → Settings → Auth → SMTP Settings and copy the values to Environment Variables'
         },
         { status: 500 }
       );
     }
+
+    // Create transporter
+    const transporter = nodemailer.createTransport({
+      host: process.env.SMTP_HOST,
+      port: parseInt(process.env.SMTP_PORT || '587', 10),
+      secure: process.env.SMTP_PORT === '465', // true for 465, false for other ports
+      auth: {
+        user: process.env.SMTP_USER,
+        pass: process.env.SMTP_PASSWORD,
+      },
+    });
+
+    // Send email
+    const info = await transporter.sendMail({
+      from: `"${process.env.SMTP_FROM_NAME || 'StudyDocs'}" <${process.env.SMTP_FROM}>`,
+      to,
+      subject,
+      html,
+    });
+
+    console.log('📧 Email sent successfully:', info.messageId);
+
+    return NextResponse.json({ 
+      success: true,
+      message: 'Email sent successfully',
+      messageId: info.messageId
+    });
   } catch (error: any) {
     console.error('Error sending email:', error);
     return NextResponse.json(
-      { error: 'Failed to send email' },
+      { 
+        error: 'Failed to send email',
+        details: process.env.NODE_ENV === 'development' ? error.message : undefined
+      },
       { status: 500 }
     );
   }
