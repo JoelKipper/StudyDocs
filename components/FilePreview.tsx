@@ -5,6 +5,7 @@ import { useLanguage } from '@/contexts/LanguageContext';
 import ShareModal from './ShareModal';
 import PasswordModal from './PasswordModal';
 import AlertModal from './AlertModal';
+import Tooltip from './Tooltip';
 import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
 import { vscDarkPlus, vs } from 'react-syntax-highlighter/dist/esm/styles/prism';
 
@@ -232,113 +233,123 @@ export default function FilePreview({ file, onClose, verifiedPassword, onFileUpd
         </div>
         <div className="flex items-center gap-1">
             {file.isPasswordProtected && (
-              <button
-                onClick={async () => {
-                  // Try to remove password protection directly without password modal
-                  // If user is owner, it will work; otherwise, show password modal
-                  try {
-                    const res = await fetch('/api/files/password', {
-                      method: 'POST',
-                      headers: { 'Content-Type': 'application/json' },
-                      body: JSON.stringify({
-                        path: file.path,
-                        password: '', // Empty - will work if user is owner
-                        action: 'remove',
-                      }),
-                    });
+              <Tooltip content={language === 'de' ? 'Passwort-Schutz entfernen' : 'Remove Password Protection'}>
+                <button
+                  onClick={async () => {
+                    // Try to remove password protection directly without password modal
+                    // If user is owner, it will work; otherwise, show password modal
+                    try {
+                      const res = await fetch('/api/files/password', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                          path: file.path,
+                          password: '', // Empty - will work if user is owner
+                          action: 'remove',
+                        }),
+                      });
 
-                    const data = await res.json();
+                      const data = await res.json();
 
-                    if (!res.ok) {
-                      // If it fails, user is not owner or needs password - show password modal
-                      if (data.error && (data.error.includes('Passwort') || data.error.includes('password'))) {
-                        setPasswordModal({
-                          isOpen: true,
-                          mode: 'remove',
-                        });
-                      } else {
-                        setAlertModal({
-                          isOpen: true,
-                          title: language === 'de' ? 'Fehler' : 'Error',
-                          message: data.error || (language === 'de' ? 'Fehler beim Entfernen des Passworts' : 'Error removing password'),
-                          type: 'error',
+                      if (!res.ok) {
+                        // If it fails, user is not owner or needs password - show password modal
+                        if (data.error && (data.error.includes('Passwort') || data.error.includes('password'))) {
+                          setPasswordModal({
+                            isOpen: true,
+                            mode: 'remove',
+                          });
+                        } else {
+                          setAlertModal({
+                            isOpen: true,
+                            title: language === 'de' ? 'Fehler' : 'Error',
+                            message: data.error || (language === 'de' ? 'Fehler beim Entfernen des Passworts' : 'Error removing password'),
+                            type: 'error',
+                          });
+                        }
+                        return;
+                      }
+
+                      // Success - update the file state without reloading
+                      if (file && onFileUpdate) {
+                        onFileUpdate({
+                          ...file,
+                          isPasswordProtected: false,
                         });
                       }
-                      return;
-                    }
-
-                    // Success - update the file state without reloading
-                    if (file && onFileUpdate) {
-                      onFileUpdate({
-                        ...file,
-                        isPasswordProtected: false,
+                    } catch (error: any) {
+                      // On error, show password modal as fallback
+                      setPasswordModal({
+                        isOpen: true,
+                        mode: 'remove',
                       });
                     }
-                  } catch (error: any) {
-                    // On error, show password modal as fallback
-                    setPasswordModal({
-                      isOpen: true,
-                      mode: 'remove',
-                    });
-                  }
-                }}
-                className="p-1.5 text-gray-500 hover:text-yellow-600 dark:text-gray-400 dark:hover:text-yellow-400 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors"
-                title={language === 'de' ? 'Passwort-Schutz entfernen' : 'Remove Password Protection'}
-              >
-                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 9V7a4 4 0 118 0v2" />
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 13h12a2 2 0 012 2v4a2 2 0 01-2 2H6a2 2 0 01-2-2v-4a2 2 0 012-2z" />
-                </svg>
-              </button>
+                  }}
+                  className="p-1.5 text-gray-500 hover:text-yellow-600 dark:text-gray-400 dark:hover:text-yellow-400 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors"
+                  aria-label={language === 'de' ? 'Passwort-Schutz entfernen' : 'Remove Password Protection'}
+                >
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 9V7a4 4 0 118 0v2" />
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 13h12a2 2 0 012 2v4a2 2 0 01-2 2H6a2 2 0 01-2-2v-4a2 2 0 012-2z" />
+                  </svg>
+                </button>
+              </Tooltip>
             )}
-            <button
-              onClick={() => {
-                setShareModal({
-                  isOpen: true,
-                  itemName: file.name,
-                  itemPath: file.path,
-                  itemType: file.type,
-                });
-              }}
-              className="p-1.5 text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors"
-              title={t('share')}
-            >
-              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8.684 13.342C8.886 12.938 9 12.482 9 12c0-.482-.114-.938-.316-1.342m0 2.684a3 3 0 110-2.684m0 2.684l6.632 3.316m-6.632-6l6.632-3.316m0 0a3 3 0 105.367-2.684 3 3 0 00-5.367 2.684zm0 9.316a3 3 0 105.368 2.684 3 3 0 00-5.368-2.684z" />
-              </svg>
-            </button>
-            {onEdit && file.type === 'file' && (
+            <Tooltip content={t('share')}>
               <button
                 onClick={() => {
-                  onEdit();
+                  setShareModal({
+                    isOpen: true,
+                    itemName: file.name,
+                    itemPath: file.path,
+                    itemType: file.type,
+                  });
                 }}
-                className="p-1.5 text-gray-500 hover:text-blue-600 dark:text-gray-400 dark:hover:text-blue-400 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors"
-                title={language === 'de' ? 'Bearbeiten' : 'Edit'}
+                className="p-1.5 text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors"
+                aria-label={t('share')}
               >
                 <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8.684 13.342C8.886 12.938 9 12.482 9 12c0-.482-.114-.938-.316-1.342m0 2.684a3 3 0 110-2.684m0 2.684l6.632 3.316m-6.632-6l6.632-3.316m0 0a3 3 0 105.367-2.684 3 3 0 00-5.367 2.684zm0 9.316a3 3 0 105.368 2.684 3 3 0 00-5.368-2.684z" />
                 </svg>
               </button>
+            </Tooltip>
+            {onEdit && file.type === 'file' && (
+              <Tooltip content={language === 'de' ? 'Bearbeiten' : 'Edit'}>
+                <button
+                  onClick={() => {
+                    onEdit();
+                  }}
+                  className="p-1.5 text-gray-500 hover:text-blue-600 dark:text-gray-400 dark:hover:text-blue-400 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors"
+                  aria-label={language === 'de' ? 'Bearbeiten' : 'Edit'}
+                >
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                  </svg>
+                </button>
+              </Tooltip>
             )}
-            <a
-              href={`/api/files/download?path=${encodeURIComponent(file.path)}`}
-              download={file.name}
-              className="p-1.5 text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors"
-              title={t('download')}
-            >
-              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
-              </svg>
-            </a>
-            <button
-              onClick={onClose}
-              className="p-1.5 text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors"
-              title={t('close')}
-            >
-              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-              </svg>
-            </button>
+            <Tooltip content={t('download')}>
+              <a
+                href={`/api/files/download?path=${encodeURIComponent(file.path)}`}
+                download={file.name}
+                className="p-1.5 text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors"
+                aria-label={t('download')}
+              >
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+                </svg>
+              </a>
+            </Tooltip>
+            <Tooltip content={t('close')}>
+              <button
+                onClick={onClose}
+                className="p-1.5 text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors"
+                aria-label={t('close')}
+              >
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </Tooltip>
         </div>
       </div>
 

@@ -2,6 +2,7 @@
 
 import { useState, useRef } from 'react';
 import ReplaceModal from './ReplaceModal';
+import Tooltip from './Tooltip';
 
 interface FileUploadProps {
   currentPath: string;
@@ -193,53 +194,59 @@ export default function FileUpload({ currentPath, onUploaded, onFolderUpload, ch
           id={`folder-upload-${currentPath}`}
         />
         {children ? (
-          <label
-            htmlFor={`file-upload-${currentPath}`}
-            className={`cursor-pointer ${uploading ? 'opacity-50 cursor-not-allowed' : ''}`}
-            title="Datei hochladen"
-            onContextMenu={(e) => {
-              e.preventDefault();
-              folderInputRef.current?.click();
-            }}
-          >
-            {children}
-          </label>
-        ) : (
-          <div className="flex items-center gap-1">
+          <Tooltip content="Datei hochladen">
             <label
               htmlFor={`file-upload-${currentPath}`}
-              className={`inline-flex items-center justify-center p-2 rounded-lg transition-colors cursor-pointer ${
-                uploading
-                  ? 'text-gray-400 cursor-not-allowed'
-                  : 'text-gray-600 hover:text-gray-900 dark:text-gray-400 dark:hover:text-gray-100 hover:bg-gray-100 dark:hover:bg-gray-700'
-              }`}
-              title="Datei hochladen"
+              className={`cursor-pointer ${uploading ? 'opacity-50 cursor-not-allowed' : ''}`}
+              aria-label="Datei hochladen"
+              onContextMenu={(e) => {
+                e.preventDefault();
+                folderInputRef.current?.click();
+              }}
             >
-              {uploading ? (
-                <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-gray-400"></div>
-              ) : (
-                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
-                </svg>
-              )}
+              {children}
             </label>
-            <label
-              htmlFor={`folder-upload-${currentPath}`}
-              className={`inline-flex items-center justify-center p-2 rounded-lg transition-colors cursor-pointer ${
-                uploading
-                  ? 'text-gray-400 cursor-not-allowed'
-                  : 'text-gray-600 hover:text-gray-900 dark:text-gray-400 dark:hover:text-gray-100 hover:bg-gray-100 dark:hover:bg-gray-700'
-              }`}
-              title="Ordner hochladen (mit allen Dateien im Ordner)"
-            >
-              {uploading ? (
-                <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-gray-400"></div>
-              ) : (
-                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z" />
-                </svg>
-              )}
-            </label>
+          </Tooltip>
+        ) : (
+          <div className="flex items-center gap-1">
+            <Tooltip content="Datei hochladen" disabled={uploading}>
+              <label
+                htmlFor={`file-upload-${currentPath}`}
+                className={`inline-flex items-center justify-center p-2 rounded-lg transition-colors cursor-pointer ${
+                  uploading
+                    ? 'text-gray-400 cursor-not-allowed'
+                    : 'text-gray-600 hover:text-gray-900 dark:text-gray-400 dark:hover:text-gray-100 hover:bg-gray-100 dark:hover:bg-gray-700'
+                }`}
+                aria-label="Datei hochladen"
+              >
+                {uploading ? (
+                  <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-gray-400"></div>
+                ) : (
+                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
+                  </svg>
+                )}
+              </label>
+            </Tooltip>
+            <Tooltip content="Ordner hochladen (mit allen Dateien im Ordner)" disabled={uploading}>
+              <label
+                htmlFor={`folder-upload-${currentPath}`}
+                className={`inline-flex items-center justify-center p-2 rounded-lg transition-colors cursor-pointer ${
+                  uploading
+                    ? 'text-gray-400 cursor-not-allowed'
+                    : 'text-gray-600 hover:text-gray-900 dark:text-gray-400 dark:hover:text-gray-100 hover:bg-gray-100 dark:hover:bg-gray-700'
+                }`}
+                aria-label="Ordner hochladen"
+              >
+                {uploading ? (
+                  <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-gray-400"></div>
+                ) : (
+                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z" />
+                  </svg>
+                )}
+              </label>
+            </Tooltip>
           </div>
         )}
         {uploading && progress > 0 && (

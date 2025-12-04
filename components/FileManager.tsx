@@ -19,6 +19,7 @@ import StorageQuota from './StorageQuota';
 import FavoritesList from './FavoritesList';
 import InfoModal from './InfoModal';
 import AdminDashboard from './AdminDashboard';
+import Tooltip from './Tooltip';
 import { useLanguage } from '@/contexts/LanguageContext';
 
 // Error Boundary for ImageEditor to catch removeChild errors
@@ -3495,35 +3496,41 @@ export default function FileManager({ user, onLogout, initialPath, initialFile: 
             </div>
             <div className="flex items-center gap-2">
               {user.isAdmin && (
+                <Tooltip content={language === 'de' ? 'Admin Dashboard' : 'Admin Dashboard'}>
+                  <button
+                    onClick={() => setAdminDashboardOpen(true)}
+                    className="p-2 text-red-500 hover:text-red-700 dark:text-red-400 dark:hover:text-red-200 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg transition-colors"
+                    aria-label={language === 'de' ? 'Admin Dashboard' : 'Admin Dashboard'}
+                  >
+                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
+                    </svg>
+                  </button>
+                </Tooltip>
+              )}
+              <Tooltip content={t('settings')}>
                 <button
-                  onClick={() => setAdminDashboardOpen(true)}
-                  className="p-2 text-red-500 hover:text-red-700 dark:text-red-400 dark:hover:text-red-200 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg transition-colors"
-                  title={language === 'de' ? 'Admin Dashboard' : 'Admin Dashboard'}
+                  onClick={() => setSettingsOpen(true)}
+                  className="p-2 text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors"
+                  aria-label={t('settings')}
                 >
                   <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
                   </svg>
                 </button>
-              )}
-              <button
-                onClick={() => setSettingsOpen(true)}
-                className="p-2 text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors"
-                title={t('settings')}
-              >
-                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-                </svg>
-              </button>
-              <button
-                onClick={onLogout}
-                className="p-2 text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors"
-                title={t('logout')}
-              >
-                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
-                </svg>
-              </button>
+              </Tooltip>
+              <Tooltip content={t('logout')}>
+                <button
+                  onClick={onLogout}
+                  className="p-2 text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors"
+                  aria-label={t('logout')}
+                >
+                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
+                  </svg>
+                </button>
+              </Tooltip>
             </div>
           </div>
         </div>
@@ -3576,20 +3583,22 @@ export default function FileManager({ user, onLogout, initialPath, initialFile: 
                   )}
                 </button>
                 {/* Collapse Button - Desktop only */}
-                <button
-                  onClick={() => setSidebarCollapsed(!sidebarCollapsed)}
-                  className="px-2 md:px-3 py-2 text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors flex-shrink-0"
-                  title={t('hideSidebar')}
-                >
-                  <svg 
-                    className="w-5 h-5 transition-transform duration-300"
-                    fill="none" 
-                    stroke="currentColor" 
-                    viewBox="0 0 24 24"
+                <Tooltip content={t('hideSidebar')}>
+                  <button
+                    onClick={() => setSidebarCollapsed(!sidebarCollapsed)}
+                    className="px-2 md:px-3 py-2 text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors flex-shrink-0"
+                    aria-label={t('hideSidebar')}
                   >
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-                  </svg>
-                </button>
+                    <svg 
+                      className="w-5 h-5 transition-transform duration-300"
+                      fill="none" 
+                      stroke="currentColor" 
+                      viewBox="0 0 24 24"
+                    >
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                    </svg>
+                  </button>
+                </Tooltip>
               </div>
 
               <div className="flex-1 overflow-y-auto custom-scrollbar p-2">
@@ -4161,40 +4170,46 @@ export default function FileManager({ user, onLogout, initialPath, initialFile: 
               <div className="flex items-center gap-1 md:gap-2 flex-shrink-0">
                 {/* Sidebar Expand Button when collapsed - Desktop only */}
                 {!isMobile && sidebarCollapsed && (
-                  <button
-                    onClick={() => setSidebarCollapsed(false)}
-                    className="p-1.5 hover:bg-gray-200 dark:hover:bg-gray-700 rounded transition-colors border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800"
-                    title={t('showSidebar')}
-                  >
-                    <svg 
-                      className="w-5 h-5 text-blue-600 dark:text-blue-400"
-                      fill="none" 
-                      stroke="currentColor" 
-                      viewBox="0 0 24 24"
+                  <Tooltip content={t('showSidebar')}>
+                    <button
+                      onClick={() => setSidebarCollapsed(false)}
+                      className="p-1.5 hover:bg-gray-200 dark:hover:bg-gray-700 rounded transition-colors border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800"
+                      aria-label={t('showSidebar')}
                     >
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
+                      <svg 
+                        className="w-5 h-5 text-blue-600 dark:text-blue-400"
+                        fill="none" 
+                        stroke="currentColor" 
+                        viewBox="0 0 24 24"
+                      >
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
+                      </svg>
+                    </button>
+                  </Tooltip>
+                )}
+                <Tooltip content={t('back')} disabled={!currentPath}>
+                  <button
+                    onClick={navigateUp}
+                    disabled={!currentPath}
+                    className="p-1.5 hover:bg-gray-200 dark:hover:bg-gray-700 rounded disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                    aria-label={t('back')}
+                  >
+                    <svg className="w-5 h-5 text-gray-600 dark:text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
                     </svg>
                   </button>
-                )}
-                <button
-                  onClick={navigateUp}
-                  disabled={!currentPath}
-                  className="p-1.5 hover:bg-gray-200 dark:hover:bg-gray-700 rounded disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-                  title={t('back')}
-                >
-                  <svg className="w-5 h-5 text-gray-600 dark:text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
-                  </svg>
-                </button>
-                <button
-                  onClick={handleRefresh}
-                  className="p-1.5 hover:bg-gray-200 dark:hover:bg-gray-700 rounded transition-colors"
-                  title={t('refresh')}
-                >
-                  <svg className="w-5 h-5 text-gray-600 dark:text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-                  </svg>
-                </button>
+                </Tooltip>
+                <Tooltip content={t('refresh')}>
+                  <button
+                    onClick={handleRefresh}
+                    className="p-1.5 hover:bg-gray-200 dark:hover:bg-gray-700 rounded transition-colors"
+                    aria-label={t('refresh')}
+                  >
+                    <svg className="w-5 h-5 text-gray-600 dark:text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                    </svg>
+                  </button>
+                </Tooltip>
                 <div className="hidden md:flex items-center gap-1 text-sm text-gray-600 dark:text-gray-400 px-2 min-w-0">
                   <div className="flex items-center gap-1 min-w-0">
                     <button
@@ -4276,44 +4291,50 @@ export default function FileManager({ user, onLogout, initialPath, initialFile: 
               {/* Actions - Always visible on the right */}
               <div className="flex items-center gap-1.5 flex-shrink-0">
                 {/* Bulk Actions - Always visible, but grayed out when nothing selected */}
-                <button
-                  onClick={handleBulkDownload}
-                  disabled={selectedItems.size === 0}
-                  className={`p-2 rounded-lg transition-all duration-200 ${
-                    selectedItems.size > 0
-                      ? 'text-blue-600 hover:text-blue-700 dark:text-blue-400 dark:hover:text-blue-300 hover:bg-blue-50 dark:hover:bg-blue-900/20'
-                      : 'text-gray-400 dark:text-gray-500 opacity-50 cursor-not-allowed'
-                  }`}
-                  title={selectedItems.size > 0 ? `${selectedItems.size} ${t('itemsDownloaded')}` : t('selectItemsToDownload')}
-                >
-                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
-                  </svg>
-                </button>
-                <button
-                  onClick={openBulkDeleteModal}
-                  disabled={selectedItems.size === 0}
-                  className={`p-2 rounded-lg transition-all duration-200 ${
-                    selectedItems.size > 0
-                      ? 'text-red-600 hover:text-red-700 dark:text-red-400 dark:hover:text-red-300 hover:bg-red-50 dark:hover:bg-red-900/20'
-                      : 'text-gray-400 dark:text-gray-500 opacity-50 cursor-not-allowed'
-                  }`}
-                  title={selectedItems.size > 0 ? `${selectedItems.size} ${t('itemsSelected')} - ${t('delete')}` : t('selectItemsToDelete')}
-                >
-                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                  </svg>
-                </button>
+                <Tooltip content={selectedItems.size > 0 ? `${selectedItems.size} ${t('itemsDownloaded')}` : t('selectItemsToDownload')} disabled={selectedItems.size === 0}>
+                  <button
+                    onClick={handleBulkDownload}
+                    disabled={selectedItems.size === 0}
+                    className={`p-2 rounded-lg transition-all duration-200 ${
+                      selectedItems.size > 0
+                        ? 'text-blue-600 hover:text-blue-700 dark:text-blue-400 dark:hover:text-blue-300 hover:bg-blue-50 dark:hover:bg-blue-900/20'
+                        : 'text-gray-400 dark:text-gray-500 opacity-50 cursor-not-allowed'
+                    }`}
+                    aria-label={selectedItems.size > 0 ? `${selectedItems.size} ${t('itemsDownloaded')}` : t('selectItemsToDownload')}
+                  >
+                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+                    </svg>
+                  </button>
+                </Tooltip>
+                <Tooltip content={selectedItems.size > 0 ? `${selectedItems.size} ${t('itemsSelected')} - ${t('delete')}` : t('selectItemsToDelete')} disabled={selectedItems.size === 0}>
+                  <button
+                    onClick={openBulkDeleteModal}
+                    disabled={selectedItems.size === 0}
+                    className={`p-2 rounded-lg transition-all duration-200 ${
+                      selectedItems.size > 0
+                        ? 'text-red-600 hover:text-red-700 dark:text-red-400 dark:hover:text-red-300 hover:bg-red-50 dark:hover:bg-red-900/20'
+                        : 'text-gray-400 dark:text-gray-500 opacity-50 cursor-not-allowed'
+                    }`}
+                    aria-label={selectedItems.size > 0 ? `${selectedItems.size} ${t('itemsSelected')} - ${t('delete')}` : t('selectItemsToDelete')}
+                  >
+                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                    </svg>
+                  </button>
+                </Tooltip>
                 {/* Always available buttons - Hidden on mobile (moved to bottom nav) */}
-                <button
-                  onClick={handleCreateDirectory}
-                  className="hidden md:flex p-2 text-gray-600 hover:text-gray-900 dark:text-gray-400 dark:hover:text-gray-100 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors"
-                  title={t('createNew')}
-                >
-                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
-                  </svg>
-                </button>
+                <Tooltip content={t('createNew')}>
+                  <button
+                    onClick={handleCreateDirectory}
+                    className="hidden md:flex p-2 text-gray-600 hover:text-gray-900 dark:text-gray-400 dark:hover:text-gray-100 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors"
+                    aria-label={t('createNew')}
+                  >
+                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                    </svg>
+                  </button>
+                </Tooltip>
                 <div className="hidden md:block">
                   <FileUpload
                     currentPath={currentPath}
@@ -4541,32 +4562,36 @@ export default function FileManager({ user, onLogout, initialPath, initialFile: 
                         </div>
                         <div className="flex items-center gap-1 flex-shrink-0">
                           {file.type === 'file' && (
+                            <Tooltip content={t('open')}>
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setPreviewFile(file);
+                                }}
+                                className="p-1.5 text-gray-500 hover:text-blue-600 dark:text-gray-400 dark:hover:text-blue-400 hover:bg-gray-100 dark:hover:bg-gray-700 rounded transition-colors"
+                                aria-label={t('open')}
+                              >
+                                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+                                </svg>
+                              </button>
+                            </Tooltip>
+                          )}
+                          <Tooltip content={t('download')}>
                             <button
                               onClick={(e) => {
                                 e.stopPropagation();
-                                setPreviewFile(file);
+                                handleDownload(file);
                               }}
-                              className="p-1.5 text-gray-500 hover:text-blue-600 dark:text-gray-400 dark:hover:text-blue-400 hover:bg-gray-100 dark:hover:bg-gray-700 rounded transition-colors"
-                              title={t('open')}
+                              className="p-1.5 text-gray-500 hover:text-green-600 dark:text-gray-400 dark:hover:text-green-400 hover:bg-gray-100 dark:hover:bg-gray-700 rounded transition-colors"
+                              aria-label={t('download')}
                             >
                               <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
                               </svg>
                             </button>
-                          )}
-                          <button
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              handleDownload(file);
-                            }}
-                            className="p-1.5 text-gray-500 hover:text-green-600 dark:text-gray-400 dark:hover:text-green-400 hover:bg-gray-100 dark:hover:bg-gray-700 rounded transition-colors"
-                            title={t('download')}
-                          >
-                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
-                            </svg>
-                          </button>
+                          </Tooltip>
                         </div>
                       </div>
                     </div>
@@ -4944,27 +4969,31 @@ export default function FileManager({ user, onLogout, initialPath, initialFile: 
                         </td>
                         <td className="px-4 py-3 text-right" onClick={(e) => e.stopPropagation()}>
                           <div className="flex items-center justify-end gap-2">
-                            <button
-                              onClick={() => handleDownload(file)}
-                              className="p-1.5 text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-900/20 rounded transition-colors"
-                              title={t('download')}
-                            >
-                              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
-                              </svg>
-                            </button>
-                            <button
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                openDeleteModal(file);
-                              }}
-                              className="p-1.5 text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20 rounded transition-colors"
-                              title={t('delete')}
-                            >
-                              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                              </svg>
-                            </button>
+                            <Tooltip content={t('download')}>
+                              <button
+                                onClick={() => handleDownload(file)}
+                                className="p-1.5 text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-900/20 rounded transition-colors"
+                                aria-label={t('download')}
+                              >
+                                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+                                </svg>
+                              </button>
+                            </Tooltip>
+                            <Tooltip content={t('delete')}>
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  openDeleteModal(file);
+                                }}
+                                className="p-1.5 text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20 rounded transition-colors"
+                                aria-label={t('delete')}
+                              >
+                                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                                </svg>
+                              </button>
+                            </Tooltip>
                           </div>
                         </td>
                       </tr>
