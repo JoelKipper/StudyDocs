@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { useLanguage } from '@/contexts/LanguageContext';
 import { useGoogleReCaptcha } from 'react-google-recaptcha-v3';
+import TotpModal from './TotpModal';
 
 interface LoginFormProps {
   onLogin: (user: any) => void;
@@ -22,6 +23,10 @@ export default function LoginForm({ onLogin, isLoginMode = true }: LoginFormProp
   const [loading, setLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   const [recaptchaEnabled, setRecaptchaEnabled] = useState(false); // Default to false
+  const [totpOpen, setTotpOpen] = useState(false);
+  const [totpError, setTotpError] = useState('');
+  const [totpLoading, setTotpLoading] = useState(false);
+  const [pendingUser, setPendingUser] = useState<any>(null);
 
   // Check if reCAPTCHA is enabled
   useEffect(() => {
@@ -104,6 +109,13 @@ export default function LoginForm({ onLogin, isLoginMode = true }: LoginFormProp
         return;
       }
 
+      if (data.requiresTotp) {
+        setPendingUser(data.user);
+        setTotpError('');
+        setTotpOpen(true);
+        return;
+      }
+
       onLogin(data.user);
     } catch (err) {
       setError('Verbindungsfehler');
@@ -112,8 +124,55 @@ export default function LoginForm({ onLogin, isLoginMode = true }: LoginFormProp
     }
   }
 
+  async function handleVerifyTotp(code: string) {
+    setTotpError('');
+    setTotpLoading(true);
+    try {
+      const res = await fetch('/api/auth/totp', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ code }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        setTotpError(data.error || (language === 'de' ? 'Ungültiger Code' : 'Invalid code'));
+        return;
+      }
+
+      // Fetch current user now that auth-token is set
+      const me = await fetch('/api/auth/me');
+      const meData = await me.json().catch(() => ({}));
+      if (me.ok && meData.user) {
+        setTotpOpen(false);
+        onLogin(meData.user);
+        return;
+      }
+
+      // Fallback
+      setTotpOpen(false);
+      if (pendingUser) onLogin(pendingUser);
+    } catch (e: any) {
+      setTotpError(e?.message || (language === 'de' ? 'Verifizierung fehlgeschlagen' : 'Verification failed'));
+    } finally {
+      setTotpLoading(false);
+    }
+  }
+
   return (
     <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-blue-50 via-indigo-50 to-purple-50 dark:from-gray-900 dark:via-gray-800 dark:to-gray-900 p-4">
+      <TotpModal
+        isOpen={totpOpen}
+        onClose={() => {
+          setTotpOpen(false);
+          setTotpError('');
+          setPendingUser(null);
+        }}
+        onVerify={handleVerifyTotp}
+        title={language === 'de' ? 'Zwei‑Faktor‑Code' : 'Two‑factor code'}
+        subtitle={language === 'de' ? 'Gib den 6‑stelligen Code aus Microsoft Authenticator ein.' : 'Enter the 6‑digit code from Microsoft Authenticator.'}
+        error={totpError}
+        loading={totpLoading}
+      />
       <div className="bg-white/80 dark:bg-gray-800/80 backdrop-blur-lg p-8 rounded-2xl shadow-2xl w-full max-w-md border border-gray-200/50 dark:border-gray-700/50 animate-scale-in">
         <div className="text-center mb-8">
           <div className="inline-flex items-center justify-center w-16 h-16 bg-gradient-to-br from-blue-500 to-indigo-600 rounded-2xl shadow-lg mb-4">

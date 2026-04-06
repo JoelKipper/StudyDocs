@@ -5,6 +5,17 @@ import { cookies } from 'next/headers';
 import { checkRateLimit, recordFailedAttempt } from '@/lib/rate-limit';
 import { validateEmail, sanitizeString } from '@/lib/validation';
 import { verifyRecaptcha } from '@/lib/captcha';
+import { shouldUseSecureCookies } from '@/lib/request-security';
+import jwt from 'jsonwebtoken';
+import { isTotpEnabled } from '@/lib/totp';
+
+function getJwtSecret(): string {
+  const secret = process.env.JWT_SECRET || '';
+  if (!secret || secret === 'your-secret-key-change-in-production') {
+    throw new Error('JWT_SECRET environment variable is required and must be set to a secure value');
+  }
+  return secret;
+}
 
 function getClientIp(request: NextRequest): string {
   const forwarded = request.headers.get('x-forwarded-for');
@@ -136,6 +147,24 @@ export async function POST(request: NextRequest) {
       );
     }
     
+    // If TOTP is enabled, do a 2-step login (preauth -> totp verify -> auth-token)
+    if (isTotpEnabled()) {
+      const preauth = jwt.sign(
+        { stage: 'preauth', userId: user.id, email: user.email, iat: Math.floor(Date.now() / 1000) },
+        getJwtSecret(),
+        { expiresIn: '5m' }
+      );
+      const cookieStore = await cookies();
+      cookieStore.delete('auth-token');
+      cookieStore.set('preauth-token', preauth, {
+        httpOnly: true,
+        secure: shouldUseSecureCookies(request),
+        sameSite: 'lax',
+        maxAge: 60 * 5,
+      });
+      return NextResponse.json({ user, success: true, requiresTotp: true });
+    }
+
     // Create new token (session regeneration for security)
     const token = await createToken(user);
     const cookieStore = await cookies();
@@ -146,7 +175,7 @@ export async function POST(request: NextRequest) {
     // Set new token
     cookieStore.set('auth-token', token, {
       httpOnly: true,
-      secure: process.env.NODE_ENV === 'production',
+      secure: shouldUseSecureCookies(request),
       sameSite: 'lax',
       maxAge: 60 * 60 * 24 * 7, // 7 Tage
     });

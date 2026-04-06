@@ -5,11 +5,14 @@ import { cookies } from 'next/headers';
 import { checkRateLimit, recordFailedAttempt } from '@/lib/rate-limit';
 import { validateEmail, validatePassword, validateName, sanitizeString } from '@/lib/validation';
 import { verifyRecaptcha } from '@/lib/captcha';
+import { shouldUseSecureCookies } from '@/lib/request-security';
+import jwt from 'jsonwebtoken';
+import { isTotpEnabled } from '@/lib/totp';
 
 async function getVerificationEmailHtml(name: string, token: string, language: 'de' | 'en'): Promise<string> {
-  const baseUrl = process.env.NEXT_PUBLIC_APP_URL || process.env.VERCEL_URL 
-    ? `https://${process.env.VERCEL_URL}` 
-    : 'http://localhost:3000';
+  const baseUrl =
+    (process.env.NEXT_PUBLIC_APP_URL && process.env.NEXT_PUBLIC_APP_URL.replace(/\/$/, '')) ||
+    (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : 'http://localhost:3000');
   const verificationUrl = `${baseUrl}/verify-email?token=${token}`;
   
   if (language === 'de') {
@@ -262,6 +265,27 @@ export async function POST(request: NextRequest) {
         }
       );
     }
+    if (isTotpEnabled()) {
+      const secret = process.env.JWT_SECRET || '';
+      if (!secret || secret === 'your-secret-key-change-in-production') {
+        throw new Error('JWT_SECRET environment variable is required and must be set to a secure value');
+      }
+      const preauth = jwt.sign(
+        { stage: 'preauth', userId: user.id, email: user.email, iat: Math.floor(Date.now() / 1000) },
+        secret,
+        { expiresIn: '5m' }
+      );
+      const cookieStore = await cookies();
+      cookieStore.delete('auth-token');
+      cookieStore.set('preauth-token', preauth, {
+        httpOnly: true,
+        secure: shouldUseSecureCookies(request),
+        sameSite: 'lax',
+        maxAge: 60 * 5,
+      });
+      return NextResponse.json({ user, success: true, requiresTotp: true });
+    }
+
     // Create new token (session regeneration for security)
     const token = await createToken(user);
     const cookieStore = await cookies();
@@ -272,7 +296,7 @@ export async function POST(request: NextRequest) {
     // Set new token
     cookieStore.set('auth-token', token, {
       httpOnly: true,
-      secure: process.env.NODE_ENV === 'production',
+      secure: shouldUseSecureCookies(request),
       sameSite: 'lax',
       maxAge: 60 * 60 * 24 * 7, // 7 Tage
     });
