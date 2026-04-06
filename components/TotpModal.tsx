@@ -14,20 +14,29 @@ export default function TotpModal(props: {
   const { isOpen, onClose, onVerify, title, subtitle, error, loading } = props;
   const [digits, setDigits] = useState<string[]>(['', '', '', '', '', '']);
   const inputsRef = useRef<Array<HTMLInputElement | null>>([]);
+  /** Verhindert wiederholtes Absenden desselben 6-stelligen Codes nach Fehler (kein Loop). */
+  const lastSubmittedCodeRef = useRef<string | null>(null);
 
   const code = useMemo(() => digits.join(''), [digits]);
 
   useEffect(() => {
     if (!isOpen) return;
     setDigits(['', '', '', '', '', '']);
+    lastSubmittedCodeRef.current = null;
     setTimeout(() => inputsRef.current[0]?.focus(), 0);
   }, [isOpen]);
 
   useEffect(() => {
     if (!isOpen) return;
-    if (code.length === 6 && /^\d{6}$/.test(code) && !loading) {
-      void onVerify(code);
+    if (code.length < 6 || !/^\d{6}$/.test(code)) {
+      lastSubmittedCodeRef.current = null;
+      return;
     }
+    if (loading) return;
+    if (lastSubmittedCodeRef.current === code) return;
+
+    lastSubmittedCodeRef.current = code;
+    void onVerify(code);
   }, [code, isOpen, loading, onVerify]);
 
   function setAt(index: number, value: string) {
