@@ -39,22 +39,9 @@ const nextConfig = {
             key: 'Permissions-Policy',
             value: 'camera=(), microphone=(), geolocation=(), interest-cohort=()'
           },
-          {
-            key: 'Content-Security-Policy',
-            value: [
-              "default-src 'self'",
-              "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://www.google.com https://www.gstatic.com https://vercel.live", // reCAPTCHA v3 + Vercel Live Feedback
-              "style-src 'self' 'unsafe-inline'", // unsafe-inline für Tailwind CSS notwendig
-              "img-src 'self' data: https:",
-              "font-src 'self' data:",
-              "connect-src 'self' https://www.google.com https://www.gstatic.com https://vercel.live wss://*.pusher.com wss://*.pusherapp.com",
-              "frame-src 'self' https://www.google.com https://www.gstatic.com https://vercel.live", // reCAPTCHA Frames + Vercel Live Feedback
-              "frame-ancestors 'self'",
-              "base-uri 'self'",
-              "form-action 'self'",
-              "upgrade-insecure-requests"
-            ].join('; ')
-          }
+          // NOTE: Intentionally no Content-Security-Policy here.
+          // A too-strict CSP can easily break Next.js chunk loading under `/_next/static/...`,
+          // especially behind NAS reverse proxies or when served over plain HTTP.
         ],
       },
     ]
