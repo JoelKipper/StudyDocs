@@ -13,9 +13,12 @@ import {
   updateBlockedIp,
 } from './local-store';
 
-const JWT_SECRET: string = process.env.JWT_SECRET || '';
-if (!JWT_SECRET || JWT_SECRET === 'your-secret-key-change-in-production') {
-  throw new Error('JWT_SECRET environment variable is required and must be set to a secure value');
+function getJwtSecret(): string {
+  const secret = process.env.JWT_SECRET || '';
+  if (!secret || secret === 'your-secret-key-change-in-production') {
+    throw new Error('JWT_SECRET environment variable is required and must be set to a secure value');
+  }
+  return secret;
 }
 
 export interface User {
@@ -42,14 +45,14 @@ export async function createToken(user: User): Promise<string> {
       jti,
       iat: Math.floor(Date.now() / 1000),
     },
-    JWT_SECRET,
+    getJwtSecret(),
     { expiresIn: '7d' }
   );
 }
 
 export async function verifyToken(token: string): Promise<User | null> {
   try {
-    const decoded = jwt.verify(token, JWT_SECRET) as { userId: string; email: string };
+    const decoded = jwt.verify(token, getJwtSecret()) as { userId: string; email: string };
     const row = await findUserById(decoded.userId);
     if (!row || row.is_active === false) {
       return null;
