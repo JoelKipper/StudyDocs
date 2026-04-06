@@ -42,16 +42,13 @@ export async function PATCH(request: NextRequest) {
 
     await setSystemSetting(key, String(value), user.id);
 
-    // Log activity
-    const { supabaseServer } = await import('@/lib/supabase-server');
-    await supabaseServer
-      .from('activity_logs')
-      .insert({
-        user_id: user.id,
-        action: 'admin_update_setting',
-        resource_type: 'system_setting',
-        details: { key, value }
-      });
+    const { insertActivityLog } = await import('@/lib/local-store');
+    await insertActivityLog({
+      user_id: user.id,
+      action: 'admin_update_setting',
+      resource_type: 'system_setting',
+      details: { key, value },
+    });
 
     return NextResponse.json({ success: true });
   } catch (error: any) {

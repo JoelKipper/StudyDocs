@@ -1,7 +1,7 @@
 import fs from 'fs/promises';
 import path from 'path';
+import { ACCOUNTS_DIR } from './data-dir';
 
-const UPLOAD_DIR = path.join(process.cwd(), 'user-data');
 const METADATA_FILE = '.metadata.json';
 
 interface MetadataStore {
@@ -36,6 +36,8 @@ export interface FileMetadata {
   lastModifiedAt?: string;
   renamedBy?: { id: string; name: string; email: string };
   renamedAt?: string;
+  /** bcrypt hash for file/folder password protection */
+  passwordHash?: string;
 }
 
 export interface FileItem {
@@ -45,10 +47,11 @@ export interface FileItem {
   size?: number;
   modified?: Date;
   metadata?: FileMetadata;
+  isPasswordProtected?: boolean;
 }
 
 export async function ensureUserDirectory(userId: string): Promise<string> {
-  const userDir = path.join(UPLOAD_DIR, userId);
+  const userDir = path.join(ACCOUNTS_DIR, userId);
   try {
     await fs.access(userDir);
   } catch {
@@ -87,13 +90,15 @@ export async function getDirectoryContents(userId: string, dirPath: string = '')
         }
       }
       
+      const meta = metadata[item];
       contents.push({
         name: item,
         path: relativePath,
         type: stats.isDirectory() ? 'directory' : 'file',
         size: size,
         modified: stats.mtime,
-        metadata: metadata[item] || undefined,
+        metadata: meta || undefined,
+        isPasswordProtected: !!meta?.passwordHash,
       });
     }
     
@@ -449,3 +454,58 @@ export async function copyItem(
   }
 }
 
+export async function getItemPasswordInfo(
+  userId: string,
+  itemPath: string
+): Promise<{
+  passwordHash: string | null;
+  type: 'file' | 'directory';
+  createdBy?: { id: string; name: string; email: string };
+} | null> {
+  const userDir = await ensureUserDirectory(userId);
+  const fullPath = path.join(userDir, itemPath);
+  let stats;
+  try {
+    stats = await fs.stat(fullPath);
+  } catch {
+    return null;
+  }
+  const type = stats.isDirectory() ? 'directory' : 'file';
+  const itemName = path.basename(itemPath);
+  const relativeDir = path.dirname(itemPath);
+  const dirPath = relativeDir === '.' ? '' : relativeDir;
+  const metaStore = await loadMetadata(userId, dirPath);
+  const entry = metaStore[itemName];
+  return {
+    passwordHash: entry?.passwordHash ?? null,
+    type,
+    createdBy: entry?.createdBy,
+  };
+}
+
+export async function setItemPasswordHash(
+  userId: string,
+  itemPath: string,
+  passwordHash: string | null,
+  contextUser: { id: string; name: string; email: string }
+): Promise<void> {
+  const userDir = await ensureUserDirectory(userId);
+  const fullPath = path.join(userDir, itemPath);
+  await fs.access(fullPath);
+  const itemName = path.basename(itemPath);
+  const relativeDir = path.dirname(itemPath);
+  const dirPath = relativeDir === '.' ? '' : relativeDir;
+  const metadata = await loadMetadata(userId, dirPath);
+  if (!metadata[itemName]) {
+    metadata[itemName] = {
+      createdBy: contextUser,
+      createdAt: new Date().toISOString(),
+    };
+  }
+  if (passwordHash === null) {
+    delete metadata[itemName].passwordHash;
+  } else {
+    metadata[itemName].passwordHash = passwordHash;
+  }
+  await saveMetadata(userId, dirPath, metadata);
+}

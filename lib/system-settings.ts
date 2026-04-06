@@ -1,21 +1,15 @@
-import { supabaseServer } from './supabase-server';
+import {
+  getSystemSetting as readSetting,
+  setSystemSetting as writeSetting,
+  getAllSystemSettings as readAll,
+} from './local-store';
 
 export async function getSystemSetting(key: string): Promise<string | null> {
-  const { data, error } = await supabaseServer
-    .from('system_settings')
-    .select('value')
-    .eq('key', key)
-    .single();
-
-  if (error || !data) {
-    return null;
-  }
-
-  return data.value;
+  return readSetting(key);
 }
 
 export async function getSystemSettingBoolean(key: string, defaultValue: boolean = false): Promise<boolean> {
-  const value = await getSystemSetting(key);
+  const value = await readSetting(key);
   if (value === null) {
     return defaultValue;
   }
@@ -23,36 +17,9 @@ export async function getSystemSettingBoolean(key: string, defaultValue: boolean
 }
 
 export async function setSystemSetting(key: string, value: string, userId: string): Promise<void> {
-  const { error } = await supabaseServer
-    .from('system_settings')
-    .upsert({
-      key,
-      value,
-      updated_by: userId,
-      updated_at: new Date().toISOString(),
-    }, {
-      onConflict: 'key',
-    });
-
-  if (error) {
-    throw new Error(`Failed to update system setting: ${error.message}`);
-  }
+  await writeSetting(key, value, userId);
 }
 
 export async function getAllSystemSettings(): Promise<Record<string, string>> {
-  const { data, error } = await supabaseServer
-    .from('system_settings')
-    .select('key, value');
-
-  if (error || !data) {
-    return {};
-  }
-
-  const settings: Record<string, string> = {};
-  data.forEach((item) => {
-    settings[item.key] = item.value;
-  });
-
-  return settings;
+  return readAll();
 }
-

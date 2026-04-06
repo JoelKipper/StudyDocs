@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getCurrentUser, isAdmin } from '@/lib/auth';
-import { supabaseServer } from '@/lib/supabase-server';
+import { listUsers, countActivitySince, listBlockedIps } from '@/lib/local-store';
+import { getGlobalFileStats } from '@/lib/fs-stats';
 
 export async function GET(request: NextRequest) {
   try {
@@ -14,71 +15,36 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
     }
 
-    // Get user statistics
-    const { count: userCount } = await supabaseServer
-      .from('users')
-      .select('*', { count: 'exact', head: true });
+    const users = await listUsers();
+    const userCount = users.length;
+    const activeUserCount = users.filter((u) => u.is_active).length;
+    const adminCount = users.filter((u) => u.is_admin).length;
 
-    const { count: activeUserCount } = await supabaseServer
-      .from('users')
-      .select('*', { count: 'exact', head: true })
-      .eq('is_active', true);
+    const { fileCount, directoryCount, totalBytes } = await getGlobalFileStats();
 
-    const { count: adminCount } = await supabaseServer
-      .from('users')
-      .select('*', { count: 'exact', head: true })
-      .eq('is_admin', true);
-
-    // Get file statistics
-    const { count: fileCount } = await supabaseServer
-      .from('file_metadata')
-      .select('*', { count: 'exact', head: true })
-      .eq('type', 'file');
-
-    const { count: directoryCount } = await supabaseServer
-      .from('file_metadata')
-      .select('*', { count: 'exact', head: true })
-      .eq('type', 'directory');
-
-    // Get total storage size
-    const { data: files } = await supabaseServer
-      .from('file_metadata')
-      .select('size')
-      .eq('type', 'file');
-
-    const totalStorage = files?.reduce((sum, file) => sum + (file.size || 0), 0) || 0;
-
-    // Get recent activity count (last 24 hours)
     const yesterday = new Date();
     yesterday.setDate(yesterday.getDate() - 1);
-    
-    const { count: recentActivityCount } = await supabaseServer
-      .from('activity_logs')
-      .select('*', { count: 'exact', head: true })
-      .gte('created_at', yesterday.toISOString());
+    const recentActivityCount = await countActivitySince(yesterday.toISOString());
 
-    // Get blocked IPs count
-    const { count: blockedIpCount } = await supabaseServer
-      .from('blocked_ips')
-      .select('*', { count: 'exact', head: true })
-      .eq('is_active', true);
+    const blocked = await listBlockedIps();
+    const blockedIpCount = blocked.filter((b) => b.is_active).length;
 
     return NextResponse.json({
       users: {
-        total: userCount || 0,
-        active: activeUserCount || 0,
-        admins: adminCount || 0,
+        total: userCount,
+        active: activeUserCount,
+        admins: adminCount,
       },
       files: {
-        total: fileCount || 0,
-        directories: directoryCount || 0,
-        totalStorage,
+        total: fileCount,
+        directories: directoryCount,
+        totalStorage: totalBytes,
       },
       activity: {
-        last24Hours: recentActivityCount || 0,
+        last24Hours: recentActivityCount,
       },
       security: {
-        blockedIps: blockedIpCount || 0,
+        blockedIps: blockedIpCount,
       },
     });
   } catch (error: any) {
@@ -86,5 +52,3 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: 'Error fetching statistics' }, { status: 500 });
   }
 }
-
-

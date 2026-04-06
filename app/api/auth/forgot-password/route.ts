@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createResetToken, getPasswordResetEmailHtml } from '@/lib/password-reset';
 import { validateEmail, sanitizeString } from '@/lib/validation';
-import { supabaseServer } from '@/lib/supabase-server';
+import { findUserByEmail } from '@/lib/local-store';
 
 /**
  * Request password reset - sends reset email
@@ -36,12 +36,7 @@ export async function POST(request: NextRequest) {
       });
     }
 
-    // Get user info for email
-    const { data: user } = await supabaseServer
-      .from('users')
-      .select('id, email, name')
-      .eq('email', email.toLowerCase())
-      .single();
+    const user = await findUserByEmail(email.toLowerCase());
 
     if (!user) {
       return NextResponse.json({

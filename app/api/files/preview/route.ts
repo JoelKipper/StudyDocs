@@ -1,69 +1,73 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getCurrentUser } from '@/lib/auth';
-import { getFile } from '@/lib/filesystem-supabase';
-import { supabaseServer } from '@/lib/supabase-server';
+import { getFile } from '@/lib/filesystem';
+import { getItemPasswordInfo } from '@/lib/filesystem';
 import { decryptFile, verifyFilePassword } from '@/lib/encryption';
 import { sanitizePath } from '@/lib/validation';
 import path from 'path';
+import {
+  resolveFileAccess,
+  getEffectiveUserId,
+  assertPathInShare,
+} from '@/lib/api-file-context';
 
 export async function GET(request: NextRequest) {
-  const user = await getCurrentUser();
-  if (!user) {
-    return NextResponse.json({ error: 'Nicht authentifiziert' }, { status: 401 });
+  const searchParams = request.nextUrl.searchParams;
+  const shareToken = searchParams.get('shareToken');
+  const resolved = await resolveFileAccess(shareToken);
+  if (!resolved.ok) {
+    return NextResponse.json({ error: resolved.message }, { status: resolved.status });
   }
+  const { access } = resolved;
 
   try {
-    const searchParams = request.nextUrl.searchParams;
     const rawFilePath = searchParams.get('path');
     const password = searchParams.get('password');
 
     if (!rawFilePath) {
       return NextResponse.json({ error: 'Pfad ist erforderlich' }, { status: 400 });
     }
-    
-    // Sanitize file path
+
     const filePath = sanitizePath(rawFilePath);
-    
+
     if (!filePath) {
       return NextResponse.json({ error: 'Ungültiger Pfad' }, { status: 400 });
     }
 
-    // Check if file is password protected
-    const { data: fileMetadata, error: fetchError } = await supabaseServer
-      .from('file_metadata')
-      .select('password_hash, type')
-      .eq('path', filePath)
-      .single();
+    if (access.mode === 'share' && !assertPathInShare(access, filePath)) {
+      return NextResponse.json({ error: 'Zugriff verweigert' }, { status: 403 });
+    }
 
-    if (fetchError || !fileMetadata) {
+    const userId = getEffectiveUserId(access);
+
+    const info = await getItemPasswordInfo(userId, filePath);
+    if (!info) {
       return NextResponse.json({ error: 'Datei nicht gefunden' }, { status: 404 });
     }
 
-    // If file is password protected, require password
-    if (fileMetadata.password_hash) {
+    if (info.type !== 'file') {
+      return NextResponse.json({ error: 'Nur Dateien können angezeigt werden' }, { status: 400 });
+    }
+
+    if (info.passwordHash) {
       if (!password) {
         return NextResponse.json({ error: 'Passwort ist erforderlich', requiresPassword: true }, { status: 401 });
       }
-
-      // Verify password
-      const isValid = await verifyFilePassword(password, fileMetadata.password_hash);
+      const isValid = await verifyFilePassword(password, info.passwordHash);
       if (!isValid) {
         return NextResponse.json({ error: 'Falsches Passwort', requiresPassword: true }, { status: 401 });
       }
     }
 
-    // Get file from Supabase Storage
-    const fileBuffer = await getFile(filePath);
-    
-    // If file is password protected, decrypt it
+    const fileBuffer = await getFile(userId, filePath);
+
     let decryptedBuffer = fileBuffer;
-    if (fileMetadata.password_hash && password) {
+    if (info.passwordHash && password) {
       decryptedBuffer = decryptFile(fileBuffer, password);
     }
+
     const fileName = path.basename(filePath);
     const fileExtension = fileName.split('.').pop()?.toLowerCase() || '';
 
-    // Determine content type
     let contentType = 'application/octet-stream';
     if (fileExtension === 'pdf') {
       contentType = 'application/pdf';
@@ -139,22 +143,16 @@ export async function GET(request: NextRequest) {
       contentType = 'application/vnd.oasis.opendocument.presentation';
     }
 
-    // Return file with appropriate headers
     const headers: HeadersInit = {
       'Content-Type': contentType,
       'Cache-Control': 'private, max-age=3600',
     };
 
-    // For PDFs, add headers to allow iframe embedding
     if (fileExtension === 'pdf') {
-      // Use inline disposition to display in browser
       headers['Content-Disposition'] = `inline; filename="${encodeURIComponent(fileName)}"`;
       headers['X-Content-Type-Options'] = 'nosniff';
-      // Allow embedding in iframe
       headers['X-Frame-Options'] = 'SAMEORIGIN';
-      // Ensure proper PDF content type
       headers['Content-Type'] = 'application/pdf';
-      // Add Accept-Ranges for better PDF support
       headers['Accept-Ranges'] = 'bytes';
     } else {
       headers['Content-Disposition'] = `inline; filename="${encodeURIComponent(fileName)}"`;
@@ -168,4 +166,3 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: error.message || 'Serverfehler' }, { status: 500 });
   }
 }
-

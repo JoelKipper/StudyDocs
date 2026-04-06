@@ -1,46 +1,41 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { getDirectoryContents } from '@/lib/filesystem';
 import { getCurrentUser } from '@/lib/auth';
-import { getDirectoryContents } from '@/lib/filesystem-supabase';
+import { sanitizeString } from '@/lib/validation';
 
 interface FileItem {
   name: string;
   path: string;
   type: 'file' | 'directory';
   size?: number;
-  modified?: string | Date; // Can be ISO string or Date
+  modified?: string | Date;
   metadata?: any;
 }
 
-async function getAllFilesRecursive(
-  dirPath: string = ''
-): Promise<FileItem[]> {
+async function getAllFilesRecursive(userId: string, dirPath: string = ''): Promise<FileItem[]> {
   const allFiles: FileItem[] = [];
-  
+
   try {
-    const contents = await getDirectoryContents(dirPath);
-    
+    const contents = await getDirectoryContents(userId, dirPath);
+
     for (const item of contents) {
-      // Convert modified date to ISO string for JSON serialization
       const fileItem: FileItem = {
         ...item,
         modified: item.modified ? new Date(item.modified).toISOString() : undefined,
       };
       allFiles.push(fileItem);
-      
-      // If it's a directory, recursively get its contents
+
       if (item.type === 'directory') {
-        const subFiles = await getAllFilesRecursive(item.path);
+        const subFiles = await getAllFilesRecursive(userId, item.path);
         allFiles.push(...subFiles);
       }
     }
   } catch (error) {
     console.error(`Error reading directory ${dirPath}:`, error);
   }
-  
+
   return allFiles;
 }
-
-import { sanitizeString } from '@/lib/validation';
 
 export async function GET(request: NextRequest) {
   const user = await getCurrentUser();
@@ -60,13 +55,10 @@ export async function GET(request: NextRequest) {
     const dateFrom = searchParams.get('dateFrom');
     const dateTo = searchParams.get('dateTo');
 
-    // Get all files recursively
-    const allFiles = await getAllFilesRecursive('');
+    const allFiles = await getAllFilesRecursive(user.id, '');
 
-    // Apply filters
     let filtered = allFiles;
 
-    // Text search
     if (query.trim()) {
       const searchQuery = query.toLowerCase().trim();
       filtered = filtered.filter(
@@ -76,12 +68,10 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    // File type filter
     if (fileType !== 'all') {
       filtered = filtered.filter((file) => file.type === fileType);
     }
 
-    // File extensions filter
     if (extensions) {
       const extensionList = extensions.split(',').map((ext) => ext.trim().toLowerCase());
       filtered = filtered.filter((file) => {
@@ -91,17 +81,15 @@ export async function GET(request: NextRequest) {
       });
     }
 
-    // Size filter
     if (minSize) {
-      const minSizeBytes = parseInt(minSize) * 1024; // Convert KB to bytes
+      const minSizeBytes = parseInt(minSize, 10) * 1024;
       filtered = filtered.filter((file) => (file.size || 0) >= minSizeBytes);
     }
     if (maxSize) {
-      const maxSizeBytes = parseInt(maxSize) * 1024; // Convert KB to bytes
+      const maxSizeBytes = parseInt(maxSize, 10) * 1024;
       filtered = filtered.filter((file) => (file.size || 0) <= maxSizeBytes);
     }
 
-    // Date filter
     if (dateFrom) {
       const fromDate = new Date(dateFrom);
       fromDate.setHours(0, 0, 0, 0);
@@ -128,4 +116,3 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: 'Fehler bei der Suche' }, { status: 500 });
   }
 }
-

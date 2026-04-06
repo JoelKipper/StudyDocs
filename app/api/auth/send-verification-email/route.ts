@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getCurrentUser } from '@/lib/auth';
 import { createVerificationToken, sendVerificationEmail } from '@/lib/email-verification';
-import { supabaseServer } from '@/lib/supabase-server';
+import { findUserById } from '@/lib/local-store';
 
 export async function POST(request: NextRequest) {
   try {
@@ -10,18 +10,12 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Nicht authentifiziert' }, { status: 401 });
     }
 
-    // Get user details
-    const { data: userData, error: userError } = await supabaseServer
-      .from('users')
-      .select('email, name, email_verified')
-      .eq('id', user.id)
-      .single();
+    const userData = await findUserById(user.id);
 
-    if (userError || !userData) {
+    if (!userData) {
       return NextResponse.json({ error: 'Benutzer nicht gefunden' }, { status: 404 });
     }
 
-    // Check if already verified
     if (userData.email_verified) {
       return NextResponse.json({ error: 'E-Mail-Adresse ist bereits verifiziert' }, { status: 400 });
     }

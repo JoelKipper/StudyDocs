@@ -1,28 +1,40 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getCurrentUser } from '@/lib/auth';
-import { getDirectoryContents } from '@/lib/filesystem-supabase';
+import { getDirectoryContents } from '@/lib/filesystem';
+import {
+  resolveFileAccess,
+  getEffectiveUserId,
+  resolveListingPath,
+  assertPathInShare,
+} from '@/lib/api-file-context';
 
 export async function GET(request: NextRequest) {
-  const user = await getCurrentUser();
-  if (!user) {
-    return NextResponse.json({ error: 'Nicht authentifiziert' }, { status: 401 });
+  const { searchParams } = new URL(request.url);
+  const shareToken = searchParams.get('shareToken');
+  const resolved = await resolveFileAccess(shareToken);
+  if (!resolved.ok) {
+    return NextResponse.json({ error: resolved.message }, { status: resolved.status });
   }
-  
+  const { access } = resolved;
+
   try {
-    const { searchParams } = new URL(request.url);
     const fileName = searchParams.get('fileName');
-    const path = searchParams.get('path') || '';
-    
+    let path = searchParams.get('path') || '';
+    path = resolveListingPath(access, path);
+
+    if (access.mode === 'share' && !assertPathInShare(access, path)) {
+      return NextResponse.json({ error: 'Zugriff verweigert' }, { status: 403 });
+    }
+
     if (!fileName) {
       return NextResponse.json({ error: 'Dateiname ist erforderlich' }, { status: 400 });
     }
-    
-    const contents = await getDirectoryContents(path);
-    const exists = contents.some(item => item.name === fileName && item.type === 'file');
-    
+
+    const userId = getEffectiveUserId(access);
+    const contents = await getDirectoryContents(userId, path);
+    const exists = contents.some((item) => item.name === fileName && item.type === 'file');
+
     return NextResponse.json({ exists, fileName });
   } catch (error) {
     return NextResponse.json({ error: 'Fehler beim Prüfen der Datei' }, { status: 500 });
   }
 }
-

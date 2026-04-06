@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getCurrentUser, isAdmin } from '@/lib/auth';
-import { supabaseServer } from '@/lib/supabase-server';
+import { queryActivityLogs, listUsers } from '@/lib/local-store';
 
 export async function GET(request: NextRequest) {
   try {
@@ -15,64 +15,32 @@ export async function GET(request: NextRequest) {
     }
 
     const { searchParams } = new URL(request.url);
-    const limit = parseInt(searchParams.get('limit') || '100');
-    const offset = parseInt(searchParams.get('offset') || '0');
+    const limit = parseInt(searchParams.get('limit') || '100', 10);
+    const offset = parseInt(searchParams.get('offset') || '0', 10);
     const action = searchParams.get('action');
     const userId = searchParams.get('userId');
 
-    let query = supabaseServer
-      .from('activity_logs')
-      .select(`
-        id,
-        action,
-        resource_type,
-        resource_path,
-        ip_address,
-        user_agent,
-        details,
-        created_at,
-        user:users!activity_logs_user_id_fkey(id, email, name)
-      `)
-      .order('created_at', { ascending: false })
-      .range(offset, offset + limit - 1);
+    const { logs, total } = await queryActivityLogs({
+      limit,
+      offset,
+      action,
+      userId,
+    });
 
-    if (action) {
-      query = query.eq('action', action);
-    }
+    const users = await listUsers();
+    const uidMap = new Map(users.map((u) => [u.id, { id: u.id, email: u.email, name: u.name }]));
 
-    if (userId) {
-      query = query.eq('user_id', userId);
-    }
-
-    const { data: activities, error } = await query;
-
-    if (error) {
-      throw error;
-    }
-
-    // Get total count
-    let countQuery = supabaseServer
-      .from('activity_logs')
-      .select('*', { count: 'exact', head: true });
-
-    if (action) {
-      countQuery = countQuery.eq('action', action);
-    }
-
-    if (userId) {
-      countQuery = countQuery.eq('user_id', userId);
-    }
-
-    const { count } = await countQuery;
+    const activities = logs.map((log) => ({
+      ...log,
+      user: uidMap.get(log.user_id) || null,
+    }));
 
     return NextResponse.json({
-      activities: activities || [],
-      total: count || 0,
+      activities,
+      total,
     });
   } catch (error: any) {
     console.error('Error fetching activity logs:', error);
     return NextResponse.json({ error: 'Error fetching activity logs' }, { status: 500 });
   }
 }
-
-

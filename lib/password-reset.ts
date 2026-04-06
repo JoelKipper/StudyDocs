@@ -1,33 +1,28 @@
 import * as nodeCrypto from 'crypto';
-import { supabaseServer } from './supabase-server';
+import {
+  findUserByEmail,
+  deletePasswordResetTokensForUser,
+  insertPasswordResetToken,
+  findPasswordResetToken,
+  markPasswordResetTokenUsed,
+  updateUser,
+  findUserById,
+} from './local-store';
 import { hashPassword } from './auth';
 import { validatePassword } from './validation';
 
-const RESET_TOKEN_EXPIRY_HOURS = 1; // Reset tokens expire after 1 hour
-const BASE_URL = process.env.NEXT_PUBLIC_APP_URL || (process.env.VERCEL_URL 
-  ? `https://${process.env.VERCEL_URL}` 
-  : 'http://localhost:3000');
+const RESET_TOKEN_EXPIRY_HOURS = 1;
 
-/**
- * Generate a secure reset token
- */
+const BASE_URL =
+  process.env.NEXT_PUBLIC_APP_URL?.replace(/\/$/, '') || 'http://localhost:3000';
+
 export function generateResetToken(): string {
   return nodeCrypto.randomBytes(32).toString('hex');
 }
 
-/**
- * Create a password reset token for a user
- */
 export async function createResetToken(email: string): Promise<string | null> {
-  // Find user by email
-  const { data: user, error: userError } = await supabaseServer
-    .from('users')
-    .select('id, email, name')
-    .eq('email', email.toLowerCase())
-    .single();
-
-  if (userError || !user) {
-    // Don't reveal if user exists or not (security best practice)
+  const user = await findUserByEmail(email.toLowerCase());
+  if (!user) {
     return null;
   }
 
@@ -35,64 +30,28 @@ export async function createResetToken(email: string): Promise<string | null> {
   const expiresAt = new Date();
   expiresAt.setHours(expiresAt.getHours() + RESET_TOKEN_EXPIRY_HOURS);
 
-  // Delete any existing unused tokens for this user
-  await supabaseServer
-    .from('password_reset_tokens')
-    .delete()
-    .eq('user_id', user.id)
-    .is('used_at', null);
-
-  // Insert new token
-  const { error } = await supabaseServer
-    .from('password_reset_tokens')
-    .insert({
-      user_id: user.id,
-      token,
-      expires_at: expiresAt.toISOString(),
-    });
-
-  if (error) {
-    console.error('Error creating reset token:', error);
-    return null;
-  }
+  await deletePasswordResetTokensForUser(user.id);
+  await insertPasswordResetToken({
+    user_id: user.id,
+    token,
+    expires_at: expiresAt.toISOString(),
+  });
 
   return token;
 }
 
-/**
- * Verify a reset token and get user info
- */
 export async function verifyResetToken(token: string): Promise<{ userId: string; email: string } | null> {
-  // Find token
-  const { data: tokenData, error: tokenError } = await supabaseServer
-    .from('password_reset_tokens')
-    .select('user_id, expires_at, used_at')
-    .eq('token', token)
-    .is('used_at', null)
-    .single();
-
-  if (tokenError || !tokenData) {
+  const tokenData = await findPasswordResetToken(token);
+  if (!tokenData) {
     return null;
   }
 
-  // Check if token is expired
   if (new Date(tokenData.expires_at) < new Date()) {
     return null;
   }
 
-  // Check if token is already used
-  if (tokenData.used_at) {
-    return null;
-  }
-
-  // Get user email
-  const { data: userData, error: userError } = await supabaseServer
-    .from('users')
-    .select('id, email')
-    .eq('id', tokenData.user_id)
-    .single();
-
-  if (userError || !userData) {
+  const userData = await findUserById(tokenData.user_id);
+  if (!userData) {
     return null;
   }
 
@@ -102,51 +61,30 @@ export async function verifyResetToken(token: string): Promise<{ userId: string;
   };
 }
 
-/**
- * Reset password using token
- */
-export async function resetPasswordWithToken(token: string, newPassword: string): Promise<{ success: boolean; error?: string }> {
-  // Validate password
+export async function resetPasswordWithToken(
+  token: string,
+  newPassword: string
+): Promise<{ success: boolean; error?: string }> {
   const passwordValidation = validatePassword(newPassword);
   if (!passwordValidation.valid) {
     return { success: false, error: passwordValidation.error };
   }
 
-  // Verify token
   const tokenData = await verifyResetToken(token);
   if (!tokenData) {
     return { success: false, error: 'Ungültiger oder abgelaufener Reset-Link' };
   }
 
-  // Hash new password
   const hashedPassword = await hashPassword(newPassword);
-
-  // Update user password
-  const { error: updateError } = await supabaseServer
-    .from('users')
-    .update({ password: hashedPassword })
-    .eq('id', tokenData.userId);
-
-  if (updateError) {
-    console.error('Error updating password:', updateError);
-    return { success: false, error: 'Fehler beim Zurücksetzen des Passworts' };
-  }
-
-  // Mark token as used
-  await supabaseServer
-    .from('password_reset_tokens')
-    .update({ used_at: new Date().toISOString() })
-    .eq('token', token);
+  await updateUser(tokenData.userId, { password: hashedPassword });
+  await markPasswordResetTokenUsed(token);
 
   return { success: true };
 }
 
-/**
- * Generate password reset email HTML
- */
 export function getPasswordResetEmailHtml(name: string, token: string, language: 'de' | 'en' = 'de'): string {
   const resetUrl = `${BASE_URL}/reset-password?token=${token}`;
-  
+
   if (language === 'de') {
     return `
       <!DOCTYPE html>
@@ -188,8 +126,9 @@ export function getPasswordResetEmailHtml(name: string, token: string, language:
       </body>
       </html>
     `;
-  } else {
-    return `
+  }
+
+  return `
       <!DOCTYPE html>
       <html>
       <head>
@@ -229,6 +168,4 @@ export function getPasswordResetEmailHtml(name: string, token: string, language:
       </body>
       </html>
     `;
-  }
 }
-

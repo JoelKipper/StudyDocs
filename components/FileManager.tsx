@@ -1,6 +1,8 @@
 'use client';
 
 import { useState, useEffect, useRef, useCallback, Component, ReactNode } from 'react';
+import { useSearchParams } from 'next/navigation';
+import { ShareTokenContext, appendShareToUrl } from '@/contexts/ShareTokenContext';
 import FileTree from './FileTree';
 import FileUpload from './FileUpload';
 import ContextMenu from './ContextMenu';
@@ -107,10 +109,15 @@ interface FileManagerProps {
   initialPath?: string;
   initialFile?: string;
   onUserUpdate?: () => void;
+  /** Optional; also read from URL ?shareToken= for shared-folder view */
+  shareToken?: string | null;
 }
 
-export default function FileManager({ user, onLogout, initialPath, initialFile: initialFileProp, onUserUpdate }: FileManagerProps) {
+export default function FileManager({ user, onLogout, initialPath, initialFile: initialFileProp, onUserUpdate, shareToken: shareTokenProp }: FileManagerProps) {
   const { t, formatSize, language } = useLanguage();
+  const urlParams = useSearchParams();
+  const effectiveShareToken = shareTokenProp ?? urlParams.get('shareToken');
+  const isShareView = !!effectiveShareToken;
   const storageKey = `studydocs-path-${user.id}`;
   
   // Load saved path from localStorage on mount, or use initialPath if provided
@@ -601,7 +608,10 @@ export default function FileManager({ user, onLogout, initialPath, initialFile: 
         let fileExists = false;
         try {
           const checkRes = await fetch(
-            `/api/files/check?fileName=${encodeURIComponent(file.name)}&path=${encodeURIComponent(targetPath)}`
+            appendShareToUrl(
+              `/api/files/check?fileName=${encodeURIComponent(file.name)}&path=${encodeURIComponent(targetPath)}`,
+              effectiveShareToken
+            )
           );
           
           if (checkRes.ok) {
@@ -1710,7 +1720,9 @@ export default function FileManager({ user, onLogout, initialPath, initialFile: 
     const allFiles: FileItem[] = [];
     
     try {
-      const res = await fetch(`/api/files?path=${encodeURIComponent(dirPath)}`);
+      const res = await fetch(
+        appendShareToUrl(`/api/files?path=${encodeURIComponent(dirPath)}`, effectiveShareToken)
+      );
       const data = await res.json();
       
       if (res.ok) {
@@ -1763,7 +1775,10 @@ export default function FileManager({ user, onLogout, initialPath, initialFile: 
     try {
       // Get verified password for current path if available
       const password = verifiedPasswords.get(currentPath);
-      const url = `/api/files?path=${encodeURIComponent(currentPath)}${password ? `&password=${encodeURIComponent(password)}` : ''}`;
+      const url = appendShareToUrl(
+        `/api/files?path=${encodeURIComponent(currentPath)}${password ? `&password=${encodeURIComponent(password)}` : ''}`,
+        effectiveShareToken
+      );
       const res = await fetch(url);
       const data = await res.json();
       
@@ -3043,7 +3058,12 @@ export default function FileManager({ user, onLogout, initialPath, initialFile: 
 
     try {
       // Verify password and download
-      const res = await fetch(`/api/files/password?path=${encodeURIComponent(item.path)}&password=${encodeURIComponent(password)}`);
+      const res = await fetch(
+        appendShareToUrl(
+          `/api/files/password?path=${encodeURIComponent(item.path)}&password=${encodeURIComponent(password)}`,
+          effectiveShareToken
+        )
+      );
       
       if (!res.ok) {
         const data = await res.json();
@@ -3186,8 +3206,9 @@ export default function FileManager({ user, onLogout, initialPath, initialFile: 
         return;
       }
       
-      // For files, download directly
-      const res = await fetch(`/api/files/download?path=${encodeURIComponent(file.path)}`);
+      const res = await fetch(
+        appendShareToUrl(`/api/files/download?path=${encodeURIComponent(file.path)}`, effectiveShareToken)
+      );
       if (res.ok) {
         const blob = await res.blob();
         const url = window.URL.createObjectURL(blob);
@@ -3473,6 +3494,7 @@ export default function FileManager({ user, onLogout, initialPath, initialFile: 
   }, [user.emailVerified, language, showToast]);
 
   return (
+    <ShareTokenContext.Provider value={effectiveShareToken}>
     <div className="h-screen bg-gray-50 dark:bg-gray-900 flex flex-col overflow-hidden">
 
       {/* Header */}
@@ -4254,7 +4276,8 @@ export default function FileManager({ user, onLogout, initialPath, initialFile: 
                 </div>
               </div>
 
-              {/* Search Bar - Hidden on mobile (shown in overlay) */}
+              {/* Search Bar - Hidden on mobile (shown in overlay); hidden in share view */}
+              {!isShareView && (
               <div className="flex-1 max-w-md min-w-0 hidden md:block">
                 <SearchBar
                   searchQuery={searchQuery}
@@ -4284,6 +4307,7 @@ export default function FileManager({ user, onLogout, initialPath, initialFile: 
                   </div>
                 )}
               </div>
+              )}
 
               {/* Spacer to push buttons to the right */}
               <div className="flex-1"></div>
@@ -4324,6 +4348,8 @@ export default function FileManager({ user, onLogout, initialPath, initialFile: 
                   </button>
                 </Tooltip>
                 {/* Always available buttons - Hidden on mobile (moved to bottom nav) */}
+                {!isShareView && (
+                <>
                 <Tooltip content={t('createNew')}>
                   <button
                     onClick={handleCreateDirectory}
@@ -4342,6 +4368,8 @@ export default function FileManager({ user, onLogout, initialPath, initialFile: 
                     onFolderUpload={handleFolderUploadWithCurrentPath}
                   />
                 </div>
+                </>
+                )}
               </div>
             </div>
           </div>
@@ -5229,6 +5257,7 @@ export default function FileManager({ user, onLogout, initialPath, initialFile: 
               </svg>
               <span className="text-xs">{t('folders')}</span>
             </button>
+            {!isShareView && (
             <button
               onClick={handleCreateDirectory}
               className="flex flex-col items-center gap-1 p-2 text-gray-600 dark:text-gray-400 hover:text-blue-600 dark:hover:text-blue-400 transition-colors"
@@ -5238,6 +5267,8 @@ export default function FileManager({ user, onLogout, initialPath, initialFile: 
               </svg>
               <span className="text-xs">{t('new')}</span>
             </button>
+            )}
+            {!isShareView && (
             <FileUpload
               currentPath={currentPath}
               onUploaded={handleRefresh}
@@ -5250,6 +5281,8 @@ export default function FileManager({ user, onLogout, initialPath, initialFile: 
                 <span className="text-xs">{t('upload')}</span>
               </div>
             </FileUpload>
+            )}
+            {!isShareView && (
             <button
               onClick={() => setMobileSearchOpen(true)}
               className="flex flex-col items-center gap-1 p-2 text-gray-600 dark:text-gray-400 hover:text-blue-600 dark:hover:text-blue-400 transition-colors"
@@ -5259,6 +5292,7 @@ export default function FileManager({ user, onLogout, initialPath, initialFile: 
               </svg>
               <span className="text-xs">{t('search')}</span>
             </button>
+            )}
             {selectedItems.size > 0 && (
               <>
                 <button
@@ -5286,7 +5320,7 @@ export default function FileManager({ user, onLogout, initialPath, initialFile: 
       )}
 
       {/* Mobile Search Overlay */}
-      {isMobile && mobileSearchOpen && (
+      {isMobile && mobileSearchOpen && !isShareView && (
         <div className="fixed inset-0 bg-black/50 z-50 md:hidden" onClick={() => setMobileSearchOpen(false)}>
           <div 
             className="absolute inset-0 bg-white dark:bg-gray-800 flex flex-col"
@@ -5455,6 +5489,7 @@ export default function FileManager({ user, onLogout, initialPath, initialFile: 
         />
       )}
     </div>
+    </ShareTokenContext.Provider>
   );
 }
 

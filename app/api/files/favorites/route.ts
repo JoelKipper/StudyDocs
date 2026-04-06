@@ -2,8 +2,9 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getCurrentUser } from '@/lib/auth';
 import fs from 'fs/promises';
 import path from 'path';
+import { DATA_DIR } from '@/lib/data-dir';
 
-const FAVORITES_FILE = path.join(process.cwd(), 'user-data', 'favorites.json');
+const FAVORITES_FILE = path.join(DATA_DIR, 'favorites.json');
 
 interface FavoritesStore {
   [userId: string]: Array<{

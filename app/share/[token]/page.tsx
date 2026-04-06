@@ -89,10 +89,13 @@ export default function SharePage() {
           const fileName = pathParts.pop() || '';
           const dirPath = pathParts.join('/');
           // Navigate immediately without changing state
-          window.location.replace(`/?path=${encodeURIComponent(dirPath)}&file=${encodeURIComponent(fileName)}`);
+          window.location.replace(
+            `/?shareToken=${encodeURIComponent(token)}&path=${encodeURIComponent(dirPath)}&file=${encodeURIComponent(fileName)}`
+          );
         } else {
-          // Navigate to the directory
-          window.location.replace(`/?path=${encodeURIComponent(data.itemPath)}`);
+          window.location.replace(
+            `/?shareToken=${encodeURIComponent(token)}&path=${encodeURIComponent(data.itemPath)}`
+          );
         }
         // Don't set loading to false - let the navigation happen
       } catch (err) {
@@ -161,6 +164,7 @@ export default function SharePage() {
           path: shareData.itemPath,
           password,
           action: 'verify',
+          shareToken: params.token as string,
         }),
       });
 
@@ -183,10 +187,15 @@ export default function SharePage() {
         const pathParts = shareData.itemPath.split('/');
         const fileName = pathParts.pop() || '';
         const dirPath = pathParts.join('/');
-        window.location.replace(`/?path=${encodeURIComponent(dirPath)}&file=${encodeURIComponent(fileName)}`);
+        const t = params.token as string;
+        window.location.replace(
+          `/?shareToken=${encodeURIComponent(t)}&path=${encodeURIComponent(dirPath)}&file=${encodeURIComponent(fileName)}`
+        );
       } else {
-        // Navigate to the directory
-        window.location.replace(`/?path=${encodeURIComponent(shareData.itemPath)}`);
+        const t = params.token as string;
+        window.location.replace(
+          `/?shareToken=${encodeURIComponent(t)}&path=${encodeURIComponent(shareData.itemPath)}`
+        );
       }
     } catch (error: any) {
       setPasswordModal({

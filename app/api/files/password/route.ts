@@ -1,11 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getCurrentUser } from '@/lib/auth';
-import { supabaseServer } from '@/lib/supabase-server';
 import { hashFilePassword, verifyFilePassword, encryptFile, decryptFile } from '@/lib/encryption';
-import { getFile, saveFile } from '@/lib/filesystem-supabase';
+import { getFile, saveFile, getItemPasswordInfo, setItemPasswordHash } from '@/lib/filesystem';
 import { sanitizePath } from '@/lib/validation';
+import { validateShareToken, isPathInShareScope } from '@/lib/file-access';
 
-// Set password protection for a file or directory
 export async function POST(request: NextRequest) {
   const user = await getCurrentUser();
   if (!user) {
@@ -17,16 +16,36 @@ export async function POST(request: NextRequest) {
     const rawPath = body.path;
     const password = body.password;
     const action = body.action;
+    const shareToken = typeof body.shareToken === 'string' ? body.shareToken : undefined;
 
     if (!rawPath) {
       return NextResponse.json({ error: 'Pfad ist erforderlich' }, { status: 400 });
     }
-    
-    // Sanitize path
-    const path = sanitizePath(rawPath);
-    
-    if (!path) {
+
+    const itemPath = sanitizePath(rawPath);
+
+    if (!itemPath) {
       return NextResponse.json({ error: 'Ungültiger Pfad' }, { status: 400 });
+    }
+
+    let fsUserId = user.id;
+    if (shareToken) {
+      const v = await validateShareToken(shareToken);
+      if (!v) {
+        return NextResponse.json({ error: 'Ungültiger Share-Link' }, { status: 403 });
+      }
+      if (!isPathInShareScope(v.itemPath, v.itemType, itemPath)) {
+        return NextResponse.json({ error: 'Zugriff verweigert' }, { status: 403 });
+      }
+      fsUserId = v.ownerUserId;
+    }
+
+    const userPayload = { id: user.id, name: user.name, email: user.email };
+
+    if (action === 'set' || action === 'remove') {
+      if (shareToken) {
+        return NextResponse.json({ error: 'Nur Lesezugriff' }, { status: 403 });
+      }
     }
 
     if (action === 'set') {
@@ -34,114 +53,66 @@ export async function POST(request: NextRequest) {
         return NextResponse.json({ error: 'Passwort muss mindestens 4 Zeichen lang sein' }, { status: 400 });
       }
 
-      // Hash the password
       const passwordHash = await hashFilePassword(password);
+      await setItemPasswordHash(user.id, itemPath, passwordHash, userPayload);
 
-      // Update file_metadata to set password_hash
-      const { error: updateError } = await supabaseServer
-        .from('file_metadata')
-        .update({ password_hash: passwordHash })
-        .eq('path', path);
-
-      if (updateError) {
-        return NextResponse.json({ error: 'Fehler beim Setzen des Passworts' }, { status: 500 });
-      }
-
-      // If it's a file, encrypt the file content
-      const { data: fileMetadata } = await supabaseServer
-        .from('file_metadata')
-        .select('type')
-        .eq('path', path)
-        .single();
-
-      if (fileMetadata?.type === 'file') {
+      const info = await getItemPasswordInfo(user.id, itemPath);
+      if (info?.type === 'file') {
         try {
-          const fileBuffer = await getFile(path);
+          const fileBuffer = await getFile(user.id, itemPath);
           const { encryptedBuffer } = encryptFile(fileBuffer, password);
-          await saveFile(path, encryptedBuffer, user);
-        } catch (error) {
-          // If file doesn't exist or can't be encrypted, continue anyway
-          // The password protection is still set in metadata
+          await saveFile(user.id, itemPath, encryptedBuffer, userPayload);
+        } catch {
+          // metadata still set
         }
       }
 
       return NextResponse.json({ success: true });
-    } else if (action === 'remove') {
-      // Get current password hash and owner
-      const { data: fileMetadata, error: fetchError } = await supabaseServer
-        .from('file_metadata')
-        .select('password_hash, type, created_by')
-        .eq('path', path)
-        .single();
+    }
 
-      if (fetchError || !fileMetadata) {
-        return NextResponse.json({ error: 'Datei oder Ordner nicht gefunden' }, { status: 404 });
-      }
-
-      if (!fileMetadata.password_hash) {
+    if (action === 'remove') {
+      const meta = await getItemPasswordInfo(user.id, itemPath);
+      if (!meta?.passwordHash) {
         return NextResponse.json({ error: 'Datei oder Ordner ist nicht passwortgeschützt' }, { status: 400 });
       }
 
-      // Check if user is the owner - if yes, no password needed
-      const isOwner = fileMetadata.created_by === user.id;
-      
-      // If not owner, require password verification
+      const isOwner = meta.createdBy?.id === user.id;
       if (!isOwner) {
         if (!password) {
           return NextResponse.json({ error: 'Passwort ist erforderlich' }, { status: 400 });
         }
-        
-        // Verify password
-        const isValid = await verifyFilePassword(password, fileMetadata.password_hash);
+        const isValid = await verifyFilePassword(password, meta.passwordHash);
         if (!isValid) {
           return NextResponse.json({ error: 'Falsches Passwort' }, { status: 401 });
         }
       }
 
-      // If it's a file, decrypt the file content
-      if (fileMetadata.type === 'file') {
+      if (meta.type === 'file') {
         try {
-          const encryptedBuffer = await getFile(path);
-          const decryptedBuffer = decryptFile(encryptedBuffer, password);
-          await saveFile(path, decryptedBuffer, user);
-        } catch (error) {
-          // If decryption fails, continue anyway to remove password protection
+          const encryptedBuffer = await getFile(user.id, itemPath);
+          const decryptedBuffer = decryptFile(encryptedBuffer, password || '');
+          await saveFile(user.id, itemPath, decryptedBuffer, userPayload);
+        } catch {
+          // continue
         }
       }
 
-      // Remove password protection
-      const { error: updateError } = await supabaseServer
-        .from('file_metadata')
-        .update({ password_hash: null })
-        .eq('path', path);
-
-      if (updateError) {
-        return NextResponse.json({ error: 'Fehler beim Entfernen des Passworts' }, { status: 500 });
-      }
+      await setItemPasswordHash(user.id, itemPath, null, userPayload);
 
       return NextResponse.json({ success: true });
-    } else if (action === 'verify') {
+    }
+
+    if (action === 'verify') {
       if (!password) {
         return NextResponse.json({ error: 'Passwort ist erforderlich' }, { status: 400 });
       }
 
-      // Get password hash
-      const { data: fileMetadata, error: fetchError } = await supabaseServer
-        .from('file_metadata')
-        .select('password_hash')
-        .eq('path', path)
-        .single();
-
-      if (fetchError || !fileMetadata) {
-        return NextResponse.json({ error: 'Datei oder Ordner nicht gefunden' }, { status: 404 });
-      }
-
-      if (!fileMetadata.password_hash) {
+      const meta = await getItemPasswordInfo(fsUserId, itemPath);
+      if (!meta?.passwordHash) {
         return NextResponse.json({ error: 'Datei oder Ordner ist nicht passwortgeschützt' }, { status: 400 });
       }
 
-      // Verify password
-      const isValid = await verifyFilePassword(password, fileMetadata.password_hash);
+      const isValid = await verifyFilePassword(password, meta.passwordHash);
       if (!isValid) {
         return NextResponse.json({ error: 'Falsches Passwort' }, { status: 401 });
       }
@@ -155,7 +126,6 @@ export async function POST(request: NextRequest) {
   }
 }
 
-// Get decrypted file content (requires password)
 export async function GET(request: NextRequest) {
   const user = await getCurrentUser();
   if (!user) {
@@ -165,54 +135,54 @@ export async function GET(request: NextRequest) {
   try {
     const searchParams = request.nextUrl.searchParams;
     const rawPath = searchParams.get('path');
-    
+    const shareToken = searchParams.get('shareToken');
+
     if (!rawPath) {
       return NextResponse.json({ error: 'Pfad ist erforderlich' }, { status: 400 });
     }
-    
-    // Sanitize path
-    const path = sanitizePath(rawPath);
-    
-    if (!path) {
+
+    const itemPath = sanitizePath(rawPath);
+
+    if (!itemPath) {
       return NextResponse.json({ error: 'Ungültiger Pfad' }, { status: 400 });
     }
-    
-    const password = searchParams.get('password');
 
-    if (!path) {
-      return NextResponse.json({ error: 'Pfad ist erforderlich' }, { status: 400 });
-    }
+    const password = searchParams.get('password');
 
     if (!password) {
       return NextResponse.json({ error: 'Passwort ist erforderlich' }, { status: 400 });
     }
 
-    // Verify password
-    const { data: fileMetadata, error: fetchError } = await supabaseServer
-      .from('file_metadata')
-      .select('password_hash, type')
-      .eq('path', path)
-      .single();
+    let fsUserId = user.id;
+    if (shareToken) {
+      const v = await validateShareToken(shareToken);
+      if (!v) {
+        return NextResponse.json({ error: 'Ungültiger Share-Link' }, { status: 403 });
+      }
+      if (!isPathInShareScope(v.itemPath, v.itemType, itemPath)) {
+        return NextResponse.json({ error: 'Zugriff verweigert' }, { status: 403 });
+      }
+      fsUserId = v.ownerUserId;
+    }
 
-    if (fetchError || !fileMetadata) {
+    const meta = await getItemPasswordInfo(fsUserId, itemPath);
+    if (!meta) {
       return NextResponse.json({ error: 'Datei nicht gefunden' }, { status: 404 });
     }
 
-    if (!fileMetadata.password_hash) {
+    if (!meta.passwordHash) {
       return NextResponse.json({ error: 'Datei ist nicht passwortgeschützt' }, { status: 400 });
     }
 
-    const isValid = await verifyFilePassword(password, fileMetadata.password_hash);
+    const isValid = await verifyFilePassword(password, meta.passwordHash);
     if (!isValid) {
       return NextResponse.json({ error: 'Falsches Passwort' }, { status: 401 });
     }
 
-    // Get and decrypt file
-    if (fileMetadata.type === 'file') {
+    if (meta.type === 'file') {
       try {
-        const encryptedBuffer = await getFile(path);
+        const encryptedBuffer = await getFile(fsUserId, itemPath);
         const decryptedBuffer = decryptFile(encryptedBuffer, password);
-        // Convert Buffer to Uint8Array for NextResponse
         const uint8Array = new Uint8Array(decryptedBuffer);
         return new NextResponse(uint8Array, {
           headers: {
@@ -229,4 +199,3 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: error.message || 'Server-Fehler' }, { status: 500 });
   }
 }
-

@@ -1,0 +1,16 @@
+services:
+  studydocs:
+    build: .
+    container_name: studydocs
+    restart: unless-stopped
+    ports:
+      - "3005:3000"
+    environment:
+      - DATA_DIR=/data
+    volumes:
+      - studydocs-data:/data
+    env_file:
+      - .env
+
+volumes:
+  studydocs-data:

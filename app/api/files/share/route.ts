@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getCurrentUser } from '@/lib/auth';
 import crypto from 'crypto';
-import { supabaseServer } from '@/lib/supabase-server';
+import { insertShare, findShareByToken, deleteShareByToken } from '@/lib/local-store';
+import { getItemPasswordInfo } from '@/lib/filesystem';
 import { sanitizePath } from '@/lib/validation';
 
 export async function POST(request: NextRequest) {
@@ -17,43 +18,27 @@ export async function POST(request: NextRequest) {
     if (!rawItemPath) {
       return NextResponse.json({ error: 'Pfad ist erforderlich' }, { status: 400 });
     }
-    
-    // Sanitize path
+
     const itemPath = sanitizePath(rawItemPath);
-    
+
     if (!itemPath) {
       return NextResponse.json({ error: 'Ungültiger Pfad' }, { status: 400 });
     }
 
-    // Verify that the item exists (check in file_metadata table)
-    const { data: item, error: itemError } = await supabaseServer
-      .from('file_metadata')
-      .select('path, type')
-      .eq('path', itemPath)
-      .single();
-
-    if (itemError || !item) {
+    const info = await getItemPasswordInfo(user.id, itemPath);
+    if (!info) {
       return NextResponse.json({ error: 'Datei oder Ordner nicht gefunden' }, { status: 404 });
     }
 
-    // Generate a unique token
     const token = crypto.randomBytes(32).toString('hex');
 
-    // Store the token in Supabase
-    const { error: insertError } = await supabaseServer
-      .from('shares')
-      .insert({
-        token: token,
-        user_id: user.id,
-        item_path: itemPath,
-        item_type: item.type,
-        created_at: new Date().toISOString(),
-      });
-
-    if (insertError) {
-      console.error('Error creating share:', insertError);
-      return NextResponse.json({ error: 'Fehler beim Erstellen des Share-Links' }, { status: 500 });
-    }
+    await insertShare({
+      token,
+      user_id: user.id,
+      item_path: itemPath,
+      item_type: info.type,
+      created_at: new Date().toISOString(),
+    });
 
     return NextResponse.json({ token });
   } catch (error: any) {
@@ -65,59 +50,43 @@ export async function POST(request: NextRequest) {
 export async function GET(request: NextRequest) {
   const searchParams = request.nextUrl.searchParams;
   const rawToken = searchParams.get('token');
-  
+
   if (!rawToken) {
     return NextResponse.json({ error: 'Token ist erforderlich' }, { status: 400 });
   }
-  
-  // Validate token format (should be hex string)
+
   if (!/^[a-f0-9]+$/i.test(rawToken) || rawToken.length !== 64) {
     return NextResponse.json({ error: 'Ungültiger Token' }, { status: 400 });
   }
-  
+
   const token = rawToken;
 
   try {
-    // Get share data from Supabase
-    const { data: shareData, error } = await supabaseServer
-      .from('shares')
-      .select('user_id, item_path, item_type, created_at')
-      .eq('token', token)
-      .single();
+    const shareData = await findShareByToken(token);
 
-    if (error || !shareData) {
+    if (!shareData) {
       return NextResponse.json({ error: 'Ungültiger oder abgelaufener Token' }, { status: 404 });
     }
 
-    // Check if share is older than 30 days
     const createdAt = new Date(shareData.created_at);
     const thirtyDaysAgo = new Date();
     thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
 
     if (createdAt < thirtyDaysAgo) {
-      // Delete expired share
-      await supabaseServer
-        .from('shares')
-        .delete()
-        .eq('token', token);
-      
+      await deleteShareByToken(token);
       return NextResponse.json({ error: 'Ungültiger oder abgelaufener Token' }, { status: 404 });
     }
 
-    // Check if the item is password protected
-    const { data: fileMetadata } = await supabaseServer
-      .from('file_metadata')
-      .select('password_hash, name')
-      .eq('path', shareData.item_path)
-      .single();
+    const pwdInfo = await getItemPasswordInfo(shareData.user_id, shareData.item_path);
+    const isPasswordProtected = !!pwdInfo?.passwordHash;
 
-    const isPasswordProtected = !!fileMetadata?.password_hash;
+    const nameFromPath = shareData.item_path.split('/').pop() || '';
 
     return NextResponse.json({
       userId: shareData.user_id,
       itemPath: shareData.item_path,
       itemType: shareData.item_type,
-      itemName: fileMetadata?.name || shareData.item_path.split('/').pop() || '',
+      itemName: nameFromPath,
       isPasswordProtected,
     });
   } catch (error: any) {

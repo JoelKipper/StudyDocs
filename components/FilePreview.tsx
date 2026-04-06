@@ -2,6 +2,7 @@
 
 import { useEffect, useState, useRef } from 'react';
 import { useLanguage } from '@/contexts/LanguageContext';
+import { useShareToken, appendShareToUrl } from '@/contexts/ShareTokenContext';
 import ShareModal from './ShareModal';
 import PasswordModal from './PasswordModal';
 import AlertModal from './AlertModal';
@@ -19,6 +20,7 @@ interface FilePreviewProps {
 
 export default function FilePreview({ file, onClose, verifiedPassword, onFileUpdate, onEdit }: FilePreviewProps) {
   const { t, language } = useLanguage();
+  const shareToken = useShareToken();
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [previewType, setPreviewType] = useState<'pdf' | 'image' | 'text' | 'video' | 'audio' | 'office' | 'unsupported' | null>(null);
   const [loading, setLoading] = useState(true);
@@ -96,7 +98,10 @@ export default function FilePreview({ file, onClose, verifiedPassword, onFileUpd
 
     // For PDFs, use direct URL (simpler approach)
     if (fileExtension === 'pdf') {
-      const url = `/api/files/preview?path=${encodeURIComponent(file.path)}${verifiedPassword ? `&password=${encodeURIComponent(verifiedPassword)}` : ''}`;
+      const url = appendShareToUrl(
+        `/api/files/preview?path=${encodeURIComponent(file.path)}${verifiedPassword ? `&password=${encodeURIComponent(verifiedPassword)}` : ''}`,
+        shareToken
+      );
       setPreviewUrl(url);
       setLoading(true); // Will be set to false when object/iframe loads
       setError('');
@@ -110,13 +115,17 @@ export default function FilePreview({ file, onClose, verifiedPassword, onFileUpd
         clearTimeout(timeout);
       };
     } else if (['mp4', 'webm', 'ogg', 'mov', 'avi', 'mkv', 'flv', 'wmv', 'mp3', 'wav', 'ogg', 'flac', 'aac', 'm4a', 'wma'].includes(fileExtension)) {
-      // For video and audio, use direct URL
-      const url = `/api/files/preview?path=${encodeURIComponent(file.path)}${verifiedPassword ? `&password=${encodeURIComponent(verifiedPassword)}` : ''}`;
+      const url = appendShareToUrl(
+        `/api/files/preview?path=${encodeURIComponent(file.path)}${verifiedPassword ? `&password=${encodeURIComponent(verifiedPassword)}` : ''}`,
+        shareToken
+      );
       setPreviewUrl(url);
       setLoading(false);
     } else if (['doc', 'docx', 'xls', 'xlsx', 'ppt', 'pptx', 'odt', 'ods', 'odp'].includes(fileExtension)) {
-      // For Office documents, use Microsoft Office Online Viewer
-      const url = `/api/files/preview?path=${encodeURIComponent(file.path)}${verifiedPassword ? `&password=${encodeURIComponent(verifiedPassword)}` : ''}`;
+      const url = appendShareToUrl(
+        `/api/files/preview?path=${encodeURIComponent(file.path)}${verifiedPassword ? `&password=${encodeURIComponent(verifiedPassword)}` : ''}`,
+        shareToken
+      );
       setPreviewUrl(url);
       setLoading(true);
       
@@ -129,8 +138,10 @@ export default function FilePreview({ file, onClose, verifiedPassword, onFileUpd
         clearTimeout(timeout);
       };
     } else {
-      // For other types (images, text), use direct URL
-      const url = `/api/files/preview?path=${encodeURIComponent(file.path)}${verifiedPassword ? `&password=${encodeURIComponent(verifiedPassword)}` : ''}`;
+      const url = appendShareToUrl(
+        `/api/files/preview?path=${encodeURIComponent(file.path)}${verifiedPassword ? `&password=${encodeURIComponent(verifiedPassword)}` : ''}`,
+        shareToken
+      );
       setPreviewUrl(url);
       setLoading(false);
       
@@ -141,7 +152,7 @@ export default function FilePreview({ file, onClose, verifiedPassword, onFileUpd
         }
       };
     }
-  }, [file, language]);
+  }, [file, language, verifiedPassword, shareToken]);
 
   useEffect(() => {
     function handleEscape(event: KeyboardEvent) {
@@ -329,7 +340,7 @@ export default function FilePreview({ file, onClose, verifiedPassword, onFileUpd
             )}
             <Tooltip content={t('download')}>
               <a
-                href={`/api/files/download?path=${encodeURIComponent(file.path)}`}
+                href={appendShareToUrl(`/api/files/download?path=${encodeURIComponent(file.path)}`, shareToken)}
                 download={file.name}
                 className="p-1.5 text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors"
                 aria-label={t('download')}
@@ -381,7 +392,7 @@ export default function FilePreview({ file, onClose, verifiedPassword, onFileUpd
                 }
               </p>
               <a
-                href={`/api/files/download?path=${encodeURIComponent(file.path)}`}
+                href={appendShareToUrl(`/api/files/download?path=${encodeURIComponent(file.path)}`, shareToken)}
                 download={file.name}
                 className="inline-flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-sm font-medium transition-colors"
               >
@@ -542,7 +553,7 @@ export default function FilePreview({ file, onClose, verifiedPassword, onFileUpd
                   </div>
                   <p className="text-gray-600 dark:text-gray-400 mb-4">{error}</p>
                   <a
-                    href={`/api/files/download?path=${encodeURIComponent(file.path)}`}
+                    href={appendShareToUrl(`/api/files/download?path=${encodeURIComponent(file.path)}`, shareToken)}
                     download={file.name}
                     className="inline-flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-sm font-medium transition-colors"
                   >

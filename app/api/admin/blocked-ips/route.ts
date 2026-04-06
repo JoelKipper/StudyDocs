@@ -1,6 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getCurrentUser, isAdmin } from '@/lib/auth';
-import { supabaseServer } from '@/lib/supabase-server';
+import {
+  listBlockedIps,
+  upsertBlockedIp,
+  updateBlockedIp,
+  findUserById,
+  insertActivityLog,
+} from '@/lib/local-store';
 
 export async function GET(request: NextRequest) {
   try {
@@ -14,25 +20,19 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
     }
 
-    const { data: blockedIps, error } = await supabaseServer
-      .from('blocked_ips')
-      .select(`
-        id,
-        ip_address,
-        reason,
-        blocked_at,
-        expires_at,
-        is_active,
-        blocked_by,
-        blocker:users!blocked_ips_blocked_by_fkey(name, email)
-      `)
-      .order('blocked_at', { ascending: false });
+    const blockedIps = await listBlockedIps();
+    const enriched = await Promise.all(
+      blockedIps.map(async (b) => {
+        let blocker: { name: string; email: string } | null = null;
+        const u = await findUserById(b.blocked_by);
+        if (u) {
+          blocker = { name: u.name, email: u.email };
+        }
+        return { ...b, blocker };
+      })
+    );
 
-    if (error) {
-      throw error;
-    }
-
-    return NextResponse.json({ blockedIps: blockedIps || [] });
+    return NextResponse.json({ blockedIps: enriched });
   } catch (error: any) {
     console.error('Error fetching blocked IPs:', error);
     return NextResponse.json({ error: 'Error fetching blocked IPs' }, { status: 500 });
@@ -57,64 +57,26 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Missing ipAddress' }, { status: 400 });
     }
 
-    const { data, error } = await supabaseServer
-      .from('blocked_ips')
-      .insert({
-        ip_address: ipAddress,
-        reason: reason || null,
-        blocked_by: user.id,
-        expires_at: expiresAt || null,
-        is_active: true,
-      })
-      .select()
-      .single();
+    const existing = (await listBlockedIps()).find((b) => b.ip_address === ipAddress);
 
-    if (error) {
-      if (error.code === '23505') {
-        // IP already exists, update it
-        const { data: updated, error: updateError } = await supabaseServer
-          .from('blocked_ips')
-          .update({
-            reason: reason || null,
-            blocked_by: user.id,
-            expires_at: expiresAt || null,
-            is_active: true,
-            blocked_at: new Date().toISOString(),
-          })
-          .eq('ip_address', ipAddress)
-          .select()
-          .single();
+    const row = await upsertBlockedIp({
+      ip_address: ipAddress,
+      reason: reason || null,
+      blocked_by: user.id,
+      expires_at: expiresAt || null,
+      is_active: true,
+      id: existing?.id,
+      blocked_at: new Date().toISOString(),
+    });
 
-        if (updateError) {
-          throw updateError;
-        }
+    await insertActivityLog({
+      user_id: user.id,
+      action: 'admin_block_ip',
+      resource_type: 'ip',
+      details: { ip_address: ipAddress, reason, expires_at: expiresAt },
+    });
 
-        // Log activity
-        await supabaseServer
-          .from('activity_logs')
-          .insert({
-            user_id: user.id,
-            action: 'admin_block_ip',
-            resource_type: 'ip',
-            details: { ip_address: ipAddress, reason, expires_at: expiresAt }
-          });
-
-        return NextResponse.json({ blockedIp: updated });
-      }
-      throw error;
-    }
-
-    // Log activity
-    await supabaseServer
-      .from('activity_logs')
-      .insert({
-        user_id: user.id,
-        action: 'admin_block_ip',
-        resource_type: 'ip',
-        details: { ip_address: ipAddress, reason, expires_at: expiresAt }
-      });
-
-    return NextResponse.json({ blockedIp: data });
+    return NextResponse.json({ blockedIp: row });
   } catch (error: any) {
     console.error('Error blocking IP:', error);
     return NextResponse.json({ error: 'Error blocking IP' }, { status: 500 });
@@ -140,32 +102,18 @@ export async function DELETE(request: NextRequest) {
       return NextResponse.json({ error: 'Missing id' }, { status: 400 });
     }
 
-    // Get IP address before deleting for logging
-    const { data: blockedIp } = await supabaseServer
-      .from('blocked_ips')
-      .select('ip_address')
-      .eq('id', ipId)
-      .single();
+    const blockedIps = await listBlockedIps();
+    const blockedIp = blockedIps.find((b) => b.id === ipId);
 
-    const { error } = await supabaseServer
-      .from('blocked_ips')
-      .update({ is_active: false })
-      .eq('id', ipId);
+    await updateBlockedIp(ipId, { is_active: false });
 
-    if (error) {
-      throw error;
-    }
-
-    // Log activity
     if (blockedIp) {
-      await supabaseServer
-        .from('activity_logs')
-        .insert({
-          user_id: user.id,
-          action: 'admin_unblock_ip',
-          resource_type: 'ip',
-          details: { ip_address: blockedIp.ip_address }
-        });
+      await insertActivityLog({
+        user_id: user.id,
+        action: 'admin_unblock_ip',
+        resource_type: 'ip',
+        details: { ip_address: blockedIp.ip_address },
+      });
     }
 
     return NextResponse.json({ success: true });
@@ -174,5 +122,3 @@ export async function DELETE(request: NextRequest) {
     return NextResponse.json({ error: 'Error unblocking IP' }, { status: 500 });
   }
 }
-
-

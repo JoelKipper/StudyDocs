@@ -4,6 +4,7 @@ import { useState, useEffect, useRef } from 'react';
 import FileIcon from './FileIcon';
 import ContextMenu from './ContextMenu';
 import { useLanguage } from '@/contexts/LanguageContext';
+import { useShareToken, appendShareToUrl } from '@/contexts/ShareTokenContext';
 
 interface FileItem {
   name: string;
@@ -46,6 +47,7 @@ interface TreeNodeData extends FileItem {
 
 export default function FileTree({ currentPath, onNavigate, onRefresh, onExternalDrop, onMoveItem, onFileDoubleClick, userId, refreshFolderPath, setRefreshFolderPath, onRename, onDelete, onDownload, onShare, onToggleFavorite, isFavorite, onItemDeleted, onItemRenamed, onItemMoved, onCreateDirectory }: FileTreeProps) {
   const { language, t } = useLanguage();
+  const shareToken = useShareToken();
   const storageKey = `studydocs-tree-expanded-${userId}`;
   
   // Load expanded state from localStorage
@@ -267,7 +269,7 @@ export default function FileTree({ currentPath, onNavigate, onRefresh, onExterna
     }
     
     try {
-      const res = await fetch(`/api/files?path=${encodeURIComponent(path)}`);
+      const res = await fetch(appendShareToUrl(`/api/files?path=${encodeURIComponent(path)}`, shareToken));
       const data = await res.json();
       if (res.ok) {
         const allItems = data.contents || [];
@@ -326,7 +328,7 @@ export default function FileTree({ currentPath, onNavigate, onRefresh, onExterna
     
     // Force reload by bypassing cache - load fresh data
     try {
-      const res = await fetch(`/api/files?path=${encodeURIComponent(folderPath)}`);
+      const res = await fetch(appendShareToUrl(`/api/files?path=${encodeURIComponent(folderPath)}`, shareToken));
       const data = await res.json();
       if (res.ok) {
         const allItems = data.contents || [];

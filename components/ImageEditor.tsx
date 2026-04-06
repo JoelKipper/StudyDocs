@@ -4,6 +4,7 @@ import { useEffect, useState, useRef, useCallback } from 'react';
 import ReactCrop, { Crop, PixelCrop, makeAspectCrop, centerCrop } from 'react-image-crop';
 import 'react-image-crop/dist/ReactCrop.css';
 import { useLanguage } from '@/contexts/LanguageContext';
+import { useShareToken, appendShareToUrl } from '@/contexts/ShareTokenContext';
 
 interface ImageEditorProps {
   file: {
@@ -21,6 +22,7 @@ interface ImageEditorProps {
 
 export default function ImageEditor({ file, verifiedPassword, onClose, onSave }: ImageEditorProps) {
   const { t, language } = useLanguage();
+  const shareToken = useShareToken();
   const imgRef = useRef<HTMLImageElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [loading, setLoading] = useState(true);
@@ -69,7 +71,10 @@ export default function ImageEditor({ file, verifiedPassword, onClose, onSave }:
         setLoading(true);
         setError('');
         
-        const previewUrl = `/api/files/preview?path=${encodeURIComponent(file.path)}${verifiedPassword ? `&password=${encodeURIComponent(verifiedPassword)}` : ''}`;
+        const previewUrl = appendShareToUrl(
+          `/api/files/preview?path=${encodeURIComponent(file.path)}${verifiedPassword ? `&password=${encodeURIComponent(verifiedPassword)}` : ''}`,
+          shareToken
+        );
         const response = await fetch(previewUrl);
         
         if (!response.ok) {
@@ -94,7 +99,7 @@ export default function ImageEditor({ file, verifiedPassword, onClose, onSave }:
         URL.revokeObjectURL(imageSrc);
       }
     };
-  }, [file?.path, verifiedPassword]);
+  }, [file?.path, verifiedPassword, shareToken]);
 
   // Get cropped image
   const getCroppedImg = async (
