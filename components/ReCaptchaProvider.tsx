@@ -12,7 +12,6 @@ export default function ReCaptchaProvider({ children }: ReCaptchaProviderProps) 
 
   // If no site key is configured, render children without reCAPTCHA
   if (!siteKey) {
-    console.warn('reCAPTCHA v3 Site Key not configured. Add NEXT_PUBLIC_RECAPTCHA_SITE_KEY to .env.local');
     return <>{children}</>;
   }
 
